@@ -3,11 +3,16 @@ import test from 'node:test';
 import React from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
+import * as THREE from 'three';
 import { RosterWorkerItem } from '../app/OfficeApp';
 import {
   advanceAvatarAnimClock,
   computeGlbMixerTimeScale,
   computeHumanoidPose,
+  computeWorkerInitialPhaseSec,
+  createAvatarSimClockState,
+  GlbAvatarAnimationController,
+  stepAvatarClockFromEngine,
   updateGlbMixerWithSimClock,
 } from '../scene/avatarAnimation';
 import {
@@ -807,4 +812,277 @@ test('14. Updating one worker state re-renders only that worker component while 
   flushSync(() => {
     root.unmount();
   });
+});
+
+// 15. Fix 1 Audit Regression: Unified SimulationEngine & Avatar Animation Time (Zero FPS-Drop Drift & Deterministic Reset)
+test('15. Unified SimulationEngine clock drives avatar animation without FPS-drop drift and restores initialPhaseSec on Reset', () => {
+  // Run A: 60Hz smooth sampling across 4000ms of simulation time
+  let snapSmooth = SimulationEngine.resetToBaseline(DEFAULT_SIMULATION_SEED);
+  const clockSmooth = createAvatarSimClockState('sonnet', snapSmooth);
+  const expectedInitialPhase = computeWorkerInitialPhaseSec('sonnet');
+  assert.equal(clockSmooth.animTimeSec, expectedInitialPhase);
+
+  for (let tick = 0; tick < 8; tick++) {
+    snapSmooth = SimulationEngine.stepSimulationTick(
+      snapSmooth,
+      FIXED_TICK_SIM_MS,
+    );
+    stepAvatarClockFromEngine(clockSmooth, snapSmooth, 'sonnet', false);
+  }
+
+  // Run B: Severe browser FPS drops (only 2 uneven render frames across the same 4000ms simulation time)
+  let snapLaggy = SimulationEngine.resetToBaseline(DEFAULT_SIMULATION_SEED);
+  const clockLaggy = createAvatarSimClockState('sonnet', snapLaggy);
+
+  // Advance 3 ticks (1500ms) before first frame renders (simulating a 1.5s frame stall)
+  for (let tick = 0; tick < 3; tick++) {
+    snapLaggy = SimulationEngine.stepSimulationTick(
+      snapLaggy,
+      FIXED_TICK_SIM_MS,
+    );
+  }
+  stepAvatarClockFromEngine(clockLaggy, snapLaggy, 'sonnet', false);
+
+  // Advance remaining 5 ticks (2500ms) before second frame renders
+  for (let tick = 0; tick < 5; tick++) {
+    snapLaggy = SimulationEngine.stepSimulationTick(
+      snapLaggy,
+      FIXED_TICK_SIM_MS,
+    );
+  }
+  stepAvatarClockFromEngine(clockLaggy, snapLaggy, 'sonnet', false);
+
+  // Both must equal initialPhaseSec + 4.000s with ZERO drift
+  assert.equal(snapSmooth.simTimeMs, 4000);
+  assert.equal(snapLaggy.simTimeMs, 4000);
+  assert.equal(
+    clockSmooth.animTimeSec,
+    Number((expectedInitialPhase + 4.0).toFixed(4)),
+  );
+  assert.equal(
+    clockLaggy.animTimeSec,
+    clockSmooth.animTimeSec,
+    'Browser FPS drops must never cause avatar animation time to drift away from SimulationEngine time',
+  );
+
+  // Verify Worker Pause freezes ONLY sonnet's unified clock while opus continues
+  const clockOpus = createAvatarSimClockState('opus', snapSmooth);
+  snapSmooth = SimulationEngine.pauseWorker(snapSmooth, 'sonnet');
+  const sonnetFrozenTime = clockSmooth.animTimeSec;
+  const opusBeforeTime = clockOpus.animTimeSec;
+
+  snapSmooth = SimulationEngine.stepSimulationTick(
+    snapSmooth,
+    FIXED_TICK_SIM_MS,
+  );
+  stepAvatarClockFromEngine(clockSmooth, snapSmooth, 'sonnet', false);
+  stepAvatarClockFromEngine(clockOpus, snapSmooth, 'opus', false);
+
+  assert.equal(
+    clockSmooth.animTimeSec,
+    sonnetFrozenTime,
+    'Paused worker sonnet animation clock must freeze',
+  );
+  assert.equal(
+    clockOpus.animTimeSec,
+    Number((opusBeforeTime + 0.5).toFixed(4)),
+    'Unpaused worker opus animation clock must advance by +0.5s',
+  );
+
+  // Resume sonnet -> continues from sonnetFrozenTime without jumping over paused interval
+  snapSmooth = SimulationEngine.resumeWorker(snapSmooth, 'sonnet');
+  snapSmooth = SimulationEngine.stepSimulationTick(
+    snapSmooth,
+    FIXED_TICK_SIM_MS,
+  );
+  stepAvatarClockFromEngine(clockSmooth, snapSmooth, 'sonnet', false);
+  assert.equal(
+    clockSmooth.animTimeSec,
+    Number((sonnetFrozenTime + 0.5).toFixed(4)),
+  );
+
+  // Reset -> restores deterministic initialPhaseSec
+  const snapReset = SimulationEngine.resetToBaseline(DEFAULT_SIMULATION_SEED);
+  const resetResult = stepAvatarClockFromEngine(
+    clockSmooth,
+    snapReset,
+    'sonnet',
+    false,
+  );
+  assert.equal(resetResult.didReset, true);
+  assert.equal(clockSmooth.animTimeSec, expectedInitialPhase);
+});
+
+// 16. Fix 2 Audit Regression: Real Three.js AnimationMixer Integration (No Extra Update on Pause, Smooth Resume, Isolated Worker Pause, No Action Restarts)
+test('16. GlbAvatarAnimationController with real THREE.AnimationMixer stops without extra update on Global Pause, isolates Worker Pause, and avoids action restarts', () => {
+  // Build two real Three.js hierarchies with keyframe-animated child bone nodes
+  const sonnetRoot = new THREE.Group();
+  sonnetRoot.name = 'SonnetRig';
+  const opencvTrackTyping = new THREE.VectorKeyframeTrack(
+    '.position',
+    [0, 10],
+    [0, 0, 0, 10, 0, 0], // x moves linearly 1.0 unit per second
+  );
+  const clipTyping = new THREE.AnimationClip('Seated_Typing', 10, [
+    opencvTrackTyping,
+  ]);
+  const clipWalking = new THREE.AnimationClip('Walk_Forward', 10, [
+    new THREE.VectorKeyframeTrack('.position', [0, 10], [0, 0, 0, 0, 10, 0]),
+  ]);
+  const clipSeated = new THREE.AnimationClip('Seated_Idle', 10, [
+    new THREE.VectorKeyframeTrack('.position', [0, 10], [0, 0, 0, 5, 0, 0]),
+  ]);
+
+  const opusRoot = new THREE.Group();
+  opusRoot.name = 'OpusRig';
+
+  const sonnetController = new GlbAvatarAnimationController(sonnetRoot, [
+    clipTyping,
+    clipWalking,
+    clipSeated,
+  ]);
+  const opusController = new GlbAvatarAnimationController(opusRoot, [
+    clipTyping,
+    clipWalking,
+    clipSeated,
+  ]);
+
+  let snapshot = SimulationEngine.resetToBaseline(DEFAULT_SIMULATION_SEED);
+  snapshot = WorkerMockService.assignTask(snapshot, { workerId: 'sonnet' }, 0);
+  snapshot = WorkerMockService.assignTask(snapshot, { workerId: 'opus' }, 0);
+
+  const sonnetClock = createAvatarSimClockState('sonnet', snapshot);
+  const opusClock = createAvatarSimClockState('opus', snapshot);
+
+  // Sync initial clips -> actionStartCount becomes 1
+  sonnetController.syncClip(
+    'typing',
+    snapshot.workers.sonnet.avatarConfig.animationMap,
+  );
+  opusController.syncClip(
+    'typing',
+    snapshot.workers.opus.avatarConfig.animationMap,
+  );
+  assert.equal(sonnetController.actionStartCount, 1);
+  assert.equal(sonnetController.getActiveClipName(), 'Seated_Typing');
+
+  // 1. Advance 2 simulation ticks at 1x (1000ms = 1.0s)
+  snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+  sonnetController.stepFromSimulation(sonnetClock, snapshot, 'sonnet', false);
+  opusController.stepFromSimulation(opusClock, snapshot, 'opus', false);
+
+  snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+  sonnetController.stepFromSimulation(sonnetClock, snapshot, 'sonnet', false);
+  opusController.stepFromSimulation(opusClock, snapshot, 'opus', false);
+
+  assert.equal(sonnetController.updateCallCount, 2);
+  assert.equal(Number(sonnetController.mixer.time.toFixed(4)), 1.0);
+  assert.ok(
+    sonnetRoot.position.x > 0.9,
+    'Real THREE.AnimationMixer must interpolate bone position.x keyframe track',
+  );
+
+  // 2. Global Pause: must stop GLB mixer with ZERO extra unintended mixer.update calls
+  snapshot = SimulationEngine.setGlobalPaused(snapshot, true);
+  const updatesBeforePauseFrames = sonnetController.updateCallCount;
+  const mixerTimeAtPause = sonnetController.mixer.time;
+  const boneXAtPause = sonnetRoot.position.x;
+
+  for (let frame = 0; frame < 30; frame++) {
+    sonnetController.syncClip(
+      'typing',
+      snapshot.workers.sonnet.avatarConfig.animationMap,
+    );
+    sonnetController.stepFromSimulation(sonnetClock, snapshot, 'sonnet', false);
+  }
+
+  assert.equal(
+    sonnetController.updateCallCount,
+    updatesBeforePauseFrames,
+    'Global Pause must not trigger even a single extra mixer.update()',
+  );
+  assert.equal(sonnetController.mixer.time, mixerTimeAtPause);
+  assert.equal(sonnetRoot.position.x, boneXAtPause);
+  assert.equal(
+    sonnetController.actionStartCount,
+    1,
+    'Global Pause must not restart the AnimationAction',
+  );
+
+  // 3. Global Resume: restarts smoothly from exact previous mixer.time without restarting action
+  snapshot = SimulationEngine.setGlobalPaused(snapshot, false);
+  snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+  sonnetController.syncClip(
+    'typing',
+    snapshot.workers.sonnet.avatarConfig.animationMap,
+  );
+  sonnetController.stepFromSimulation(sonnetClock, snapshot, 'sonnet', false);
+  opusController.stepFromSimulation(opusClock, snapshot, 'opus', false);
+
+  assert.equal(Number(sonnetController.mixer.time.toFixed(4)), 1.5);
+  assert.equal(
+    sonnetController.actionStartCount,
+    1,
+    'Global Resume must not restart the running AnimationAction',
+  );
+
+  // 4. Isolated Worker Pause: pausing sonnet freezes sonnet's mixer while opus's mixer advances
+  snapshot = SimulationEngine.pauseWorker(snapshot, 'sonnet');
+  const sonnetMixerTimePaused = sonnetController.mixer.time;
+  const opusMixerTimeBefore = opusController.mixer.time;
+
+  snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+  sonnetController.stepFromSimulation(sonnetClock, snapshot, 'sonnet', false);
+  opusController.stepFromSimulation(opusClock, snapshot, 'opus', false);
+
+  assert.equal(
+    sonnetController.mixer.time,
+    sonnetMixerTimePaused,
+    'Paused worker sonnet GLB mixer must remain frozen',
+  );
+  assert.equal(
+    Number(opusController.mixer.time.toFixed(4)),
+    Number((opusMixerTimeBefore + 0.5).toFixed(4)),
+    'Unpaused worker opus GLB mixer must advance by +0.5s',
+  );
+
+  // Resume sonnet -> continues smoothly from sonnetMixerTimePaused without action restart
+  snapshot = SimulationEngine.resumeWorker(snapshot, 'sonnet');
+  snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+  sonnetController.syncClip(
+    'typing',
+    snapshot.workers.sonnet.avatarConfig.animationMap,
+  );
+  sonnetController.stepFromSimulation(sonnetClock, snapshot, 'sonnet', false);
+
+  assert.equal(
+    Number(sonnetController.mixer.time.toFixed(4)),
+    Number((sonnetMixerTimePaused + 0.5).toFixed(4)),
+  );
+  assert.equal(sonnetController.actionStartCount, 1);
+
+  // 5. Speed multiplier 4x scales GLB mixer advancement consistently
+  snapshot = { ...snapshot, simSpeedMultiplier: 4 };
+  snapshot = SimulationEngine.advanceByWallClockDelta(snapshot, 500); // +2000ms = +2.0s at 4x
+  sonnetController.stepFromSimulation(sonnetClock, snapshot, 'sonnet', false);
+  assert.equal(
+    Number(sonnetController.mixer.time.toFixed(4)),
+    Number((sonnetMixerTimePaused + 2.5).toFixed(4)),
+  );
+
+  // 6. Changing animationState ('typing' -> 'walking') transitions clip cleanly
+  sonnetController.syncClip(
+    'walking',
+    snapshot.workers.sonnet.avatarConfig.animationMap,
+  );
+  assert.equal(sonnetController.getActiveClipName(), 'Walk_Forward');
+  assert.equal(sonnetController.actionStartCount, 2);
+
+  // 7. Reset restores mixer.time to 0 deterministically
+  snapshot = SimulationEngine.resetToBaseline(DEFAULT_SIMULATION_SEED);
+  sonnetController.stepFromSimulation(sonnetClock, snapshot, 'sonnet', false);
+  assert.equal(sonnetController.mixer.time, 0);
+
+  sonnetController.dispose();
+  opusController.dispose();
 });

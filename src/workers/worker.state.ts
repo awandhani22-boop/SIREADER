@@ -14,11 +14,12 @@ import {
 } from './worker.types';
 
 /**
- * Central Zustand Store for SIREADER Virtual Office (Phase 1.1 — Stabilized)
+ * Central Zustand Store for SIREADER Virtual Office (Phase 1.1 Final Audit)
  * - Supports granular per-worker subscriptions so updating one worker does not
  *   re-render unrelated worker components.
  * - Tracks isolated avatar GLB load errors per worker (`avatarLoadErrors`).
  * - Implements deterministic baseline reset (`resetSimulationWithSeed`).
+ * - Synchronizes `SimulationEngine` real-time clock anchor on pause/resume/speed changes.
  */
 
 export type GraphicsPreset = 'high' | 'balanced';
@@ -228,17 +229,44 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
 
   setGlobalPaused: (isPaused) =>
     set((state) => {
-      const next = SimulationEngine.setGlobalPaused(state, isPaused);
+      let current: SimulationSnapshot = state;
+      if (isPaused && !state.isGlobalPaused) {
+        const pendingWallMs = SimulationEngine.getPendingRealtimeWallDeltaMs(
+          performance.now(),
+        );
+        if (pendingWallMs > 0) {
+          current = SimulationEngine.advanceByWallClockDelta(current, pendingWallMs);
+        }
+      }
+      const next = SimulationEngine.setGlobalPaused(current, isPaused);
       return applySnapshotPatch(next);
     }),
 
-  toggleGlobalPaused: () =>
+  toggleGlobalPaused: () => {
+    const currentlyPaused = get().isGlobalPaused;
+    get().setGlobalPaused(!currentlyPaused);
+  },
+
+  setSimSpeedMultiplier: (speed) =>
     set((state) => {
-      const next = SimulationEngine.setGlobalPaused(state, !state.isGlobalPaused);
-      return applySnapshotPatch(next);
+      let current: SimulationSnapshot = state;
+      if (!state.isGlobalPaused) {
+        const now = performance.now();
+        const pendingWallMs = SimulationEngine.getPendingRealtimeWallDeltaMs(now);
+        if (pendingWallMs > 0) {
+          current = SimulationEngine.advanceByWallClockDelta(current, pendingWallMs);
+          SimulationEngine.syncRealtimeClockAnchor(
+            { ...current, simSpeedMultiplier: speed },
+            now,
+            true,
+          );
+        }
+      }
+      return {
+        ...applySnapshotPatch(current),
+        simSpeedMultiplier: speed,
+      };
     }),
-
-  setSimSpeedMultiplier: (speed) => set({ simSpeedMultiplier: speed }),
 
   /**
    * Restores a deterministic zero-task baseline (`t = 0`, `prngState = seed`,

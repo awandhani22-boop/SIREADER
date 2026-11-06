@@ -1,39 +1,39 @@
 # SIREADER Virtual Office — Project State
 
 ## Current phase
-Phase 1.1 (Technical Fix & Stabilization — Complete & Verified) — Futuristic isometric 3D virtual office with 7 interactive AI workers, controlled simulation animation clock, isolated GLB error boundaries, granular Zustand selectors, and deterministic baseline reset.
+Phase 1.1 (Technical Fix & Stabilization + Final Audit Corrections — Complete & Verified) — Futuristic isometric 3D virtual office with 7 interactive AI workers, unified SimulationEngine & avatar animation time source, direct `THREE.AnimationMixer` synchronization (`GlbAvatarAnimationController`), isolated GLB error boundaries, granular Zustand selectors, and deterministic baseline reset.
 
 ## Working features
-- **Fix A — Controlled Avatar Animation Clock (`src/scene/avatarAnimation.ts`, `src/scene/WorkerAvatar.tsx`, `src/scene/Workstation.tsx`)**:
-  - Replaced Three.js wall-clock `state.clock.elapsedTime` with a ref-driven controlled animation clock (`advanceAvatarAnimClock`, `computeHumanoidPose`, `computeGlbMixerTimeScale`, `updateGlbMixerWithSimClock`).
-  - Global Pause (`isGlobalPaused === true`) freezes simulation clock advancement, worker movement, articulated humanoid joint animations, overhead beacon rotation, workstation selection ring rotation, GLB `AnimationMixer` updates (`timeScale = 0`), task progress, worker state transitions, and simulated activity generation without mutating React state at 60Hz.
-  - Individual Worker Pause (`worker.status === 'PAUSED'`) freezes only that worker's task progress and visual animation while unpaused workers continue normally.
-  - Global Resume (`setGlobalPaused(false)`) preserves any worker that was individually `PAUSED` prior to Global Pause.
-- **Fix B — Isolated GLB Error Boundary & Fallback (`src/scene/avatarErrorBoundary.tsx`, `src/scene/WorkerAvatar.tsx`, `src/ui/WorkerPanel.tsx`)**:
-  - Each worker avatar wraps its GLB model loader (`GlbModelAvatar`) in an isolated `AvatarModelErrorBoundary` with `resolveAvatarRenderMode` and `isValidGlbModelUrl`.
-  - Missing, invalid, or corrupted `.glb`/`.gltf` URLs fall back cleanly to that worker's `ArticulatedHumanoidPlaceholder` while preserving `fallbackType`, `accentColor`, `modelUrl`, and `animationMap`, logging a diagnostic warning once without infinite reload loops or crashing sibling avatars / `OfficeScene`.
-- **Fix C — Granular Zustand Selectors & Render Isolation (`src/scene/OfficeScene.tsx`, `src/scene/WorldLabelsOverlay.tsx`, `src/app/OfficeApp.tsx`, `src/ui/WorkerPanel.tsx`, `src/utils/renderProfiler.ts`)**:
-  - Extracted memoized per-worker components (`WorkerAvatarSceneItem`, `WorkstationSceneItem`, `RoomSceneItem`, `WorldWorkerBadgeItem`, `RosterWorkerItem`) subscribing only to their own worker slice (`s.workers[workerId]`).
-  - Preserved object reference equality in `SimulationEngine.stepSingleWorker` for unchanged workers so mutating one worker causes `0` re-renders on the other 6 worker components.
-- **Fix D — Deterministic Reset & Simulation Clock Consistency (`src/workers/simulation.engine.ts`, `src/workers/worker.registry.ts`, `src/workers/worker.state.ts`)**:
-  - Added `SimulationEngine.createBaselineSnapshot(seed)` and `SimulationEngine.resetToBaseline(seed)`.
-  - `Reset` restores a clean zero-task deterministic baseline (`simTimeMs = 0`, `tickCount = 0`, `prngState = seed`, `tasks = {}`, `events = []`, all 7 workers `IDLE` with empty queues and zeroed `SIMULATED` token/cost metrics) whether invoked while running, while globally paused, with active tasks, or with queued tasks.
-  - Speed multipliers (`1x`, `2x`, `4x`) and manual `Step +0.5s` (`tickSimulation(500)`) advance simulation time and animation clocks consistently.
+- **Unified SimulationEngine & Avatar Animation Clock (`src/workers/simulation.engine.ts`, `src/scene/avatarAnimation.ts`, `src/scene/WorkerAvatar.tsx`, `src/scene/Workstation.tsx`, `src/app/OfficeApp.tsx`)**:
+  - `SimulationEngine` is the single source of truth for simulation time (`simTimeMs` and `SimulationEngine.getUnifiedSimTimeMs`).
+  - `stepAvatarClockFromEngine` advances each worker's `AvatarSimClockState` strictly by the simulation-time delta (`deltaSimMs / 1000`) derived from `SimulationEngine`, eliminating drift between `SimulationEngine` time and 3D avatar animation time even across severe browser FPS drops (`0.000000s` drift).
+  - Global Pause (`isGlobalPaused === true`) freezes simulation time, placeholder joint poses, overhead beacon rotation, workstation selection rings, and GLB `THREE.AnimationMixer` updates at the exact frame without 60Hz React state updates.
+  - Individual Worker Pause (`worker.status === 'PAUSED'`) freezes only that worker's task progress and animation clock while unpaused workers continue normally, and preserves `PAUSED` across Global Pause/Resume.
+  - Speed multipliers (`1x`, `2x`, `4x`), manual `Step +0.5s` (`tickSimulation(500)`), and deterministic `Reset` (`resetToBaseline`, restoring `initialPhaseSec` for placeholders and `mixer.time = 0` for GLB avatars) operate from the same engine clock.
+- **Direct GLB `THREE.AnimationMixer` Synchronization (`GlbAvatarAnimationController` in `src/scene/avatarAnimation.ts` & `src/scene/WorkerAvatar.tsx`)**:
+  - Replaced `@react-three/drei`'s `useAnimations` (which registered an internal `useFrame((state, delta) => mixer.update(delta))` before component `useFrame` callbacks, causing an unintended extra mixer update on Global Pause).
+  - `GlbAvatarAnimationController` directly manages `new THREE.AnimationMixer(root)` and updates it exclusively via `stepFromSimulation` after checking pause/freeze state (`0` extra updates on Global Pause).
+  - Tracks `activeClipName` and `actionStartCount` so pausing, resuming, or changing speed (`1x`/`2x`/`4x`) never restarts a running `THREE.AnimationAction` unless `animationState` maps to a different clip name.
+- **Isolated GLB Error Boundary & Fallback (`src/scene/avatarErrorBoundary.tsx`, `src/scene/WorkerAvatar.tsx`, `src/ui/WorkerPanel.tsx`)**:
+  - Each worker avatar wraps its GLB model loader in an isolated `AvatarModelErrorBoundary` with `resolveAvatarRenderMode` and `isValidGlbModelUrl`.
+  - Missing, invalid, or corrupted `.glb`/`.gltf` URLs fall back cleanly to that worker's `ArticulatedHumanoidPlaceholder` while preserving `fallbackType`, `accentColor`, `modelUrl`, and `animationMap`.
+- **Granular Zustand Selectors & Render Isolation (`src/scene/OfficeScene.tsx`, `src/scene/WorldLabelsOverlay.tsx`, `src/app/OfficeApp.tsx`, `src/ui/WorkerPanel.tsx`, `src/utils/renderProfiler.ts`)**:
+  - Memoized per-worker components (`WorkerAvatarSceneItem`, `WorkstationSceneItem`, `RoomSceneItem`, `WorldWorkerBadgeItem`, `RosterWorkerItem`) subscribe only to their own worker slice (`s.workers[workerId]`), resulting in `0` re-renders on the other 6 workers when one worker updates.
 
-## Files modified / added in Phase 1.1
-- `src/scene/avatarAnimation.ts` (Added)
+## Files modified / added in Phase 1.1 & Final Audit
+- `src/scene/avatarAnimation.ts` (Added & Updated — `stepAvatarClockFromEngine`, `createAvatarSimClockState`, `GlbAvatarAnimationController`)
 - `src/scene/avatarErrorBoundary.tsx` (Added)
 - `src/utils/renderProfiler.ts` (Added)
-- `src/scene/WorkerAvatar.tsx` (Modified)
-- `src/scene/Workstation.tsx` (Modified)
-- `src/scene/OfficeScene.tsx` (Modified)
-- `src/scene/WorldLabelsOverlay.tsx` (Modified)
-- `src/app/OfficeApp.tsx` (Modified)
-- `src/ui/WorkerPanel.tsx` (Modified)
-- `src/workers/worker.registry.ts` (Modified)
-- `src/workers/simulation.engine.ts` (Modified)
-- `src/workers/worker.state.ts` (Modified)
-- `src/workers/simulation.engine.test.ts` (Modified — expanded to 14 automated tests)
+- `src/scene/WorkerAvatar.tsx` (Modified — unified engine clock + `GlbAvatarAnimationController`)
+- `src/scene/Workstation.tsx` (Modified — unified engine clock for selection ring)
+- `src/scene/OfficeScene.tsx` (Modified — granular memoized scene items)
+- `src/scene/WorldLabelsOverlay.tsx` (Modified — granular memoized badge items)
+- `src/app/OfficeApp.tsx` (Modified — granular `RosterWorkerItem` + `SimulationEngine.syncRealtimeClockAnchor`)
+- `src/ui/WorkerPanel.tsx` (Modified — granular selectors + GLB fallback diagnostics)
+- `src/workers/worker.registry.ts` (Modified — zero-state deterministic baseline)
+- `src/workers/simulation.engine.ts` (Modified — `getUnifiedSimTimeMs`, `syncRealtimeClockAnchor`, `resetToBaseline`)
+- `src/workers/worker.state.ts` (Modified — flushes pending real-time wall delta on pause/speed transitions)
+- `src/workers/simulation.engine.test.ts` (Modified — 16 automated tests including unified clock FPS-drop regression & real `THREE.AnimationMixer` integration)
 - `docs/PROJECT_STATE.md` (Modified)
 
 ## Architecture constraints
@@ -45,18 +45,18 @@ Phase 1.1 (Technical Fix & Stabilization — Complete & Verified) — Futuristic
 - Workers default to the 12-part `articulated-humanoid` placeholder (`PLACEHOLDER AVATAR — GLB READY`) until licensed rigged `.glb` files are placed under `public/models/` and configured via `avatarConfig.modelUrl`.
 
 ## Last verified checks (Exact commands & actual results)
-1. **Unit & Component Tests**:
+1. **Automated Unit, Component & Three.js AnimationMixer Integration Tests**:
    - Command: `npx --yes tsx --test src/workers/simulation.engine.test.ts`
-   - Result: **Passed (14/14 tests passing, 0 failures)**.
+   - Result: **Passed (`1..16`, `pass 16`, `fail 0`, exit code `0`)** — covers all 14 core Phase 1.1 tests plus Test 15 (unified `SimulationEngine` clock & zero FPS-drop drift) and Test 16 (real `THREE.AnimationMixer` integration via `GlbAvatarAnimationController`).
 2. **TypeScript Typecheck**:
    - Command: `npm run lint` (`tsc --noEmit`)
-   - Result: **Passed (0 errors)**.
+   - Result: **Passed (`0` errors, exit code `0`)**.
 3. **Production Build**:
    - Command: `npm run build` (`vite build`)
-   - Result: **Passed**.
-4. **Headless Browser Verification**:
+   - Result: **Passed (`Build succeeded - the applet is compiled`, exit code `0`)**.
+4. **Headless Chromium Browser Verification**:
    - Command: `playwright-cli open http://localhost:3000` (`1440x900`)
-   - Result: **Passed** — verified Global Pause/Resume clock & progress freeze, manual Step (`+0.5s`), Worker Pause isolation across Global Pause/Resume, `4x` speed control, FIFO task queueing, isolated GLB load failure fallback & recovery (`FALLBACK ACTIVE — GLB FAILED` -> `PLACEHOLDER AVATAR — GLB READY`), and deterministic `Reset` (`00:00`, `0` tokens, `$0.000`, `IDLE`).
+   - Result: **Passed (`0` console errors)** — verified Global Pause clock & progress freeze (`globalPauseFrozen: true`), manual `Step +0.5s` (`00:06` -> `00:07`), Worker Pause isolation across Global Pause/Resume (`PAUSED` preserved), speed transitions (`4x` -> `2x` -> `1x`), and deterministic `Reset` (`00:00`, `0` tokens, `$0.000`, `IDLE`).
 
 ## Next task
-Await owner approval of Phase 1.1 stabilization before any future phase.
+Stop after Phase 1.1 Final Audit corrections and await owner review before Phase 2.

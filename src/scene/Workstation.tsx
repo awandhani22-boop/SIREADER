@@ -7,12 +7,17 @@ import {
   WorkerStatus,
   WorkstationDefinition,
 } from '../workers/worker.types';
-import { shouldFreezeWorkerAnimation } from './avatarAnimation';
+import {
+  AvatarSimClockState,
+  createAvatarSimClockState,
+  stepAvatarClockFromEngine,
+} from './avatarAnimation';
 import { SCENE_COLORS } from './scene.constants';
 
 /**
  * Workstation Component (Composite 3D Desk + Chair + Multi-Monitor Rig)
- * - Freezes selection ring animation when Global Pause, Worker Pause, or Reduced Motion is active.
+ * - Selection ring rotation is driven by the unified `SimulationEngine` clock
+ *   (`stepAvatarClockFromEngine`), freezing on Global Pause, Worker Pause, or Reduced Motion.
  * - Memoized with granular per-workstation selector (`WorkstationSceneItem`).
  */
 
@@ -33,6 +38,9 @@ export const Workstation = React.memo(function Workstation({
 }: WorkstationProps) {
   const [hovered, setHovered] = useState(false);
   const selectionRingRef = useRef<THREE.Mesh>(null);
+  const clockStateRef = useRef<AvatarSimClockState>(
+    createAvatarSimClockState(workstation.workerId, useOfficeStore.getState()),
+  );
   const [dx, dy, dz] = workstation.deskPosition3D;
   const [sx, sy, sz] = workstation.seatPosition3D;
 
@@ -41,14 +49,18 @@ export const Workstation = React.memo(function Workstation({
     workerStatus === 'TASK_RECEIVED' ||
     workerStatus === 'COMPLETED';
 
-  // Animate selection ring rotation smoothly via ref, freezing on Global Pause or Worker Pause
-  useFrame((_, delta) => {
+  // Animate selection ring rotation using unified SimulationEngine time
+  useFrame(() => {
+    const storeState = useOfficeStore.getState();
+    const { animTimeSec } = stepAvatarClockFromEngine(
+      clockStateRef.current,
+      storeState,
+      workstation.workerId,
+      reducedMotion,
+      performance.now(),
+    );
     if (!selectionRingRef.current || !(isSelected || hovered)) return;
-    const { isGlobalPaused, simSpeedMultiplier } = useOfficeStore.getState();
-    if (shouldFreezeWorkerAnimation(isGlobalPaused, workerStatus, reducedMotion)) {
-      return;
-    }
-    selectionRingRef.current.rotation.z += delta * 0.85 * simSpeedMultiplier;
+    selectionRingRef.current.rotation.z = animTimeSec * 0.85;
   });
 
   const monitorOffsets =

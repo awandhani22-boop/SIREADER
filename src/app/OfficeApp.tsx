@@ -14,7 +14,10 @@ import { ActivityFeed } from '../ui/ActivityFeed';
 import { TopBar } from '../ui/TopBar';
 import { WorkerPanel } from '../ui/WorkerPanel';
 import { recordWorkerComponentRender } from '../utils/renderProfiler';
-import { FIXED_TICK_SIM_MS } from '../workers/simulation.engine';
+import {
+  FIXED_TICK_SIM_MS,
+  SimulationEngine,
+} from '../workers/simulation.engine';
 import { useOfficeStore } from '../workers/worker.state';
 import { WorkerId } from '../workers/worker.types';
 
@@ -99,10 +102,11 @@ export const RosterWorkerItem = React.memo(function RosterWorkerItem({
 });
 
 /**
- * OfficeApp Shell (SIREADER Virtual Office — Phase 1.1)
+ * OfficeApp Shell (SIREADER Virtual Office — Phase 1.1 Final Audit)
  * Integrates:
- * 1. Independent Simulation Engine Clock (decoupled from browser frame rate,
- *    with clamped delta so tab switching or browser lag never skips task stages).
+ * 1. Unified SimulationEngine Clock Anchor (`SimulationEngine.syncRealtimeClockAnchor`)
+ *    so `SimulationEngine` is the single source of truth for both discrete task ticks
+ *    and continuous 3D avatar animation time without 60Hz React state updates.
  * 2. Full-viewport 3D Isometric Virtual Office (`OfficeScene`).
  * 3. Accessible HTML Command-Center Overlay (`TopBar`, Top-Center Isometric Camera
  *    Dock, Collapsible Department/Worker Roster, `WorkerPanel` Profile Drawer,
@@ -111,6 +115,7 @@ export const RosterWorkerItem = React.memo(function RosterWorkerItem({
 
 export function OfficeApp() {
   const isGlobalPaused = useOfficeStore((s) => s.isGlobalPaused);
+  const simSpeedMultiplier = useOfficeStore((s) => s.simSpeedMultiplier);
   const advanceByWallClock = useOfficeStore((s) => s.advanceByWallClock);
   const workerOrder = useOfficeStore((s) => s.workerOrder);
   const selectedWorkerId = useOfficeStore((s) => s.selectedWorkerId);
@@ -126,9 +131,16 @@ export function OfficeApp() {
 
   const lastTickWallMsRef = useRef<number>(performance.now());
 
-  // Independent simulation clock interval (decoupled from 3D render framerate)
+  // Unified simulation clock interval anchored to SimulationEngine
   useEffect(() => {
-    lastTickWallMsRef.current = performance.now();
+    const startWallNow = performance.now();
+    lastTickWallMsRef.current = startWallNow;
+    SimulationEngine.syncRealtimeClockAnchor(
+      useOfficeStore.getState(),
+      startWallNow,
+      !isGlobalPaused,
+    );
+
     if (isGlobalPaused) return;
 
     const intervalId = window.setInterval(() => {
@@ -136,12 +148,22 @@ export function OfficeApp() {
       const rawDelta = now - lastTickWallMsRef.current;
       lastTickWallMsRef.current = now;
       advanceByWallClock(rawDelta);
+      SimulationEngine.syncRealtimeClockAnchor(
+        useOfficeStore.getState(),
+        now,
+        true,
+      );
     }, FIXED_TICK_SIM_MS);
 
     return () => {
       window.clearInterval(intervalId);
+      SimulationEngine.syncRealtimeClockAnchor(
+        useOfficeStore.getState(),
+        performance.now(),
+        false,
+      );
     };
-  }, [isGlobalPaused, advanceByWallClock]);
+  }, [isGlobalPaused, simSpeedMultiplier, advanceByWallClock]);
 
   return (
     <div className="relative w-screen h-screen flex flex-col bg-[#070C18] text-slate-100 overflow-hidden">

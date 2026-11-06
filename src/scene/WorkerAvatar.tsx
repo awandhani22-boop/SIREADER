@@ -1,18 +1,16 @@
-import { useAnimations, useGLTF } from '@react-three/drei';
+import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import React, { Suspense, useEffect, useRef } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { recordWorkerComponentRender } from '../utils/renderProfiler';
 import { useOfficeStore } from '../workers/worker.state';
+import { WorkerEntity, WorkerId } from '../workers/worker.types';
 import {
-  WorkerEntity,
-  WorkerId,
-} from '../workers/worker.types';
-import {
-  advanceAvatarAnimClock,
-  computeGlbMixerTimeScale,
+  AvatarSimClockState,
   computeHumanoidPose,
-  shouldFreezeWorkerAnimation,
+  createAvatarSimClockState,
+  GlbAvatarAnimationController,
+  stepAvatarClockFromEngine,
 } from './avatarAnimation';
 import {
   AvatarModelErrorBoundary,
@@ -20,17 +18,19 @@ import {
 } from './avatarErrorBoundary';
 
 /**
- * WorkerAvatar Component (Phase 1.1 — Fix A, Fix B, Fix C)
+ * WorkerAvatar Component (Phase 1.1 Final Audit — Unified Simulation Clock & Direct GLB Mixer)
  *
- * - Fix A: Uses controlled simulation animation clock (`advanceAvatarAnimClock` &
- *   `computeGlbMixerTimeScale`) instead of Three.js wall-clock `state.clock.elapsedTime`.
- *   Global Pause freezes all placeholder joints, overhead beacons, and GLB AnimationMixers;
- *   resuming continues from the exact previous animation time.
- * - Fix B: Wraps GLB loading in an isolated `AvatarModelErrorBoundary` + `<Suspense>`
- *   so a missing/corrupt GLB model falls back to that worker's `ArticulatedHumanoidPlaceholder`
- *   without crashing other avatars or the `OfficeScene`.
- * - Fix C: Memoized per-worker subscription (`WorkerAvatarSceneItem`) so mutating one
- *   worker never triggers unnecessary re-renders on the other 6 worker avatars.
+ * - Fix 1 (Unified Simulation & Avatar Animation Time):
+ *   Both `ArticulatedHumanoidPlaceholder` and `RiggedGlbAvatar` advance strictly from
+ *   `SimulationEngine`'s authoritative simulation time via `stepAvatarClockFromEngine`.
+ *   Browser FPS drops never cause animation time to drift away from simulation time,
+ *   Reset restores deterministic `initialPhaseSec` phases, and React state is never
+ *   updated at 60Hz.
+ * - Fix 2 (Direct GLB `THREE.AnimationMixer` Synchronization):
+ *   `RiggedGlbAvatar` uses `GlbAvatarAnimationController` instead of `@react-three/drei`'s
+ *   `useAnimations`, preventing `useAnimations`'s internal `useFrame` from firing an
+ *   extra unintended animation update on Global Pause and preventing unnecessary
+ *   `AnimationAction` restarts on pause/resume or speed changes.
  */
 
 export interface WorkerAvatarProps {
@@ -39,7 +39,11 @@ export interface WorkerAvatarProps {
   reducedMotion: boolean;
   avatarLoadError?: string;
   onSelectWorker: (workerId: WorkerId) => void;
-  onModelError?: (workerId: WorkerId, modelUrl: string, errorMessage: string) => void;
+  onModelError?: (
+    workerId: WorkerId,
+    modelUrl: string,
+    errorMessage: string,
+  ) => void;
 }
 
 interface RiggedGlbModelProps {
@@ -48,58 +52,44 @@ interface RiggedGlbModelProps {
   reducedMotion: boolean;
 }
 
-function RiggedGlbAvatar({ modelUrl, worker, reducedMotion }: RiggedGlbModelProps) {
+function RiggedGlbAvatar({
+  modelUrl,
+  worker,
+  reducedMotion,
+}: RiggedGlbModelProps) {
   const groupRef = useRef<THREE.Group>(null);
   const { scene, animations } = useGLTF(modelUrl);
-  const { actions, mixer } = useAnimations(animations, groupRef);
+
+  const controller = useMemo(
+    () => new GlbAvatarAnimationController(scene, animations),
+    [scene, animations],
+  );
+
+  const clockStateRef = useRef<AvatarSimClockState>(
+    createAvatarSimClockState(worker.id, useOfficeStore.getState()),
+  );
+
+  // Sync active clip ONLY when animationState or animationMap changes (never restarts on pause/speed)
+  useEffect(() => {
+    controller.syncClip(worker.animationState, worker.avatarConfig.animationMap);
+  }, [controller, worker.animationState, worker.avatarConfig.animationMap]);
 
   useEffect(() => {
-    const requestedClipName = worker.avatarConfig.animationMap[worker.animationState];
-    const clipAction =
-      (requestedClipName && actions[requestedClipName]) ||
-      Object.values(actions)[0] ||
-      null;
-
-    const { isGlobalPaused, simSpeedMultiplier } = useOfficeStore.getState();
-    const frozen = shouldFreezeWorkerAnimation(
-      isGlobalPaused,
-      worker.status,
-      reducedMotion,
-    );
-
-    if (mixer) {
-      mixer.timeScale = computeGlbMixerTimeScale({
-        isGlobalPaused,
-        workerStatus: worker.status,
-        reducedMotion,
-        simSpeedMultiplier,
-      });
-    }
-
-    if (clipAction) {
-      if (!clipAction.isRunning()) {
-        clipAction.reset().fadeIn(0.25).play();
-      }
-      clipAction.paused = frozen;
-    }
-
     return () => {
-      if (clipAction) {
-        clipAction.fadeOut(0.2);
-      }
+      controller.dispose();
     };
-  }, [actions, mixer, worker.animationState, worker.avatarConfig.animationMap, worker.status, reducedMotion]);
+  }, [controller]);
 
-  // Synchronize mixer.timeScale in useFrame so Global Pause / Speed changes take effect immediately
+  // Single unified useFrame driven by SimulationEngine time (no competing useAnimations useFrame)
   useFrame(() => {
-    if (!mixer) return;
-    const { isGlobalPaused, simSpeedMultiplier } = useOfficeStore.getState();
-    mixer.timeScale = computeGlbMixerTimeScale({
-      isGlobalPaused,
-      workerStatus: worker.status,
+    const storeState = useOfficeStore.getState();
+    controller.stepFromSimulation(
+      clockStateRef.current,
+      storeState,
+      worker.id,
       reducedMotion,
-      simSpeedMultiplier,
-    });
+      performance.now(),
+    );
   });
 
   return (
@@ -131,12 +121,11 @@ function ArticulatedHumanoidPlaceholder({
   const rightLegRef = useRef<THREE.Group>(null);
   const beaconRef = useRef<THREE.Mesh>(null);
 
-  const initialPhase =
-    worker.id.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0) * 0.37;
-  const controlledAnimTimeRef = useRef<number>(initialPhase);
-  const lastSeenSimTimeMsRef = useRef<number>(useOfficeStore.getState().simTimeMs);
+  const clockStateRef = useRef<AvatarSimClockState>(
+    createAvatarSimClockState(worker.id, useOfficeStore.getState()),
+  );
 
-  useFrame((_, rawDeltaSec) => {
+  useFrame(() => {
     if (
       !rootRef.current ||
       !torsoRef.current ||
@@ -151,32 +140,18 @@ function ArticulatedHumanoidPlaceholder({
       return;
     }
 
-    const { isGlobalPaused, simSpeedMultiplier, simTimeMs } = useOfficeStore.getState();
-
-    // If simulation was reset (`simTimeMs === 0` after being > 0), restore initial phase deterministically
-    if (simTimeMs === 0 && lastSeenSimTimeMsRef.current > 0) {
-      controlledAnimTimeRef.current = initialPhase;
-    }
-    lastSeenSimTimeMsRef.current = simTimeMs;
-
-    // Advance controlled animation clock (freezes when Global Pause, Worker Pause, or Reduced Motion is active)
-    controlledAnimTimeRef.current = advanceAvatarAnimClock({
-      currentAnimTimeSec: controlledAnimTimeRef.current,
-      rawDeltaSec,
-      isGlobalPaused,
-      workerStatus: worker.status,
+    const storeState = useOfficeStore.getState();
+    const { animTimeSec, isFrozen } = stepAvatarClockFromEngine(
+      clockStateRef.current,
+      storeState,
+      worker.id,
       reducedMotion,
-      simSpeedMultiplier,
-    });
-
-    const isFrozen = shouldFreezeWorkerAnimation(
-      isGlobalPaused,
-      worker.status,
-      reducedMotion,
+      performance.now(),
     );
+
     const pose = computeHumanoidPose(
       worker.animationState,
-      controlledAnimTimeRef.current,
+      animTimeSec,
       isFrozen,
     );
 
@@ -340,7 +315,11 @@ export const WorkerAvatar = React.memo(function WorkerAvatar({
       resolution.errorDetail &&
       onModelError
     ) {
-      onModelError(worker.id, worker.avatarConfig.modelUrl, resolution.errorDetail);
+      onModelError(
+        worker.id,
+        worker.avatarConfig.modelUrl,
+        resolution.errorDetail,
+      );
     }
   }, [
     worker.id,
@@ -415,7 +394,9 @@ export const WorkerAvatarSceneItem = React.memo(function WorkerAvatarSceneItem({
   const reducedMotion = useOfficeStore((s) => s.reducedMotion);
   const avatarLoadError = useOfficeStore((s) => s.avatarLoadErrors[workerId]);
   const selectWorker = useOfficeStore((s) => s.selectWorker);
-  const recordAvatarModelError = useOfficeStore((s) => s.recordAvatarModelError);
+  const recordAvatarModelError = useOfficeStore(
+    (s) => s.recordAvatarModelError,
+  );
 
   if (!worker) return null;
 

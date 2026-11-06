@@ -17,14 +17,19 @@ import {
 } from './worker.types';
 
 /**
- * SimulationEngine (Phase 1.1 — Deterministic Local Simulation Clock)
+ * SimulationEngine (Phase 1.1 Final Audit — Unified Simulation & Animation Clock)
  *
  * Enforces the critical architectural invariants:
- * 1. Frame-rate independence: Uses its own simulation clock step (`MAX_DELTA_CLAMP_MS = 1000`).
+ * 1. Single Source of Truth for Time:
+ *    - `SimulationEngine` owns both discrete tick simulation time (`snapshot.simTimeMs`)
+ *      and the unified render simulation time (`SimulationEngine.getUnifiedSimTimeMs`),
+ *      so 3D avatar animations (placeholder joints, GLB `THREE.AnimationMixer`, and
+ *      workstation rings) advance strictly from `SimulationEngine` time deltas without
+ *      60Hz React state updates or FPS-drop drift.
  * 2. Explicit Pause semantics:
  *    - Global Pause (`isGlobalPaused`): freezes the entire simulation clock and all workers.
  *    - Worker Pause (`worker.status === 'PAUSED'`): freezes ONLY that worker's
- *      current task progress while all other workers continue normally.
+ *      current task progress and animation time while all other workers continue normally.
  *    - Global Resume (`setGlobalPaused(false)`): never resumes a worker that was
  *      individually paused before Global Pause.
  *    - Worker Resume: restores `statusBeforePause` and continues the active task
@@ -32,8 +37,8 @@ import {
  * 3. Deterministic Reset (`resetToBaseline`):
  *    - Restores a clean, zero-task, zero-clock deterministic baseline (`simTimeMs = 0`,
  *      `tickCount = 0`, `prngState = seed`, `tasks = {}`, `events = []`, all workers `IDLE`
- *      with empty queues and zeroed `SIMULATED` metrics) whether called while running,
- *      while globally paused, with active tasks, or with queued tasks.
+ *      with empty queues and zeroed `SIMULATED` metrics) and increments `resetGeneration`
+ *      so all avatar animation phases reset deterministically.
  */
 
 export const DEFAULT_SIMULATION_SEED = 20261106;
@@ -43,6 +48,22 @@ export const MAX_DELTA_CLAMP_MS = 1000;
 const TASK_RECEIVED_DURATION_MS = 1000;
 const WALKING_DURATION_MS = 1500;
 const COMPLETED_CELEBRATION_DURATION_MS = 1000;
+
+export interface RealtimeClockAnchorState {
+  baseSimTimeMs: number;
+  anchorWallTimeMs: number;
+  isRealtimeLoopActive: boolean;
+  highWaterSimTimeMs: number;
+  resetGeneration: number;
+}
+
+const clockAnchor: RealtimeClockAnchorState = {
+  baseSimTimeMs: 0,
+  anchorWallTimeMs: 0,
+  isRealtimeLoopActive: false,
+  highWaterSimTimeMs: 0,
+  resetGeneration: 1,
+};
 
 /**
  * Mulberry32 deterministic seeded PRNG.
@@ -74,11 +95,100 @@ function interpolatePosition(
 
 export class SimulationEngine {
   /**
+   * Returns the monotonic reset generation counter.
+   * Increments whenever `createBaselineSnapshot` / `resetToBaseline` is invoked
+   * so avatar animation clocks deterministically restore their initial phases.
+   */
+  static getResetGeneration(): number {
+    return clockAnchor.resetGeneration;
+  }
+
+  /**
+   * Synchronizes the non-reactive real-time clock anchor with `snapshot.simTimeMs`.
+   * Called by `OfficeApp`'s real-time loop so `useFrame` can read continuous
+   * engine-anchored simulation time at 60fps without 60Hz React state updates
+   * and with zero long-term or FPS-drop drift from `snapshot.simTimeMs`.
+   */
+  static syncRealtimeClockAnchor(
+    snapshot: SimulationSnapshot,
+    nowWallTimeMs: number,
+    isRealtimeLoopActive: boolean,
+  ): void {
+    clockAnchor.baseSimTimeMs = snapshot.simTimeMs;
+    clockAnchor.anchorWallTimeMs = nowWallTimeMs;
+    clockAnchor.isRealtimeLoopActive = isRealtimeLoopActive && !snapshot.isGlobalPaused;
+    clockAnchor.highWaterSimTimeMs = Math.max(
+      clockAnchor.highWaterSimTimeMs,
+      snapshot.simTimeMs,
+    );
+  }
+
+  /**
+   * Returns the elapsed wall-clock milliseconds since the last real-time anchor sync
+   * (or `0` when the real-time loop is not active). Used when pausing or changing speed
+   * mid-interval to flush partial tick progress into `SimulationEngine` before freezing.
+   */
+  static getPendingRealtimeWallDeltaMs(nowWallTimeMs: number): number {
+    if (!clockAnchor.isRealtimeLoopActive) {
+      return 0;
+    }
+    return Math.max(
+      0,
+      Math.min(nowWallTimeMs - clockAnchor.anchorWallTimeMs, MAX_DELTA_CLAMP_MS),
+    );
+  }
+
+  /**
+   * Computes the authoritative simulation time (ms) from `SimulationEngine`.
+   * - When globally paused or in deterministic unit-test / step mode (`!isRealtimeLoopActive`),
+   *   returns `snapshot.simTimeMs` directly.
+   * - When the real-time loop is active in the browser, interpolates sub-tick progress
+   *   anchored strictly to `snapshot.simTimeMs` so animation never drifts from `simTimeMs`
+   *   even if browser FPS drops.
+   */
+  static getUnifiedSimTimeMs(
+    snapshot: SimulationSnapshot,
+    nowWallTimeMs?: number,
+  ): number {
+    if (snapshot.simTimeMs === 0 && snapshot.tickCount === 0) {
+      return 0;
+    }
+
+    if (
+      snapshot.isGlobalPaused ||
+      !clockAnchor.isRealtimeLoopActive ||
+      nowWallTimeMs === undefined
+    ) {
+      return Math.max(snapshot.simTimeMs, clockAnchor.highWaterSimTimeMs);
+    }
+
+    const elapsedWallMs = Math.max(
+      0,
+      Math.min(nowWallTimeMs - clockAnchor.anchorWallTimeMs, FIXED_TICK_SIM_MS),
+    );
+    const interpolatedSimMs =
+      snapshot.simTimeMs + elapsedWallMs * snapshot.simSpeedMultiplier;
+
+    clockAnchor.highWaterSimTimeMs = Math.max(
+      clockAnchor.highWaterSimTimeMs,
+      snapshot.simTimeMs,
+      interpolatedSimMs,
+    );
+    return clockAnchor.highWaterSimTimeMs;
+  }
+
+  /**
    * Creates a clean, zero-task deterministic baseline snapshot (`t = 0`).
    * Used by `resetToBaseline` so Reset clears all active/queued tasks, activity events,
-   * worker states, and restores the exact seeded PRNG state.
+   * worker states, and restores the exact seeded PRNG state and avatar animation phases.
    */
   static createBaselineSnapshot(seed: number = DEFAULT_SIMULATION_SEED): SimulationSnapshot {
+    clockAnchor.resetGeneration += 1;
+    clockAnchor.baseSimTimeMs = 0;
+    clockAnchor.anchorWallTimeMs = 0;
+    clockAnchor.isRealtimeLoopActive = false;
+    clockAnchor.highWaterSimTimeMs = 0;
+
     const workers = createInitialWorkersRegistry();
     return {
       seed,
@@ -97,7 +207,7 @@ export class SimulationEngine {
   /**
    * Restores the simulation to the clean deterministic baseline (`t = 0`),
    * clearing all active and queued tasks, resetting worker states and metrics,
-   * and restoring `prngState = seed`.
+   * restoring `prngState = seed`, and resetting avatar animation phases.
    */
   static resetToBaseline(seed: number = DEFAULT_SIMULATION_SEED): SimulationSnapshot {
     return this.createBaselineSnapshot(seed);
@@ -126,6 +236,8 @@ export class SimulationEngine {
       snapshot = this.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
     }
 
+    clockAnchor.baseSimTimeMs = snapshot.simTimeMs;
+    clockAnchor.highWaterSimTimeMs = snapshot.simTimeMs;
     return snapshot;
   }
 
@@ -159,6 +271,11 @@ export class SimulationEngine {
       current = this.stepSimulationTick(current, remainingMs);
     }
 
+    clockAnchor.baseSimTimeMs = current.simTimeMs;
+    clockAnchor.highWaterSimTimeMs = Math.max(
+      clockAnchor.highWaterSimTimeMs,
+      current.simTimeMs,
+    );
     return current;
   }
 
@@ -215,6 +332,11 @@ export class SimulationEngine {
       }
     }
 
+    clockAnchor.baseSimTimeMs = nextSnapshot.simTimeMs;
+    clockAnchor.highWaterSimTimeMs = Math.max(
+      clockAnchor.highWaterSimTimeMs,
+      nextSnapshot.simTimeMs,
+    );
     return nextSnapshot;
   }
 
@@ -536,6 +658,10 @@ export class SimulationEngine {
    */
   static setGlobalPaused(snapshot: SimulationSnapshot, isPaused: boolean): SimulationSnapshot {
     if (snapshot.isGlobalPaused === isPaused) return snapshot;
+
+    if (isPaused) {
+      clockAnchor.isRealtimeLoopActive = false;
+    }
 
     const event = WorkerMockService.createEvent(snapshot, {
       workerId: null,
