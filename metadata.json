@@ -1,0 +1,6 @@
+{
+  "name": "SIREADER Virtual Office",
+  "description": "Futuristic 3D isometric virtual office simulation for SIREADER AI workers with deterministic local task queues, state-driven avatars, and department telemetry.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
