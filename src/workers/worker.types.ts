@@ -1,18 +1,73 @@
 /**
- * Domain types for SIREADER Virtual Office (Phase 1 — Local Simulation Only)
+ * Domain types for SIREADER Virtual Office (Phase 1.1 & Phase 2.1 — Local Simulation Only)
  * Enforces strict separation between Worker and Task entities, deterministic
- * simulation clock state, and explicit SIMULATED metric labeling.
+ * simulation clock state, Phase 2.1 structured task metadata, and explicit SIMULATED metric labeling.
  */
 
-export type WorkerId =
-  | 'supervisor'
-  | 'haiku'
-  | 'sonnet'
-  | 'opus'
-  | 'decision_engineer'
-  | 'market_monitor'
-  | 'data_archivist'
-  | (string & {});
+import {
+  CapabilityComplexityLevel,
+  CapabilityDefinition,
+  CapabilitySchemaDescriptor,
+  PERMANENT_WORKER_IDS,
+  PermanentWorkerId,
+  TASK_CATEGORIES,
+  TASK_EXECUTION_STAGE_STATUSES,
+  TASK_LIFECYCLE_STATUSES,
+  TASK_PRIORITIES,
+  TASK_TYPES,
+  TaskCategory,
+  TaskErrorDetail,
+  TaskExecutionStageStatus,
+  TaskInputPayload,
+  TaskLifecycleStatus,
+  TaskParameterPrimitive,
+  TaskPriority,
+  TaskResultPayload,
+  TaskStatus,
+  TaskTransitionError,
+  TaskType,
+  TaskValidationIssue,
+  TaskValidationResult,
+  TaskValidationRuleCode,
+  WORKER_CAPABILITY_IDS,
+  WorkerCapabilityId,
+  WorkerCapabilityProfile,
+  WorkerId,
+} from '../tasks/task.types';
+
+export {
+  PERMANENT_WORKER_IDS,
+  TASK_CATEGORIES,
+  TASK_EXECUTION_STAGE_STATUSES,
+  TASK_LIFECYCLE_STATUSES,
+  TASK_PRIORITIES,
+  TASK_TYPES,
+  WORKER_CAPABILITY_IDS,
+};
+
+export type {
+  CapabilityComplexityLevel,
+  CapabilityDefinition,
+  CapabilitySchemaDescriptor,
+  PermanentWorkerId,
+  TaskCategory,
+  TaskErrorDetail,
+  TaskExecutionStageStatus,
+  TaskInputPayload,
+  TaskLifecycleStatus,
+  TaskParameterPrimitive,
+  TaskPriority,
+  TaskResultPayload,
+  TaskStatus,
+  TaskTransitionError,
+  TaskType,
+  TaskValidationIssue,
+  TaskValidationResult,
+  TaskValidationRuleCode,
+  WorkerCapabilityId,
+  WorkerCapabilityProfile,
+  WorkerId,
+};
 
 export type RoomId =
   | 'room_reception'
@@ -40,31 +95,6 @@ export type WorkerStatus =
   | 'COMPLETED'
   | 'ERROR';
 
-/**
- * Explicit Task lifecycle status (separate from Worker status).
- * A BUSY worker can have a currentTask in ANALYZING while queued tasks are QUEUED.
- */
-export type TaskStatus =
-  | 'QUEUED'
-  | 'ROUTING'
-  | 'EXTRACTING'
-  | 'ANALYZING'
-  | 'VALIDATING'
-  | 'ARCHIVING'
-  | 'COMPLETED'
-  | 'FAILED';
-
-export type TaskPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'CRITICAL';
-
-export type TaskCategory =
-  | 'ROUTING'
-  | 'CLASSIFICATION'
-  | 'REASONING'
-  | 'ESCALATION'
-  | 'DECISION_CHECK'
-  | 'MARKET_WATCH'
-  | 'ARCHIVAL';
-
 export type AnimationClipKey = 'idle' | 'seated' | 'typing' | 'walking' | 'talking';
 
 export interface AvatarConfig {
@@ -78,19 +108,52 @@ export interface AvatarConfig {
 }
 
 export interface TaskStageThreshold {
-  status: Exclude<TaskStatus, 'QUEUED' | 'COMPLETED' | 'FAILED'>;
+  status: TaskExecutionStageStatus;
   startPercent: number;
   endPercent: number;
 }
 
+/**
+ * Unified TaskEntity (Phase 1.1 + Phase 2.1 backward-compatible extension).
+ * Single canonical task model across the entire repository.
+ */
 export interface TaskEntity {
   id: string;
+  /** Phase 1.1 worker reference (kept in sync with assignedWorkerId when assigned) */
   workerId: WorkerId;
+  /** Phase 2.1 structured task type mapped to worker capabilities */
+  type: TaskType;
   title: string;
   description: string;
+  /** Phase 1.1 legacy category preserved for UI badges & stage pipelines */
   category: TaskCategory;
   priority: TaskPriority;
+  /** Unified status (supports Phase 2.1 lifecycle states and Phase 1.1 execution sub-stages) */
   status: TaskStatus;
+  /** Canonical Phase 2.1 lifecycle status ('PENDING' | 'QUEUED' | 'ASSIGNED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'RETRY_WAIT' | 'BLOCKED' | 'CANCELLED') */
+  lifecycleStatus: TaskLifecycleStatus;
+  /** Phase 2.1 explicit assigned worker ID (null when unassigned in PENDING/QUEUED/BLOCKED states) */
+  assignedWorkerId: WorkerId | null;
+  /** Phase 2.1 parent task ID for decomposed subtasks */
+  parentTaskId: string | null;
+  /** Phase 2.1 upstream task IDs that must complete before execution */
+  dependencyIds: string[];
+  /** Phase 2.1 structured task input payload */
+  input: TaskInputPayload;
+  /** Phase 2.1 structured task result payload (populated on completion) */
+  result: TaskResultPayload | null;
+  /** Phase 2.1 structured error detail (populated on failure/error) */
+  error: TaskErrorDetail | null;
+  /** Phase 2.1 execution attempt counter (0 before first run, >= 1 when started) */
+  attemptCount: number;
+  /** Phase 2.1 maximum allowed attempts (must be > 0) */
+  maxAttempts: number;
+  /** Phase 2.1 simulation timestamps (in simulation milliseconds, synced with *SimMs fields) */
+  createdAt: number;
+  queuedAt: number | null;
+  startedAt: number | null;
+  completedAt: number | null;
+  updatedAt: number;
   /** Deterministic progress 0..100 derived strictly from elapsedSimMs / totalDurationSimMs */
   progress: number;
   elapsedSimMs: number;

@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Clock,
   Cpu,
+  Layers,
   ListTodo,
   Terminal,
   X,
@@ -14,17 +15,19 @@ import {
   formatSimDuration,
   formatTokens,
 } from '../utils/formatters';
+import { getWorkerCapabilityProfile } from '../workers/worker.capabilities';
 import { useOfficeStore } from '../workers/worker.state';
 import { WorkerControls } from './WorkerControls';
 
 /**
- * WorkerPanel Component (Selected Worker Profile Drawer — Phase 1.1)
+ * WorkerPanel Component (Selected Worker Profile Drawer — Phase 1.1 & Phase 2.1)
  * Displays:
  * - Worker Identity, Role, Department, Workstation
  * - Explicit separation between Worker Status (`BUSY`/`IDLE`/`PAUSED`) and
  *   Current Task Status (`ROUTING`/`EXTRACTING`/`ANALYZING`/`VALIDATING`/`ARCHIVING`)
  * - Deterministic Task Progress bar & Stage Pipeline
  * - Task Queue (`QUEUED` items)
+ * - Read-only Official Worker Capabilities (`WorkerCapabilityProfile`)
  * - Honest Character Asset & Rig Configuration (`PLACEHOLDER AVATAR — GLB READY`
  *   plus isolated GLB fallback diagnostics when a model URL fails to load)
  * - Simulated Telemetry (`SIMULATED` tokens & cost)
@@ -46,6 +49,7 @@ export function WorkerPanel() {
     return null;
   }
 
+  const capabilityProfile = getWorkerCapabilityProfile(worker.id);
   const activeTask = worker.currentTaskId
     ? tasks[worker.currentTaskId] ?? null
     : null;
@@ -320,6 +324,38 @@ export function WorkerPanel() {
             <span>Engine: {worker.modelLabel}</span>
           </div>
         </section>
+
+        {/* 4b. Read-Only Worker Capability Registry Profile (Phase 2.1) */}
+        {capabilityProfile && (
+          <section
+            aria-label="Worker Capabilities"
+            data-testid="worker-capabilities-section"
+            className="p-3 rounded-lg bg-slate-900/75 border border-slate-800 space-y-2"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                <span>
+                  Capabilities ({capabilityProfile.capabilities.length})
+                </span>
+              </h3>
+              <span className="font-mono text-[10px] text-slate-400">
+                MAX CONCURRENCY: {capabilityProfile.maxConcurrency}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {capabilityProfile.capabilities.map((cap) => (
+                <span
+                  key={cap.capabilityId}
+                  title={cap.description}
+                  className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-950 text-cyan-300 border border-slate-800"
+                >
+                  {cap.capabilityId}
+                </span>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* 5. Interactive Controls (Pause/Resume + Assign Mock Task) */}
         <WorkerControls worker={worker} />

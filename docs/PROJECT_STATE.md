@@ -1,62 +1,57 @@
 # SIREADER Virtual Office — Project State
 
 ## Current phase
-Phase 1.1 (Technical Fix & Stabilization + Final Audit Corrections — Complete & Verified) — Futuristic isometric 3D virtual office with 7 interactive AI workers, unified SimulationEngine & avatar animation time source, direct `THREE.AnimationMixer` synchronization (`GlbAvatarAnimationController`), isolated GLB error boundaries, granular Zustand selectors, and deterministic baseline reset.
+Phase 2.1 (Worker Capability Registry & Task Model — Complete & Verified) — Builds on the Phase 1.1 unified 3D simulation & animation foundation by introducing a centralized, deeply immutable `WorkerCapabilityRegistry` across all 7 permanent workers (`28` unique capabilities) and a backward-compatible, deterministically validated `TaskEntity` domain model with a 9-state lifecycle state machine (`PENDING`, `QUEUED`, `ASSIGNED`, `RUNNING`, `COMPLETED`, `FAILED`, `RETRY_WAIT`, `BLOCKED`, `CANCELLED`).
 
 ## Working features
-- **Unified SimulationEngine & Avatar Animation Clock (`src/workers/simulation.engine.ts`, `src/scene/avatarAnimation.ts`, `src/scene/WorkerAvatar.tsx`, `src/scene/Workstation.tsx`, `src/app/OfficeApp.tsx`)**:
-  - `SimulationEngine` is the single source of truth for simulation time (`simTimeMs` and `SimulationEngine.getUnifiedSimTimeMs`).
-  - `stepAvatarClockFromEngine` advances each worker's `AvatarSimClockState` strictly by the simulation-time delta (`deltaSimMs / 1000`) derived from `SimulationEngine`, eliminating drift between `SimulationEngine` time and 3D avatar animation time even across severe browser FPS drops (`0.000000s` drift).
-  - Global Pause (`isGlobalPaused === true`) freezes simulation time, placeholder joint poses, overhead beacon rotation, workstation selection rings, and GLB `THREE.AnimationMixer` updates at the exact frame without 60Hz React state updates.
-  - Individual Worker Pause (`worker.status === 'PAUSED'`) freezes only that worker's task progress and animation clock while unpaused workers continue normally, and preserves `PAUSED` across Global Pause/Resume.
-  - Speed multipliers (`1x`, `2x`, `4x`), manual `Step +0.5s` (`tickSimulation(500)`), and deterministic `Reset` (`resetToBaseline`, restoring `initialPhaseSec` for placeholders and `mixer.time = 0` for GLB avatars) operate from the same engine clock.
-- **Direct GLB `THREE.AnimationMixer` Synchronization (`GlbAvatarAnimationController` in `src/scene/avatarAnimation.ts` & `src/scene/WorkerAvatar.tsx`)**:
-  - Replaced `@react-three/drei`'s `useAnimations` (which registered an internal `useFrame((state, delta) => mixer.update(delta))` before component `useFrame` callbacks, causing an unintended extra mixer update on Global Pause).
-  - `GlbAvatarAnimationController` directly manages `new THREE.AnimationMixer(root)` and updates it exclusively via `stepFromSimulation` after checking pause/freeze state (`0` extra updates on Global Pause).
-  - Tracks `activeClipName` and `actionStartCount` so pausing, resuming, or changing speed (`1x`/`2x`/`4x`) never restarts a running `THREE.AnimationAction` unless `animationState` maps to a different clip name.
-- **Isolated GLB Error Boundary & Fallback (`src/scene/avatarErrorBoundary.tsx`, `src/scene/WorkerAvatar.tsx`, `src/ui/WorkerPanel.tsx`)**:
-  - Each worker avatar wraps its GLB model loader in an isolated `AvatarModelErrorBoundary` with `resolveAvatarRenderMode` and `isValidGlbModelUrl`.
-  - Missing, invalid, or corrupted `.glb`/`.gltf` URLs fall back cleanly to that worker's `ArticulatedHumanoidPlaceholder` while preserving `fallbackType`, `accentColor`, `modelUrl`, and `animationMap`.
-- **Granular Zustand Selectors & Render Isolation (`src/scene/OfficeScene.tsx`, `src/scene/WorldLabelsOverlay.tsx`, `src/app/OfficeApp.tsx`, `src/ui/WorkerPanel.tsx`, `src/utils/renderProfiler.ts`)**:
-  - Memoized per-worker components (`WorkerAvatarSceneItem`, `WorkstationSceneItem`, `RoomSceneItem`, `WorldWorkerBadgeItem`, `RosterWorkerItem`) subscribe only to their own worker slice (`s.workers[workerId]`), resulting in `0` re-renders on the other 6 workers when one worker updates.
+- **Centralized Worker Capability Registry (`src/workers/worker.capabilities.ts`, `src/tasks/task.types.ts`)**:
+  - Single source of truth for static capability metadata across the 7 permanent workers (`supervisor`, `haiku`, `sonnet`, `opus`, `decision_engineer`, `market_monitor`, `data_archivist`) and `28` unique `WorkerCapabilityId` definitions.
+  - Strict separation between static capability profiles (`WorkerCapabilityProfile`) and runtime worker operational status (`IDLE`, `BUSY`, `PAUSED`).
+  - Supports worker profile lookup (`getWorkerCapabilityProfile`), full profile enumeration (`getAllWorkerCapabilityProfiles`), capability lookup (`getCapabilityById`), active task-type support check (`supportsTaskType`), worker discovery by task type (`getWorkersByTaskType`), and isolated custom registry snapshots (`createCustomCapabilityRegistry`) where disabled capabilities (`enabled: false`) or disabled workers are excluded from active queries.
+  - All returned profiles and capability definitions are deeply frozen (`Object.freeze`) defensive clones that cannot be mutated from outside.
+- **Unified Structured Task Model & Deterministic Factory (`src/workers/worker.types.ts`, `src/tasks/task.factory.ts`, `src/workers/worker.mock-service.ts`)**:
+  - Extended the existing `TaskEntity` backward-compatibly (without creating a duplicate task entity) to include `type`, `lifecycleStatus`, `assignedWorkerId`, `parentTaskId`, `dependencyIds`, structured `input` (`TaskInputPayload`), structured `result` (`TaskResultPayload | null`), structured `error` (`TaskErrorDetail | null`), `attemptCount`, `maxAttempts`, and simulation-clock timestamps (`createdAt`, `queuedAt`, `startedAt`, `completedAt`, `updatedAt`).
+  - Deterministic task ID and entity creation (`generateDeterministicTaskId`, `DeterministicTaskSequence`, `createTaskEntity`) driven strictly by `simTimeMs`, seed, and sequence counters (zero `Date.now()` or `Math.random()`).
+- **Task Lifecycle State Machine & 17-Rule Validator (`src/tasks/task.transitions.ts`, `src/tasks/task.validation.ts`)**:
+  - Enforces all valid Phase 2.1 lifecycle transitions (`PENDING`, `QUEUED`, `ASSIGNED`, `RUNNING`, `COMPLETED`, `FAILED`, `RETRY_WAIT`, `BLOCKED`, `CANCELLED`), terminal state immutability (`COMPLETED`, `CANCELLED`), and backward-compatible mapping from Phase 1.1 stage statuses (`ROUTING`, `EXTRACTING`, `ANALYZING`, `VALIDATING`, `ARCHIVING` -> `RUNNING`).
+  - `transitionTaskStatus` is pure and immutable: failed transitions return structured `TaskTransitionError` objects without mutating the input `TaskEntity`.
+  - `validateTaskEntity` enforces all 17 structural, relational, and simulation-timestamp invariants.
+- **Preserved Phase 1.1 Foundation**:
+  - Unified `SimulationEngine` & avatar animation clock (`stepAvatarClockFromEngine`), direct `THREE.AnimationMixer` controller (`GlbAvatarAnimationController`), isolated GLB error boundaries, granular Zustand selectors, and read-only capability badges in `WorkerPanel`.
 
-## Files modified / added in Phase 1.1 & Final Audit
-- `src/scene/avatarAnimation.ts` (Added & Updated — `stepAvatarClockFromEngine`, `createAvatarSimClockState`, `GlbAvatarAnimationController`)
-- `src/scene/avatarErrorBoundary.tsx` (Added)
-- `src/utils/renderProfiler.ts` (Added)
-- `src/scene/WorkerAvatar.tsx` (Modified — unified engine clock + `GlbAvatarAnimationController`)
-- `src/scene/Workstation.tsx` (Modified — unified engine clock for selection ring)
-- `src/scene/OfficeScene.tsx` (Modified — granular memoized scene items)
-- `src/scene/WorldLabelsOverlay.tsx` (Modified — granular memoized badge items)
-- `src/app/OfficeApp.tsx` (Modified — granular `RosterWorkerItem` + `SimulationEngine.syncRealtimeClockAnchor`)
-- `src/ui/WorkerPanel.tsx` (Modified — granular selectors + GLB fallback diagnostics)
-- `src/workers/worker.registry.ts` (Modified — zero-state deterministic baseline)
-- `src/workers/simulation.engine.ts` (Modified — `getUnifiedSimTimeMs`, `syncRealtimeClockAnchor`, `resetToBaseline`)
-- `src/workers/worker.state.ts` (Modified — flushes pending real-time wall delta on pause/speed transitions)
-- `src/workers/simulation.engine.test.ts` (Modified — 16 automated tests including unified clock FPS-drop regression & real `THREE.AnimationMixer` integration)
+## Files modified / added in Phase 2.1
+- `src/tasks/task.types.ts` (Added — Phase 2.1 task, capability, validation, and transition types)
+- `src/workers/worker.capabilities.ts` (Added — centralized immutable Worker Capability Registry & query operations)
+- `src/tasks/task.transitions.ts` (Added — 9-state Task State Machine, stage compatibility mapper, and immutable transition functions)
+- `src/tasks/task.validation.ts` (Added — 17-rule TaskEntity structural and timestamp validator)
+- `src/tasks/task.factory.ts` (Added — deterministic Task ID sequence & validated TaskEntity factory)
+- `src/workers/worker.types.ts` (Modified — backward-compatible extension of `TaskEntity` with Phase 2.1 fields)
+- `src/workers/worker.mock-service.ts` (Modified — populates and maintains Phase 2.1 `TaskEntity` metadata & timestamps)
+- `src/workers/simulation.engine.ts` (Modified — maintains `lifecycleStatus` and `updatedAt` during execution ticks)
+- `src/ui/WorkerPanel.tsx` (Modified — displays read-only worker capabilities from `getWorkerCapabilityProfile`)
+- `src/workers/worker.capabilities.test.ts` (Added — 10 automated unit tests for Capability Registry)
+- `src/tasks/task.model.test.ts` (Added — 14 automated unit tests for Task Model, Validation & Deterministic Factory)
+- `src/tasks/task.transitions.test.ts` (Added — 5 automated unit tests for Task State Machine & transitions)
 - `docs/PROJECT_STATE.md` (Modified)
 
 ## Architecture constraints
-- Strictly 100% Frontend-only (`Phase 1.1`). Python backend, databases, migrations, `.env`, Telegram, MetaTrader 5, and live trading execution are untouched.
-- Stack: React 19, TypeScript, Vite, Three.js (`^0.187.0`), `@react-three/fiber` (`^9.8.2`), `@react-three/drei` (`^10.7.9`), `zustand` (`^5.0.16`), Tailwind CSS v4.
+- Strictly 100% Frontend-only (`Phase 2.1`). Python backend, databases, migrations, `.env`, Telegram, MetaTrader 5, and live trading execution are untouched.
+- Phase 2.1 scope strictly limited to Worker Capability Registry & Task Model (no Task Dispatcher, Priority Scheduler, Dependency Graph / Cycle Detection, Inter-worker Messaging, or Retry/Timeout/Audit Engine yet).
 
 ## Known limitations
 - All tasks, queues, events, token counts, and USD costs are local deterministic simulations explicitly labeled `SIMULATED`.
-- Workers default to the 12-part `articulated-humanoid` placeholder (`PLACEHOLDER AVATAR — GLB READY`) until licensed rigged `.glb` files are placed under `public/models/` and configured via `avatarConfig.modelUrl`.
+- Task Dispatcher, Priority Queue Scheduler, and Task Decomposition will be introduced in Phase 2.2.
 
 ## Last verified checks (Exact commands & actual results)
-1. **Automated Unit, Component & Three.js AnimationMixer Integration Tests**:
-   - Command: `npx --yes tsx --test src/workers/simulation.engine.test.ts`
-   - Result: **Passed (`1..16`, `pass 16`, `fail 0`, exit code `0`)** — covers all 14 core Phase 1.1 tests plus Test 15 (unified `SimulationEngine` clock & zero FPS-drop drift) and Test 16 (real `THREE.AnimationMixer` integration via `GlbAvatarAnimationController`).
+1. **Automated Unit & Integration Tests (Phase 1.1 + Phase 2.1)**:
+   - Command: `npx --yes tsx --test src/workers/simulation.engine.test.ts src/workers/worker.capabilities.test.ts src/tasks/task.model.test.ts src/tasks/task.transitions.test.ts`
+   - Result: **Passed (`1..45`, `pass 45`, `fail 0`, exit code `0`)** — 16 Phase 1.1 tests + 10 Capability Registry tests + 14 Task Model/Validation/Factory tests + 5 State Transition tests.
 2. **TypeScript Typecheck**:
    - Command: `npm run lint` (`tsc --noEmit`)
    - Result: **Passed (`0` errors, exit code `0`)**.
 3. **Production Build**:
    - Command: `npm run build` (`vite build`)
    - Result: **Passed (`Build succeeded - the applet is compiled`, exit code `0`)**.
-4. **Headless Chromium Browser Verification**:
-   - Command: `playwright-cli open http://localhost:3000` (`1440x900`)
-   - Result: **Passed (`0` console errors)** — verified Global Pause clock & progress freeze (`globalPauseFrozen: true`), manual `Step +0.5s` (`00:06` -> `00:07`), Worker Pause isolation across Global Pause/Resume (`PAUSED` preserved), speed transitions (`4x` -> `2x` -> `1x`), and deterministic `Reset` (`00:00`, `0` tokens, `$0.000`, `IDLE`).
 
 ## Next task
-Stop after Phase 1.1 Final Audit corrections and await owner review before Phase 2.
+Await owner review of Phase 2.1 before proceeding to Phase 2.2 (Supervisor Decomposition, Task Dispatcher & Priority Scheduler).

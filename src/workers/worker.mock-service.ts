@@ -4,6 +4,15 @@ import {
   WORKER_TASK_TEMPLATES,
 } from './worker.registry';
 import {
+  mapCategoryToDefaultTaskType,
+} from './worker.capabilities';
+import {
+  createTaskEntity as buildValidatedTaskEntity,
+} from '../tasks/task.factory';
+import {
+  toTaskLifecycleStatus,
+} from '../tasks/task.transitions';
+import {
   ActivityEvent,
   ActivityEventType,
   AnimationClipKey,
@@ -13,14 +22,16 @@ import {
   TaskEntity,
   TaskPriority,
   TaskStatus,
+  TaskType,
   WorkerEntity,
   WorkerId,
   WorkerStatus,
 } from './worker.types';
 
 /**
- * WorkerMockService (Phase 1 — Local Simulation Only)
+ * WorkerMockService (Phase 1.1 & Phase 2.1 — Local Simulation Only)
  * Responsible for domain operations on Workers and Tasks:
+ * - Creating validated, deterministic TaskEntities with Phase 2.1 structured metadata
  * - Assigning tasks and managing per-worker task queues
  * - Promoting queued tasks when a worker becomes available
  * - Completing simulated tasks and updating SIMULATED token/cost counters
@@ -31,12 +42,16 @@ const MAX_EVENT_LOG_LENGTH = 80;
 
 export interface AssignTaskInput {
   workerId: WorkerId;
+  type?: TaskType;
   title?: string;
   description?: string;
   category?: TaskCategory;
   priority?: TaskPriority;
   durationSimMs?: number;
   targetTokens?: number;
+  parentTaskId?: string | null;
+  dependencyIds?: readonly string[];
+  maxAttempts?: number;
 }
 
 export function deriveAnimationForWorker(
@@ -110,31 +125,48 @@ export class WorkerMockService {
     const template = templates[templateIndex % templates.length];
 
     const category = input.category ?? template.category;
+    const taskType = input.type ?? mapCategoryToDefaultTaskType(category);
     const stagePipeline = DEFAULT_STAGE_PIPELINES[category] ?? DEFAULT_STAGE_PIPELINES.REASONING;
     const costRate = COST_PER_1K_TOKENS_SIMULATED[input.workerId] ?? 0.002;
     const taskNumber = Object.keys(snapshot.tasks).length + 101;
     const id = `tsk_${input.workerId}_${taskNumber}_${snapshot.simTimeMs}`;
+    const title = input.title?.trim() ? input.title.trim() : template.title;
+    const description = input.description?.trim()
+      ? input.description.trim()
+      : template.description;
 
-    return {
+    const created = buildValidatedTaskEntity({
       id,
-      workerId: input.workerId,
-      title: input.title?.trim() ? input.title.trim() : template.title,
-      description: input.description?.trim() ? input.description.trim() : template.description,
+      simTimeMs: snapshot.simTimeMs,
+      type: taskType,
       category,
+      title,
+      description,
       priority: input.priority ?? template.priority,
       status: 'QUEUED',
-      progress: 0,
-      elapsedSimMs: 0,
+      assignedWorkerId: input.workerId,
+      fallbackWorkerId: input.workerId,
+      parentTaskId: input.parentTaskId ?? null,
+      dependencyIds: input.dependencyIds ?? [],
+      maxAttempts: input.maxAttempts ?? 3,
       totalDurationSimMs: input.durationSimMs ?? template.durationSimMs,
-      stagePipeline,
-      simulatedTokens: 0,
       targetTokens: input.targetTokens ?? template.targetTokens,
-      simulatedCostUsd: 0,
+      input: {
+        instruction: description,
+        parameters: {
+          workerId: input.workerId,
+          category,
+          templateIndex,
+        },
+        sourceChannel: 'simulation_baseline',
+        contextTags: [category.toLowerCase(), taskType.toLowerCase()],
+      },
+    });
+
+    return {
+      ...created,
+      stagePipeline: stagePipeline.map((s) => ({ ...s })),
       costPerThousandTokensUsd: costRate,
-      createdAtSimMs: snapshot.simTimeMs,
-      startedAtSimMs: null,
-      completedAtSimMs: null,
-      isSimulated: true,
     };
   }
 
@@ -170,6 +202,10 @@ export class WorkerMockService {
       const startedTask: TaskEntity = {
         ...newTask,
         status: initialStageStatus,
+        lifecycleStatus: toTaskLifecycleStatus(initialStageStatus),
+        attemptCount: Math.min(newTask.maxAttempts, newTask.attemptCount + 1),
+        startedAt: snapshot.simTimeMs,
+        updatedAt: snapshot.simTimeMs,
         startedAtSimMs: snapshot.simTimeMs,
       };
       updatedTasks[newTask.id] = startedTask;
@@ -254,6 +290,10 @@ export class WorkerMockService {
     const activatedTask: TaskEntity = {
       ...nextTask,
       status: initialStageStatus,
+      lifecycleStatus: toTaskLifecycleStatus(initialStageStatus),
+      attemptCount: Math.min(nextTask.maxAttempts, nextTask.attemptCount + 1),
+      startedAt: snapshot.simTimeMs,
+      updatedAt: snapshot.simTimeMs,
       startedAtSimMs: snapshot.simTimeMs,
     };
 
@@ -319,11 +359,25 @@ export class WorkerMockService {
     const completedTask: TaskEntity = {
       ...currentTask,
       status: 'COMPLETED',
+      lifecycleStatus: 'COMPLETED',
       progress: 100,
       elapsedSimMs: currentTask.totalDurationSimMs,
       simulatedTokens: finalTokens,
       simulatedCostUsd: finalCost,
+      completedAt: snapshot.simTimeMs,
+      updatedAt: snapshot.simTimeMs,
       completedAtSimMs: snapshot.simTimeMs,
+      result: {
+        summary: `[SIMULATED] Completed "${currentTask.title}" by ${worker.name}`,
+        outputData: {
+          simulatedTokens: finalTokens,
+          simulatedCostUsd: finalCost,
+          completedAtSimMs: snapshot.simTimeMs,
+        },
+        artifacts: [`artifact_${currentTask.id}`],
+        confidenceScore: 0.98,
+        isSimulated: true,
+      },
     };
 
     const updatedWorker: WorkerEntity = {

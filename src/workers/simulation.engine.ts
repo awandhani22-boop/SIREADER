@@ -473,6 +473,8 @@ export class SimulationEngine {
         elapsedSimMs: nextElapsedMs,
         progress: nextProgress,
         status: nextStageStatus,
+        lifecycleStatus: 'RUNNING',
+        updatedAt: snapshot.simTimeMs,
         simulatedTokens: nextSimTokens,
         simulatedCostUsd: nextSimCost,
       };
