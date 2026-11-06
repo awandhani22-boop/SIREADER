@@ -1,30 +1,45 @@
 import { useAnimations, useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { Suspense, useEffect, useRef } from 'react';
+import React, { Suspense, useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { recordWorkerComponentRender } from '../utils/renderProfiler';
+import { useOfficeStore } from '../workers/worker.state';
 import {
-  TaskEntity,
   WorkerEntity,
   WorkerId,
 } from '../workers/worker.types';
+import {
+  advanceAvatarAnimClock,
+  computeGlbMixerTimeScale,
+  computeHumanoidPose,
+  shouldFreezeWorkerAnimation,
+} from './avatarAnimation';
+import {
+  AvatarModelErrorBoundary,
+  resolveAvatarRenderMode,
+} from './avatarErrorBoundary';
 
 /**
- * WorkerAvatar Component (Skill 04 — Human Character & Animation System)
+ * WorkerAvatar Component (Phase 1.1 — Fix A, Fix B, Fix C)
  *
- * Supports:
- * 1. Rigged GLB/glTF characters with animation clip mapping (`idle`, `seated`,
- *    `typing`, `walking`, `talking`) when `worker.avatarConfig.modelUrl` is provided.
- * 2. Honest 12-part Articulated Humanoid Placeholder when `modelUrl` is null,
- *    with smooth per-frame joint kinematics driven strictly via `useRef` inside
- *    `useFrame` (zero 60Hz React state updates).
+ * - Fix A: Uses controlled simulation animation clock (`advanceAvatarAnimClock` &
+ *   `computeGlbMixerTimeScale`) instead of Three.js wall-clock `state.clock.elapsedTime`.
+ *   Global Pause freezes all placeholder joints, overhead beacons, and GLB AnimationMixers;
+ *   resuming continues from the exact previous animation time.
+ * - Fix B: Wraps GLB loading in an isolated `AvatarModelErrorBoundary` + `<Suspense>`
+ *   so a missing/corrupt GLB model falls back to that worker's `ArticulatedHumanoidPlaceholder`
+ *   without crashing other avatars or the `OfficeScene`.
+ * - Fix C: Memoized per-worker subscription (`WorkerAvatarSceneItem`) so mutating one
+ *   worker never triggers unnecessary re-renders on the other 6 worker avatars.
  */
 
-interface WorkerAvatarProps {
+export interface WorkerAvatarProps {
   worker: WorkerEntity;
-  activeTask: TaskEntity | null;
   isSelected: boolean;
   reducedMotion: boolean;
+  avatarLoadError?: string;
   onSelectWorker: (workerId: WorkerId) => void;
+  onModelError?: (workerId: WorkerId, modelUrl: string, errorMessage: string) => void;
 }
 
 interface RiggedGlbModelProps {
@@ -36,7 +51,7 @@ interface RiggedGlbModelProps {
 function RiggedGlbAvatar({ modelUrl, worker, reducedMotion }: RiggedGlbModelProps) {
   const groupRef = useRef<THREE.Group>(null);
   const { scene, animations } = useGLTF(modelUrl);
-  const { actions } = useAnimations(animations, groupRef);
+  const { actions, mixer } = useAnimations(animations, groupRef);
 
   useEffect(() => {
     const requestedClipName = worker.avatarConfig.animationMap[worker.animationState];
@@ -45,9 +60,27 @@ function RiggedGlbAvatar({ modelUrl, worker, reducedMotion }: RiggedGlbModelProp
       Object.values(actions)[0] ||
       null;
 
+    const { isGlobalPaused, simSpeedMultiplier } = useOfficeStore.getState();
+    const frozen = shouldFreezeWorkerAnimation(
+      isGlobalPaused,
+      worker.status,
+      reducedMotion,
+    );
+
+    if (mixer) {
+      mixer.timeScale = computeGlbMixerTimeScale({
+        isGlobalPaused,
+        workerStatus: worker.status,
+        reducedMotion,
+        simSpeedMultiplier,
+      });
+    }
+
     if (clipAction) {
-      clipAction.reset().fadeIn(0.25).play();
-      clipAction.paused = worker.status === 'PAUSED' || reducedMotion;
+      if (!clipAction.isRunning()) {
+        clipAction.reset().fadeIn(0.25).play();
+      }
+      clipAction.paused = frozen;
     }
 
     return () => {
@@ -55,10 +88,22 @@ function RiggedGlbAvatar({ modelUrl, worker, reducedMotion }: RiggedGlbModelProp
         clipAction.fadeOut(0.2);
       }
     };
-  }, [actions, worker.animationState, worker.avatarConfig.animationMap, worker.status, reducedMotion]);
+  }, [actions, mixer, worker.animationState, worker.avatarConfig.animationMap, worker.status, reducedMotion]);
+
+  // Synchronize mixer.timeScale in useFrame so Global Pause / Speed changes take effect immediately
+  useFrame(() => {
+    if (!mixer) return;
+    const { isGlobalPaused, simSpeedMultiplier } = useOfficeStore.getState();
+    mixer.timeScale = computeGlbMixerTimeScale({
+      isGlobalPaused,
+      workerStatus: worker.status,
+      reducedMotion,
+      simSpeedMultiplier,
+    });
+  });
 
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} name={`RiggedGlb_${worker.id}`}>
       <primitive object={scene} scale={1} />
     </group>
   );
@@ -86,11 +131,12 @@ function ArticulatedHumanoidPlaceholder({
   const rightLegRef = useRef<THREE.Group>(null);
   const beaconRef = useRef<THREE.Mesh>(null);
 
-  const phaseOffset = useRef(
-    worker.id.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0) * 0.37,
-  );
+  const initialPhase =
+    worker.id.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0) * 0.37;
+  const controlledAnimTimeRef = useRef<number>(initialPhase);
+  const lastSeenSimTimeMsRef = useRef<number>(useOfficeStore.getState().simTimeMs);
 
-  useFrame((state) => {
+  useFrame((_, rawDeltaSec) => {
     if (
       !rootRef.current ||
       !torsoRef.current ||
@@ -105,71 +151,51 @@ function ArticulatedHumanoidPlaceholder({
       return;
     }
 
-    const isPaused = worker.status === 'PAUSED' || reducedMotion;
-    const t = isPaused ? phaseOffset.current : state.clock.elapsedTime + phaseOffset.current;
-    const anim = worker.animationState;
+    const { isGlobalPaused, simSpeedMultiplier, simTimeMs } = useOfficeStore.getState();
 
-    if (beaconRef.current && !isPaused) {
-      beaconRef.current.rotation.y = t * 1.8;
+    // If simulation was reset (`simTimeMs === 0` after being > 0), restore initial phase deterministically
+    if (simTimeMs === 0 && lastSeenSimTimeMsRef.current > 0) {
+      controlledAnimTimeRef.current = initialPhase;
+    }
+    lastSeenSimTimeMsRef.current = simTimeMs;
+
+    // Advance controlled animation clock (freezes when Global Pause, Worker Pause, or Reduced Motion is active)
+    controlledAnimTimeRef.current = advanceAvatarAnimClock({
+      currentAnimTimeSec: controlledAnimTimeRef.current,
+      rawDeltaSec,
+      isGlobalPaused,
+      workerStatus: worker.status,
+      reducedMotion,
+      simSpeedMultiplier,
+    });
+
+    const isFrozen = shouldFreezeWorkerAnimation(
+      isGlobalPaused,
+      worker.status,
+      reducedMotion,
+    );
+    const pose = computeHumanoidPose(
+      worker.animationState,
+      controlledAnimTimeRef.current,
+      isFrozen,
+    );
+
+    if (beaconRef.current) {
+      beaconRef.current.rotation.y = pose.beaconRotY;
     }
 
-    if (anim === 'walking') {
-      // Standing upright walk cycle along corridor waypoint -> workstation
-      rootRef.current.position.y = 0.04 + Math.abs(Math.sin(t * 7)) * 0.035;
-      torsoRef.current.rotation.x = 0.08;
-      headRef.current.rotation.y = Math.sin(t * 2.5) * 0.12;
-      headRef.current.rotation.x = 0;
+    rootRef.current.position.y = pose.rootOffsetY;
+    torsoRef.current.rotation.x = pose.torsoRotX;
+    headRef.current.rotation.x = pose.headRotX;
+    headRef.current.rotation.y = pose.headRotY;
 
-      leftArmRef.current.rotation.x = Math.sin(t * 7) * 0.45;
-      rightArmRef.current.rotation.x = -Math.sin(t * 7) * 0.45;
-      leftForearmRef.current.rotation.x = -0.35;
-      rightForearmRef.current.rotation.x = -0.35;
+    leftArmRef.current.rotation.x = pose.leftArmRotX;
+    rightArmRef.current.rotation.x = pose.rightArmRotX;
+    leftForearmRef.current.rotation.x = pose.leftForearmRotX;
+    rightForearmRef.current.rotation.x = pose.rightForearmRotX;
 
-      leftLegRef.current.rotation.x = -Math.sin(t * 7) * 0.5;
-      rightLegRef.current.rotation.x = Math.sin(t * 7) * 0.5;
-    } else if (anim === 'typing') {
-      // Seated focused keyboard typing posture
-      rootRef.current.position.y = -0.14;
-      torsoRef.current.rotation.x = -0.12 + Math.sin(t * 2.2) * 0.02;
-      headRef.current.rotation.x = 0.1 + Math.sin(t * 3.1) * 0.03;
-      headRef.current.rotation.y = Math.sin(t * 1.4) * 0.14;
-
-      leftArmRef.current.rotation.x = -0.68 + Math.sin(t * 14) * 0.07;
-      rightArmRef.current.rotation.x = -0.68 + Math.cos(t * 14) * 0.07;
-      leftForearmRef.current.rotation.x = -0.62 + Math.sin(t * 18) * 0.09;
-      rightForearmRef.current.rotation.x = -0.62 + Math.cos(t * 18) * 0.09;
-
-      leftLegRef.current.rotation.x = -1.35;
-      rightLegRef.current.rotation.x = -1.35;
-    } else if (anim === 'talking') {
-      // Seated analytical briefing / coordination gesture
-      rootRef.current.position.y = -0.14;
-      torsoRef.current.rotation.x = -0.05;
-      headRef.current.rotation.x = Math.sin(t * 4.5) * 0.07;
-      headRef.current.rotation.y = Math.sin(t * 2.2) * 0.22;
-
-      leftArmRef.current.rotation.x = -0.55 + Math.sin(t * 5.2) * 0.18;
-      rightArmRef.current.rotation.x = -0.55 + Math.cos(t * 4.8) * 0.18;
-      leftForearmRef.current.rotation.x = -0.5 + Math.sin(t * 5.2) * 0.15;
-      rightForearmRef.current.rotation.x = -0.5 + Math.cos(t * 4.8) * 0.15;
-
-      leftLegRef.current.rotation.x = -1.35;
-      rightLegRef.current.rotation.x = -1.35;
-    } else {
-      // Seated idle / paused calm breathing
-      rootRef.current.position.y = -0.14;
-      torsoRef.current.rotation.x = Math.sin(t * 1.6) * 0.025;
-      headRef.current.rotation.x = 0.04;
-      headRef.current.rotation.y = isPaused ? 0 : Math.sin(t * 0.9) * 0.1;
-
-      leftArmRef.current.rotation.x = -0.35;
-      rightArmRef.current.rotation.x = -0.35;
-      leftForearmRef.current.rotation.x = -0.45;
-      rightForearmRef.current.rotation.x = -0.45;
-
-      leftLegRef.current.rotation.x = -1.35;
-      rightLegRef.current.rotation.x = -1.35;
-    }
+    leftLegRef.current.rotation.x = pose.leftLegRotX;
+    rightLegRef.current.rotation.x = pose.rightLegRotX;
   });
 
   const { accentColor, suitColor } = worker.avatarConfig;
@@ -232,29 +258,25 @@ function ArticulatedHumanoidPlaceholder({
 
         {/* Articulated Head & Visor Group */}
         <group ref={headRef} position={[0, 0.59, 0]}>
-          {/* Cranial Shell */}
           <mesh castShadow>
             <boxGeometry args={[0.22, 0.24, 0.22]} />
             <meshStandardMaterial color="#E2E8F0" roughness={0.35} metalness={0.25} />
           </mesh>
-          {/* Futuristic Hair / Crown Cap */}
           <mesh position={[0, 0.1, 0.01]}>
             <boxGeometry args={[0.23, 0.06, 0.23]} />
             <meshStandardMaterial color="#0F172A" roughness={0.5} metalness={0.4} />
           </mesh>
-          {/* Glowing Sci-Fi Optical Visor (Facing -Z toward desk monitors) */}
           <mesh position={[0, 0.02, -0.115]}>
             <boxGeometry args={[0.19, 0.065, 0.02]} />
             <meshBasicMaterial color={isPaused ? '#F59E0B' : accentColor} />
           </mesh>
-          {/* Side Comms Ear-Piece */}
           <mesh position={[0.12, 0.01, 0]} rotation={[0, 0, Math.PI / 2]}>
             <cylinderGeometry args={[0.035, 0.035, 0.03, 12]} />
             <meshBasicMaterial color={accentColor} />
           </mesh>
         </group>
 
-        {/* Left Articulated Arm (Shoulder + Upper Arm + Hinged Forearm/Hand) */}
+        {/* Left Articulated Arm */}
         <group ref={leftArmRef} position={[-0.22, 0.36, 0]}>
           <mesh position={[0, 0.02, 0]}>
             <sphereGeometry args={[0.06, 10, 10]} />
@@ -272,7 +294,7 @@ function ArticulatedHumanoidPlaceholder({
           </group>
         </group>
 
-        {/* Right Articulated Arm (Shoulder + Upper Arm + Hinged Forearm/Hand) */}
+        {/* Right Articulated Arm */}
         <group ref={rightArmRef} position={[0.22, 0.36, 0]}>
           <mesh position={[0, 0.02, 0]}>
             <sphereGeometry args={[0.06, 10, 10]} />
@@ -294,13 +316,48 @@ function ArticulatedHumanoidPlaceholder({
   );
 }
 
-export function WorkerAvatar({
+export const WorkerAvatar = React.memo(function WorkerAvatar({
   worker,
   isSelected,
   reducedMotion,
+  avatarLoadError,
   onSelectWorker,
+  onModelError,
 }: WorkerAvatarProps) {
+  recordWorkerComponentRender(worker.id, 'avatar');
+
   const [px, py, pz] = worker.position3D;
+  const resolution = resolveAvatarRenderMode(worker.id, worker.avatarConfig, {
+    [worker.id]: avatarLoadError,
+  });
+
+  // If URL format itself is invalid (e.g., not .glb/.gltf), report error once without crashing
+  useEffect(() => {
+    if (
+      worker.avatarConfig.modelUrl &&
+      resolution.mode === 'fallback-after-error' &&
+      !avatarLoadError &&
+      resolution.errorDetail &&
+      onModelError
+    ) {
+      onModelError(worker.id, worker.avatarConfig.modelUrl, resolution.errorDetail);
+    }
+  }, [
+    worker.id,
+    worker.avatarConfig.modelUrl,
+    resolution.mode,
+    resolution.errorDetail,
+    avatarLoadError,
+    onModelError,
+  ]);
+
+  const placeholderElement = (
+    <ArticulatedHumanoidPlaceholder
+      worker={worker}
+      isSelected={isSelected}
+      reducedMotion={reducedMotion}
+    />
+  );
 
   return (
     <group
@@ -320,30 +377,56 @@ export function WorkerAvatar({
         document.body.style.cursor = 'auto';
       }}
     >
-      {/* Render Rigged GLB Model if configured, otherwise Honest Articulated Placeholder */}
-      {worker.avatarConfig.modelUrl ? (
-        <Suspense
-          fallback={
-            <ArticulatedHumanoidPlaceholder
+      {resolution.mode === 'glb' && resolution.activeModelUrl ? (
+        <AvatarModelErrorBoundary
+          workerId={worker.id}
+          workerName={worker.name}
+          modelUrl={resolution.activeModelUrl}
+          fallback={placeholderElement}
+          onModelError={onModelError}
+        >
+          <Suspense fallback={placeholderElement}>
+            <RiggedGlbAvatar
+              modelUrl={resolution.activeModelUrl}
               worker={worker}
-              isSelected={isSelected}
               reducedMotion={reducedMotion}
             />
-          }
-        >
-          <RiggedGlbAvatar
-            modelUrl={worker.avatarConfig.modelUrl}
-            worker={worker}
-            reducedMotion={reducedMotion}
-          />
-        </Suspense>
+          </Suspense>
+        </AvatarModelErrorBoundary>
       ) : (
-        <ArticulatedHumanoidPlaceholder
-          worker={worker}
-          isSelected={isSelected}
-          reducedMotion={reducedMotion}
-        />
+        placeholderElement
       )}
     </group>
   );
-}
+});
+
+/**
+ * Granular Zustand-connected wrapper for a single WorkerAvatar.
+ * Subscribes ONLY to this worker's slice so updating one worker never re-renders
+ * any other worker's avatar component.
+ */
+export const WorkerAvatarSceneItem = React.memo(function WorkerAvatarSceneItem({
+  workerId,
+}: {
+  workerId: WorkerId;
+}) {
+  const worker = useOfficeStore((s) => s.workers[workerId]);
+  const isSelected = useOfficeStore((s) => s.selectedWorkerId === workerId);
+  const reducedMotion = useOfficeStore((s) => s.reducedMotion);
+  const avatarLoadError = useOfficeStore((s) => s.avatarLoadErrors[workerId]);
+  const selectWorker = useOfficeStore((s) => s.selectWorker);
+  const recordAvatarModelError = useOfficeStore((s) => s.recordAvatarModelError);
+
+  if (!worker) return null;
+
+  return (
+    <WorkerAvatar
+      worker={worker}
+      isSelected={isSelected}
+      reducedMotion={reducedMotion}
+      avatarLoadError={avatarLoadError}
+      onSelectWorker={selectWorker}
+      onModelError={recordAvatarModelError}
+    />
+  );
+});

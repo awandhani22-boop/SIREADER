@@ -63,19 +63,6 @@ export const DEFAULT_STAGE_PIPELINES: Record<TaskCategory, TaskStageThreshold[]>
   ],
 };
 
-/**
- * Floor plan layout:
- * Central Spine Corridor runs East–West along Z = 0 (from X = -18 to X = +18, width = 4.4m).
- * - West Hub (X = -15.5, Z = 0): Reception / Supervisor AI (Command Entrance facing East)
- * - North Wing (Z = -6.8):
- *   1. Research Room / Haiku (X = -8.5, Z = -6.8) — door on 'south' wall
- *   2. Analysis Room / Sonnet (X = 0, Z = -6.8) — door on 'south' wall
- *   3. Strategy Room / Opus (X = +8.5, Z = -6.8) — door on 'south' wall
- * - South Wing (Z = +6.8):
- *   4. Trading Operations / Decision Engineer (X = -8.5, Z = +6.8) — door on 'north' wall
- *   5. Market Monitoring / Market Monitor (X = 0, Z = +6.8) — door on 'north' wall
- *   6. Archive Room / Data Archivist (X = +8.5, Z = +6.8) — door on 'north' wall
- */
 export const ROOM_REGISTRY: Record<RoomId, RoomDefinition> = {
   room_reception: {
     id: 'room_reception',
@@ -86,7 +73,7 @@ export const ROOM_REGISTRY: Record<RoomId, RoomDefinition> = {
     center3D: [-15.5, 0, 0],
     size3D: [6.5, 2.8, 9.2],
     doorSide: 'east',
-    accentColor: '#06B6D4', // Cyan
+    accentColor: '#06B6D4',
     floorTint: '#0B1528',
     roomType: 'reception',
   },
@@ -99,7 +86,7 @@ export const ROOM_REGISTRY: Record<RoomId, RoomDefinition> = {
     center3D: [-8.2, 0, -6.6],
     size3D: [7.2, 2.8, 6.8],
     doorSide: 'south',
-    accentColor: '#38BDF8', // Sky Cyan
+    accentColor: '#38BDF8',
     floorTint: '#0A1324',
     roomType: 'research',
   },
@@ -112,7 +99,7 @@ export const ROOM_REGISTRY: Record<RoomId, RoomDefinition> = {
     center3D: [0, 0, -6.6],
     size3D: [7.2, 2.8, 6.8],
     doorSide: 'south',
-    accentColor: '#3B82F6', // Electric Blue
+    accentColor: '#3B82F6',
     floorTint: '#0B1426',
     roomType: 'analysis',
   },
@@ -125,7 +112,7 @@ export const ROOM_REGISTRY: Record<RoomId, RoomDefinition> = {
     center3D: [8.2, 0, -6.6],
     size3D: [7.2, 2.8, 6.8],
     doorSide: 'south',
-    accentColor: '#8B5CF6', // Violet
+    accentColor: '#8B5CF6',
     floorTint: '#111128',
     roomType: 'strategy',
   },
@@ -138,7 +125,7 @@ export const ROOM_REGISTRY: Record<RoomId, RoomDefinition> = {
     center3D: [-8.2, 0, 6.6],
     size3D: [7.2, 2.8, 6.8],
     doorSide: 'north',
-    accentColor: '#10B981', // Emerald Teal
+    accentColor: '#10B981',
     floorTint: '#091722',
     roomType: 'trading_ops',
   },
@@ -151,7 +138,7 @@ export const ROOM_REGISTRY: Record<RoomId, RoomDefinition> = {
     center3D: [0, 0, 6.6],
     size3D: [7.2, 2.8, 6.8],
     doorSide: 'north',
-    accentColor: '#F59E0B', // Amber Signal
+    accentColor: '#F59E0B',
     floorTint: '#141422',
     roomType: 'market_monitor',
   },
@@ -164,7 +151,7 @@ export const ROOM_REGISTRY: Record<RoomId, RoomDefinition> = {
     center3D: [8.2, 0, 6.6],
     size3D: [7.2, 2.8, 6.8],
     doorSide: 'north',
-    accentColor: '#6366F1', // Indigo
+    accentColor: '#6366F1',
     floorTint: '#0D1326',
     roomType: 'archive',
   },
@@ -260,6 +247,11 @@ const DEFAULT_ANIMATION_MAP = {
   talking: 'Seated_Talking',
 };
 
+/**
+ * Returns a clean zero-state baseline registry for all 7 SIREADER workers.
+ * All workers start IDLE at their home workstation with 0 active/queued tasks
+ * and 0 simulated token/cost counters.
+ */
 export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
   return {
     supervisor: {
@@ -286,7 +278,7 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
       completedTaskIds: [],
       avatarConfig: {
         modelUrl: null,
-        animationMap: DEFAULT_ANIMATION_MAP,
+        animationMap: { ...DEFAULT_ANIMATION_MAP },
         fallbackType: 'articulated-humanoid',
         accentColor: '#06B6D4',
         secondaryColor: '#22D3EE',
@@ -294,9 +286,9 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
         badgeCode: 'SUP-01',
       },
       metrics: {
-        simulatedTokens: 1420,
-        simulatedCostUsd: 0.0042,
-        completedTasksCount: 3,
+        simulatedTokens: 0,
+        simulatedCostUsd: 0,
+        completedTasksCount: 0,
         errorCount: 0,
         lastActivitySimMs: 0,
         isSimulated: true,
@@ -326,7 +318,7 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
       completedTaskIds: [],
       avatarConfig: {
         modelUrl: null,
-        animationMap: DEFAULT_ANIMATION_MAP,
+        animationMap: { ...DEFAULT_ANIMATION_MAP },
         fallbackType: 'articulated-humanoid',
         accentColor: '#38BDF8',
         secondaryColor: '#7DD3FC',
@@ -334,9 +326,9 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
         badgeCode: 'HKU-02',
       },
       metrics: {
-        simulatedTokens: 3850,
-        simulatedCostUsd: 0.0038,
-        completedTasksCount: 5,
+        simulatedTokens: 0,
+        simulatedCostUsd: 0,
+        completedTasksCount: 0,
         errorCount: 0,
         lastActivitySimMs: 0,
         isSimulated: true,
@@ -366,7 +358,7 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
       completedTaskIds: [],
       avatarConfig: {
         modelUrl: null,
-        animationMap: DEFAULT_ANIMATION_MAP,
+        animationMap: { ...DEFAULT_ANIMATION_MAP },
         fallbackType: 'articulated-humanoid',
         accentColor: '#3B82F6',
         secondaryColor: '#60A5FA',
@@ -374,9 +366,9 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
         badgeCode: 'SNT-03',
       },
       metrics: {
-        simulatedTokens: 6420,
-        simulatedCostUsd: 0.0193,
-        completedTasksCount: 4,
+        simulatedTokens: 0,
+        simulatedCostUsd: 0,
+        completedTasksCount: 0,
         errorCount: 0,
         lastActivitySimMs: 0,
         isSimulated: true,
@@ -406,7 +398,7 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
       completedTaskIds: [],
       avatarConfig: {
         modelUrl: null,
-        animationMap: DEFAULT_ANIMATION_MAP,
+        animationMap: { ...DEFAULT_ANIMATION_MAP },
         fallbackType: 'articulated-humanoid',
         accentColor: '#8B5CF6',
         secondaryColor: '#A78BFA',
@@ -414,9 +406,9 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
         badgeCode: 'OPS-04',
       },
       metrics: {
-        simulatedTokens: 4100,
-        simulatedCostUsd: 0.0615,
-        completedTasksCount: 2,
+        simulatedTokens: 0,
+        simulatedCostUsd: 0,
+        completedTasksCount: 0,
         errorCount: 0,
         lastActivitySimMs: 0,
         isSimulated: true,
@@ -446,7 +438,7 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
       completedTaskIds: [],
       avatarConfig: {
         modelUrl: null,
-        animationMap: DEFAULT_ANIMATION_MAP,
+        animationMap: { ...DEFAULT_ANIMATION_MAP },
         fallbackType: 'articulated-humanoid',
         accentColor: '#10B981',
         secondaryColor: '#34D399',
@@ -454,9 +446,9 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
         badgeCode: 'DEC-05',
       },
       metrics: {
-        simulatedTokens: 2180,
-        simulatedCostUsd: 0.0044,
-        completedTasksCount: 4,
+        simulatedTokens: 0,
+        simulatedCostUsd: 0,
+        completedTasksCount: 0,
         errorCount: 0,
         lastActivitySimMs: 0,
         isSimulated: true,
@@ -486,7 +478,7 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
       completedTaskIds: [],
       avatarConfig: {
         modelUrl: null,
-        animationMap: DEFAULT_ANIMATION_MAP,
+        animationMap: { ...DEFAULT_ANIMATION_MAP },
         fallbackType: 'articulated-humanoid',
         accentColor: '#F59E0B',
         secondaryColor: '#FBBF24',
@@ -494,9 +486,9 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
         badgeCode: 'MKT-06',
       },
       metrics: {
-        simulatedTokens: 2950,
-        simulatedCostUsd: 0.0059,
-        completedTasksCount: 5,
+        simulatedTokens: 0,
+        simulatedCostUsd: 0,
+        completedTasksCount: 0,
         errorCount: 0,
         lastActivitySimMs: 0,
         isSimulated: true,
@@ -526,7 +518,7 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
       completedTaskIds: [],
       avatarConfig: {
         modelUrl: null,
-        animationMap: DEFAULT_ANIMATION_MAP,
+        animationMap: { ...DEFAULT_ANIMATION_MAP },
         fallbackType: 'articulated-humanoid',
         accentColor: '#6366F1',
         secondaryColor: '#818CF8',
@@ -534,9 +526,9 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
         badgeCode: 'ARC-07',
       },
       metrics: {
-        simulatedTokens: 1890,
-        simulatedCostUsd: 0.0028,
-        completedTasksCount: 3,
+        simulatedTokens: 0,
+        simulatedCostUsd: 0,
+        completedTasksCount: 0,
         errorCount: 0,
         lastActivitySimMs: 0,
         isSimulated: true,

@@ -1,17 +1,19 @@
 import { useFrame } from '@react-three/fiber';
-import { useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import * as THREE from 'three';
+import { useOfficeStore } from '../workers/worker.state';
 import {
   WorkerId,
   WorkerStatus,
   WorkstationDefinition,
 } from '../workers/worker.types';
+import { shouldFreezeWorkerAnimation } from './avatarAnimation';
 import { SCENE_COLORS } from './scene.constants';
 
 /**
  * Workstation Component (Composite 3D Desk + Chair + Multi-Monitor Rig)
- * Clickable target in the 3D scene (`e.stopPropagation()`) that selects
- * the assigned worker and highlights when active or selected.
+ * - Freezes selection ring animation when Global Pause, Worker Pause, or Reduced Motion is active.
+ * - Memoized with granular per-workstation selector (`WorkstationSceneItem`).
  */
 
 interface WorkstationProps {
@@ -22,7 +24,7 @@ interface WorkstationProps {
   onSelectWorker: (workerId: WorkerId) => void;
 }
 
-export function Workstation({
+export const Workstation = React.memo(function Workstation({
   workstation,
   workerStatus,
   isSelected,
@@ -39,11 +41,14 @@ export function Workstation({
     workerStatus === 'TASK_RECEIVED' ||
     workerStatus === 'COMPLETED';
 
-  // Animate selection ring rotation smoothly via ref without React state updates
+  // Animate selection ring rotation smoothly via ref, freezing on Global Pause or Worker Pause
   useFrame((_, delta) => {
-    if (selectionRingRef.current && (isSelected || hovered) && !reducedMotion) {
-      selectionRingRef.current.rotation.z += delta * 0.85;
+    if (!selectionRingRef.current || !(isSelected || hovered)) return;
+    const { isGlobalPaused, simSpeedMultiplier } = useOfficeStore.getState();
+    if (shouldFreezeWorkerAnimation(isGlobalPaused, workerStatus, reducedMotion)) {
+      return;
     }
+    selectionRingRef.current.rotation.z += delta * 0.85 * simSpeedMultiplier;
   });
 
   const monitorOffsets =
@@ -144,12 +149,10 @@ export function Workstation({
             position={[mon.x, 1.06, -0.18 + mon.z]}
             rotation={[0, mon.rotY, 0]}
           >
-            {/* Monitor Stand Stem */}
             <mesh position={[0, -0.16, -0.05]}>
               <cylinderGeometry args={[0.025, 0.035, 0.28, 10]} />
               <meshStandardMaterial color="#334155" roughness={0.4} metalness={0.8} />
             </mesh>
-            {/* Monitor Outer Bezel */}
             <mesh>
               <boxGeometry args={[0.62, 0.38, 0.035]} />
               <meshStandardMaterial
@@ -158,7 +161,6 @@ export function Workstation({
                 metalness={0.7}
               />
             </mesh>
-            {/* Monitor Active Display Screen (Faces the worker seated at +Z) */}
             <mesh position={[0, 0, 0.02]}>
               <boxGeometry args={[0.57, 0.33, 0.005]} />
               <meshBasicMaterial
@@ -186,7 +188,6 @@ export function Workstation({
           onSelectWorker(workstation.workerId);
         }}
       >
-        {/* Soft Radial Contact Shadow Disc (`y = 0.035` to avoid Z-fighting) */}
         <mesh position={[0, 0.035, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <circleGeometry args={[0.85, 24]} />
           <meshBasicMaterial
@@ -197,7 +198,6 @@ export function Workstation({
           />
         </mesh>
 
-        {/* Interactive Selection Ring */}
         {(isSelected || hovered) && (
           <mesh
             ref={selectionRingRef}
@@ -214,17 +214,14 @@ export function Workstation({
           </mesh>
         )}
 
-        {/* Chair Pedestal Base */}
         <mesh position={[0, 0.06, 0]}>
           <cylinderGeometry args={[0.32, 0.36, 0.05, 16]} />
           <meshStandardMaterial color="#1E293B" roughness={0.4} metalness={0.7} />
         </mesh>
-        {/* Hydraulic Stem */}
         <mesh position={[0, 0.24, 0]}>
           <cylinderGeometry args={[0.045, 0.045, 0.36, 12]} />
           <meshStandardMaterial color="#475569" roughness={0.3} metalness={0.8} />
         </mesh>
-        {/* Seat Cushion */}
         <mesh position={[0, 0.44, 0]}>
           <boxGeometry args={[0.52, 0.07, 0.5]} />
           <meshStandardMaterial
@@ -233,7 +230,6 @@ export function Workstation({
             metalness={0.15}
           />
         </mesh>
-        {/* High-Back Support Rest (Behind seated avatar at +Z) */}
         <mesh position={[0, 0.82, 0.23]}>
           <boxGeometry args={[0.48, 0.72, 0.07]} />
           <meshStandardMaterial
@@ -242,7 +238,6 @@ export function Workstation({
             metalness={0.2}
           />
         </mesh>
-        {/* Chair Accent Spine Strip */}
         <mesh position={[0, 0.82, 0.27]}>
           <boxGeometry args={[0.12, 0.56, 0.02]} />
           <meshBasicMaterial color={workstation.accentColor} />
@@ -250,4 +245,29 @@ export function Workstation({
       </group>
     </group>
   );
-}
+});
+
+export const WorkstationSceneItem = React.memo(function WorkstationSceneItem({
+  workstation,
+}: {
+  workstation: WorkstationDefinition;
+}) {
+  const workerStatus = useOfficeStore(
+    (s) => s.workers[workstation.workerId]?.status ?? 'IDLE',
+  );
+  const isSelected = useOfficeStore(
+    (s) => s.selectedWorkerId === workstation.workerId,
+  );
+  const reducedMotion = useOfficeStore((s) => s.reducedMotion);
+  const selectWorker = useOfficeStore((s) => s.selectWorker);
+
+  return (
+    <Workstation
+      workstation={workstation}
+      workerStatus={workerStatus}
+      isSelected={isSelected}
+      reducedMotion={reducedMotion}
+      onSelectWorker={selectWorker}
+    />
+  );
+});

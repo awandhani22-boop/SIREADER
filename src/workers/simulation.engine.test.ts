@@ -1,181 +1,810 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import React from 'react';
+import { flushSync } from 'react-dom';
+import { createRoot } from 'react-dom/client';
+import { RosterWorkerItem } from '../app/OfficeApp';
+import {
+  advanceAvatarAnimClock,
+  computeGlbMixerTimeScale,
+  computeHumanoidPose,
+  updateGlbMixerWithSimClock,
+} from '../scene/avatarAnimation';
+import {
+  AvatarModelErrorBoundary,
+  resolveAvatarRenderMode,
+} from '../scene/avatarErrorBoundary';
+import { WorldWorkerBadgeItem } from '../scene/WorldLabelsOverlay';
+import {
+  getWorkerComponentRenderCount,
+  resetWorkerRenderCounts,
+} from '../utils/renderProfiler';
 import {
   DEFAULT_SIMULATION_SEED,
   FIXED_TICK_SIM_MS,
-  MAX_DELTA_CLAMP_MS,
   SimulationEngine,
 } from './simulation.engine';
 import { WorkerMockService } from './worker.mock-service';
+import { useOfficeStore } from './worker.state';
 
-test('1. Initial registry contains all 7 SIREADER workers with SIMULATED metrics', () => {
-  const snapshot = SimulationEngine.createInitialSnapshot(DEFAULT_SIMULATION_SEED);
-  assert.equal(snapshot.workerOrder.length, 7);
-  assert.deepEqual(snapshot.workerOrder, [
-    'supervisor',
-    'haiku',
-    'sonnet',
-    'opus',
-    'decision_engineer',
-    'market_monitor',
-    'data_archivist',
-  ]);
+interface MockDomNode {
+  tagName: string;
+  nodeType: number;
+  textContent: string;
+  children: MockDomNode[];
+  attributes: Record<string, string>;
+}
 
-  for (const workerId of snapshot.workerOrder) {
-    const worker = snapshot.workers[workerId];
-    assert.ok(worker, `Worker ${workerId} should exist`);
-    assert.equal(worker.metrics.isSimulated, true);
-    assert.equal(worker.avatarConfig.fallbackType, 'articulated-humanoid');
+function collectDomTextAndIds(node: MockDomNode): string {
+  const parts: string[] = [];
+  if (node.attributes?.id) {
+    parts.push(`#${node.attributes.id}`);
   }
-});
-
-test('2. Worker and Task entities are distinct: BUSY worker can have active task and QUEUED tasks', () => {
-  let snapshot = SimulationEngine.createInitialSnapshot(DEFAULT_SIMULATION_SEED);
-
-  // Assign two additional tasks to sonnet (who already has 1 active and 1 queued)
-  snapshot = WorkerMockService.assignTask(snapshot, {
-    workerId: 'sonnet',
-    title: 'Queued Reasoning Task Alpha',
-  });
-  snapshot = WorkerMockService.assignTask(snapshot, {
-    workerId: 'sonnet',
-    title: 'Queued Reasoning Task Beta',
-  });
-
-  const sonnet = snapshot.workers.sonnet;
-  assert.equal(sonnet.status, 'BUSY');
-  assert.ok(sonnet.currentTaskId, 'Sonnet should have an active task');
-
-  const activeTask = snapshot.tasks[sonnet.currentTaskId];
-  assert.notEqual(activeTask.status, 'QUEUED');
-  assert.ok(sonnet.taskQueueIds.length >= 2, 'Sonnet should hold multiple queued tasks');
-
-  for (const queuedId of sonnet.taskQueueIds) {
-    const queuedTask = snapshot.tasks[queuedId];
-    assert.equal(queuedTask.status, 'QUEUED');
-    assert.equal(queuedTask.progress, 0);
+  if (node.textContent) {
+    parts.push(node.textContent);
   }
-});
+  for (const child of node.children || []) {
+    parts.push(collectDomTextAndIds(child));
+  }
+  return parts.join(' ');
+}
 
-test('3. Deterministic seeded simulation produces identical state across runs', () => {
-  let runA = SimulationEngine.createInitialSnapshot(998877);
-  let runB = SimulationEngine.createInitialSnapshot(998877);
-
-  for (let i = 0; i < 20; i++) {
-    runA = SimulationEngine.stepSimulationTick(runA, FIXED_TICK_SIM_MS);
-    runB = SimulationEngine.stepSimulationTick(runB, FIXED_TICK_SIM_MS);
+/**
+ * Minimal DOM shim for React 19 createRoot in Node test runner
+ * Used by Test 12, Test 13, and Test 14 to verify component error boundaries
+ * and granular Zustand selector re-render isolation.
+ */
+function ensureMinimalDomEnvironment() {
+  if (typeof globalThis.document !== 'undefined') {
+    return;
   }
 
-  assert.equal(runA.simTimeMs, runB.simTimeMs);
-  assert.equal(runA.prngState, runB.prngState);
-  assert.equal(
-    runA.workers.haiku.metrics.simulatedTokens,
-    runB.workers.haiku.metrics.simulatedTokens,
-  );
-  assert.equal(runA.events.length, runB.events.length);
-});
+  class MockElement implements MockDomNode {
+    tagName: string;
+    nodeType = 1;
+    style: Record<string, string> = {};
+    children: MockElement[] = [];
+    parentNode: MockElement | null = null;
+    textContent = '';
+    attributes: Record<string, string> = {};
+    ownerDocument: unknown;
+    namespaceURI = 'http://www.w3.org/1999/xhtml';
 
-test('4. Simulation clock clamps large wall-clock lag so tasks never skip stages uncontrollably', () => {
-  const initial = SimulationEngine.createInitialSnapshot(DEFAULT_SIMULATION_SEED);
-  const startSimTime = initial.simTimeMs;
-
-  // Simulate a 45-second browser tab freeze (45000ms)
-  const afterLag = SimulationEngine.advanceByWallClockDelta(initial, 45000);
-
-  // Should clamp delta to MAX_DELTA_CLAMP_MS * simSpeedMultiplier
-  assert.equal(
-    afterLag.simTimeMs - startSimTime,
-    MAX_DELTA_CLAMP_MS * initial.simSpeedMultiplier,
-  );
-});
-
-test('5. Worker Pause freezes ONLY that worker while others continue, and Resume preserves exact task progress', () => {
-  let snapshot = SimulationEngine.createInitialSnapshot(DEFAULT_SIMULATION_SEED);
-
-  const sonnetBeforePause = snapshot.workers.sonnet;
-  assert.equal(sonnetBeforePause.status, 'BUSY');
-  assert.ok(sonnetBeforePause.currentTaskId);
-
-  const sonnetTaskBefore = snapshot.tasks[sonnetBeforePause.currentTaskId];
-  const preservedProgress = sonnetTaskBefore.progress;
-  const preservedElapsed = sonnetTaskBefore.elapsedSimMs;
-
-  const opusBefore = snapshot.workers.opus;
-  assert.ok(opusBefore.currentTaskId);
-  const opusProgressBefore = snapshot.tasks[opusBefore.currentTaskId].progress;
-
-  // Pause ONLY sonnet
-  snapshot = SimulationEngine.pauseWorker(snapshot, 'sonnet');
-  assert.equal(snapshot.workers.sonnet.status, 'PAUSED');
-
-  // Advance simulation by 4 ticks (2000ms)
-  for (let i = 0; i < 4; i++) {
-    snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+    constructor(tagName: string, ownerDoc: unknown) {
+      this.tagName = tagName.toUpperCase();
+      this.ownerDocument = ownerDoc;
+    }
+    appendChild(child: MockElement) {
+      child.parentNode = this;
+      this.children.push(child);
+      return child;
+    }
+    removeChild(child: MockElement) {
+      const idx = this.children.indexOf(child);
+      if (idx >= 0) {
+        this.children.splice(idx, 1);
+        child.parentNode = null;
+      }
+      return child;
+    }
+    insertBefore(newChild: MockElement, refChild: MockElement | null) {
+      newChild.parentNode = this;
+      if (!refChild) {
+        this.children.push(newChild);
+        return newChild;
+      }
+      const idx = this.children.indexOf(refChild);
+      if (idx >= 0) {
+        this.children.splice(idx, 0, newChild);
+      } else {
+        this.children.push(newChild);
+      }
+      return newChild;
+    }
+    setAttribute(name: string, val: string) {
+      this.attributes[name] = String(val);
+    }
+    removeAttribute(name: string) {
+      delete this.attributes[name];
+    }
+    addEventListener() {}
+    removeEventListener() {}
   }
 
-  // Sonnet's active task must not have progressed at all
-  const sonnetTaskDuringPause = snapshot.tasks[sonnetBeforePause.currentTaskId];
-  assert.equal(sonnetTaskDuringPause.progress, preservedProgress);
-  assert.equal(sonnetTaskDuringPause.elapsedSimMs, preservedElapsed);
+  const mockDocument = {
+    nodeType: 9,
+    createElement: (tag: string) => new MockElement(tag, mockDocument),
+    createElementNS: (_ns: string, tag: string) =>
+      new MockElement(tag, mockDocument),
+    createTextNode: (text: string) => {
+      const node = new MockElement('#text', mockDocument);
+      node.nodeType = 3;
+      node.textContent = text;
+      return node;
+    },
+    createComment: (text: string) => {
+      const node = new MockElement('#comment', mockDocument);
+      node.nodeType = 8;
+      node.textContent = text;
+      return node;
+    },
+    documentElement: null as unknown,
+    body: null as unknown,
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  mockDocument.documentElement = new MockElement('html', mockDocument);
+  mockDocument.body = new MockElement('body', mockDocument);
 
-  // Meanwhile, Opus (not paused) MUST have progressed
-  const opusTaskAfterTicks = snapshot.tasks[opusBefore.currentTaskId];
-  assert.ok(
-    opusTaskAfterTicks.progress > opusProgressBefore,
-    'Unpaused worker Opus should continue progressing while Sonnet is paused',
-  );
+  (globalThis as Record<string, unknown>).document = mockDocument;
+  (globalThis as Record<string, unknown>).window = {
+    document: mockDocument,
+    navigator: { userAgent: 'node-test' },
+    addEventListener() {},
+    removeEventListener() {},
+    HTMLElement: MockElement,
+    HTMLIFrameElement: MockElement,
+  };
+  (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+}
 
-  // Now Resume Sonnet -> must resume from preservedProgress, NOT reset to 0
-  snapshot = SimulationEngine.resumeWorker(snapshot, 'sonnet');
-  assert.equal(snapshot.workers.sonnet.status, 'BUSY');
-  const sonnetTaskAfterResume = snapshot.tasks[sonnetBeforePause.currentTaskId];
-  assert.equal(sonnetTaskAfterResume.progress, preservedProgress);
-  assert.equal(sonnetTaskAfterResume.elapsedSimMs, preservedElapsed);
-
-  // Tick once more -> Sonnet now advances beyond preservedProgress
-  snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
-  const sonnetTaskNextTick = snapshot.tasks[sonnetBeforePause.currentTaskId];
-  assert.ok(sonnetTaskNextTick.progress > preservedProgress);
-});
-
-test('6. Global Pause stops the entire simulation clock for all workers', () => {
+// 1. Global Pause freezes simulation time.
+test('1. Global Pause freezes simulation time, task progress, worker transitions, and event generation', () => {
   let snapshot = SimulationEngine.createInitialSnapshot(DEFAULT_SIMULATION_SEED);
   snapshot = SimulationEngine.setGlobalPaused(snapshot, true);
   assert.equal(snapshot.isGlobalPaused, true);
 
   const timeBefore = snapshot.simTimeMs;
-  const opusTaskBefore = snapshot.tasks[snapshot.workers.opus.currentTaskId!].progress;
+  const tickBefore = snapshot.tickCount;
+  const eventsBefore = snapshot.events.length;
+  const prngBefore = snapshot.prngState;
+  const opusProgressBefore =
+    snapshot.tasks[snapshot.workers.opus.currentTaskId!].progress;
 
+  // Attempt both fixed tick and wall-clock advancement while globally paused
   snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
-  snapshot = SimulationEngine.advanceByWallClockDelta(snapshot, 1000);
+  snapshot = SimulationEngine.advanceByWallClockDelta(snapshot, 2000);
 
   assert.equal(snapshot.simTimeMs, timeBefore);
+  assert.equal(snapshot.tickCount, tickBefore);
+  assert.equal(snapshot.events.length, eventsBefore);
+  assert.equal(snapshot.prngState, prngBefore);
   assert.equal(
     snapshot.tasks[snapshot.workers.opus.currentTaskId!].progress,
-    opusTaskBefore,
+    opusProgressBefore,
   );
 });
 
-test('7. Task Progress drives deterministic Task Status transitions across stage pipeline', () => {
-  let snapshot = SimulationEngine.createInitialSnapshot(DEFAULT_SIMULATION_SEED);
-  const opusTaskId = snapshot.workers.opus.currentTaskId!;
-  assert.ok(opusTaskId);
+// 2. Global Pause freezes placeholder animation time.
+test('2. Global Pause freezes placeholder animation time and articulated humanoid joint angles', () => {
+  let animClockSec = 1.25;
 
-  const observedStages = new Set<string>();
-  observedStages.add(snapshot.tasks[opusTaskId].status);
+  // Advance while running at 1x (rawDeltaSec = 0.08 <= MAX_ANIM_FRAME_DELTA_SEC)
+  animClockSec = advanceAvatarAnimClock({
+    currentAnimTimeSec: animClockSec,
+    rawDeltaSec: 0.08,
+    isGlobalPaused: false,
+    workerStatus: 'BUSY',
+    reducedMotion: false,
+    simSpeedMultiplier: 1,
+  });
+  assert.equal(Number(animClockSec.toFixed(4)), 1.33);
 
-  // Advance until Opus finishes the task
-  for (let i = 0; i < 40; i++) {
-    snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
-    const task = snapshot.tasks[opusTaskId];
-    observedStages.add(task.status);
-    if (task.status === 'COMPLETED') break;
+  const poseAtPause = computeHumanoidPose('typing', animClockSec, true);
+
+  // Advance 60 frames while isGlobalPaused === true -> clock and pose must remain identical
+  for (let frame = 0; frame < 60; frame++) {
+    animClockSec = advanceAvatarAnimClock({
+      currentAnimTimeSec: animClockSec,
+      rawDeltaSec: 1 / 60,
+      isGlobalPaused: true,
+      workerStatus: 'BUSY',
+      reducedMotion: false,
+      simSpeedMultiplier: 4,
+    });
   }
 
-  // Escalation pipeline has ROUTING -> ANALYZING -> VALIDATING -> ARCHIVING -> COMPLETED
-  assert.ok(observedStages.has('ANALYZING'), 'Should pass through ANALYZING stage');
-  assert.ok(observedStages.has('VALIDATING'), 'Should pass through VALIDATING stage');
-  assert.ok(observedStages.has('ARCHIVING'), 'Should pass through ARCHIVING stage');
-  assert.ok(observedStages.has('COMPLETED'), 'Should reach COMPLETED stage at 100%');
-  assert.equal(snapshot.tasks[opusTaskId].progress, 100);
+  assert.equal(
+    Number(animClockSec.toFixed(4)),
+    1.33,
+    'Placeholder animation clock must not advance during Global Pause',
+  );
+  const poseAfterPausedFrames = computeHumanoidPose('typing', animClockSec, true);
+  assert.deepEqual(poseAfterPausedFrames, poseAtPause);
+});
+
+// 3. Global Pause freezes GLB animation updates.
+test('3. Global Pause freezes GLB AnimationMixer timeScale and frame delta updates', () => {
+  const mixerCalls: number[] = [];
+  const mockMixer = {
+    timeScale: 1,
+    update(deltaSec: number) {
+      mixerCalls.push(deltaSec);
+    },
+  };
+
+  // Running at 2x speed -> mixer timeScale = 2 and mixer.update is invoked with scaled delta
+  const activeDelta = updateGlbMixerWithSimClock(mockMixer, {
+    rawDeltaSec: 0.016,
+    isGlobalPaused: false,
+    workerStatus: 'BUSY',
+    reducedMotion: false,
+    simSpeedMultiplier: 2,
+  });
+  assert.equal(mockMixer.timeScale, 2);
+  assert.equal(Number(activeDelta.toFixed(4)), 0.032);
+  assert.equal(mixerCalls.length, 1);
+
+  // Global Pause -> mixer timeScale = 0 and mixer.update is NOT invoked
+  const pausedDelta = updateGlbMixerWithSimClock(mockMixer, {
+    rawDeltaSec: 0.016,
+    isGlobalPaused: true,
+    workerStatus: 'BUSY',
+    reducedMotion: false,
+    simSpeedMultiplier: 2,
+  });
+  assert.equal(
+    computeGlbMixerTimeScale({
+      isGlobalPaused: true,
+      workerStatus: 'BUSY',
+      reducedMotion: false,
+      simSpeedMultiplier: 2,
+    }),
+    0,
+  );
+  assert.equal(mockMixer.timeScale, 0);
+  assert.equal(pausedDelta, 0);
+  assert.equal(
+    mixerCalls.length,
+    1,
+    'GLB mixer.update() must not be called while globally paused',
+  );
+});
+
+// 4. Resume continues from the previous state.
+test('4. Resume continues simulation and animation clock from exact previous state', () => {
+  let snapshot = SimulationEngine.createInitialSnapshot(DEFAULT_SIMULATION_SEED);
+  snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+
+  const exactSimTimeAtPause = snapshot.simTimeMs;
+  const exactOpusTask = snapshot.tasks[snapshot.workers.opus.currentTaskId!];
+  const exactProgressAtPause = exactOpusTask.progress;
+  const exactElapsedAtPause = exactOpusTask.elapsedSimMs;
+
+  let animClockSec = advanceAvatarAnimClock({
+    currentAnimTimeSec: 0,
+    rawDeltaSec: 0.05,
+    isGlobalPaused: false,
+    workerStatus: 'BUSY',
+    reducedMotion: false,
+    simSpeedMultiplier: 1,
+  });
+  assert.equal(animClockSec, 0.05);
+
+  // Pause globally and pass wall time
+  snapshot = SimulationEngine.setGlobalPaused(snapshot, true);
+  snapshot = SimulationEngine.advanceByWallClockDelta(snapshot, 5000);
+  animClockSec = advanceAvatarAnimClock({
+    currentAnimTimeSec: animClockSec,
+    rawDeltaSec: 0.08,
+    isGlobalPaused: true,
+    workerStatus: 'BUSY',
+    reducedMotion: false,
+    simSpeedMultiplier: 1,
+  });
+
+  // Global Resume
+  snapshot = SimulationEngine.setGlobalPaused(snapshot, false);
+  assert.equal(snapshot.simTimeMs, exactSimTimeAtPause);
+  assert.equal(
+    snapshot.tasks[snapshot.workers.opus.currentTaskId!].progress,
+    exactProgressAtPause,
+  );
+  assert.equal(
+    snapshot.tasks[snapshot.workers.opus.currentTaskId!].elapsedSimMs,
+    exactElapsedAtPause,
+  );
+  assert.equal(animClockSec, 0.05);
+
+  // Next tick continues smoothly from previous state
+  snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+  animClockSec = advanceAvatarAnimClock({
+    currentAnimTimeSec: animClockSec,
+    rawDeltaSec: 0.05,
+    isGlobalPaused: false,
+    workerStatus: 'BUSY',
+    reducedMotion: false,
+    simSpeedMultiplier: 1,
+  });
+
+  assert.equal(snapshot.simTimeMs, exactSimTimeAtPause + FIXED_TICK_SIM_MS);
+  assert.ok(
+    snapshot.tasks[snapshot.workers.opus.currentTaskId!].progress >
+      exactProgressAtPause,
+  );
+  assert.equal(Number(animClockSec.toFixed(4)), 0.1);
+});
+
+// 5. Worker Pause affects only the selected worker.
+test('5. Worker Pause affects only the selected worker while other workers continue moving and progressing', () => {
+  let snapshot = SimulationEngine.createInitialSnapshot(DEFAULT_SIMULATION_SEED);
+
+  const sonnetTaskId = snapshot.workers.sonnet.currentTaskId!;
+  const opusTaskId = snapshot.workers.opus.currentTaskId!;
+  const sonnetProgressStart = snapshot.tasks[sonnetTaskId].progress;
+  const opusProgressStart = snapshot.tasks[opusTaskId].progress;
+
+  // Pause only sonnet
+  snapshot = SimulationEngine.pauseWorker(snapshot, 'sonnet');
+  assert.equal(snapshot.workers.sonnet.status, 'PAUSED');
+  assert.equal(snapshot.workers.opus.status, 'BUSY');
+
+  // Advance 4 simulation ticks
+  for (let i = 0; i < 4; i++) {
+    snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+  }
+
+  // Sonnet is frozen; Opus progressed
+  assert.equal(snapshot.tasks[sonnetTaskId].progress, sonnetProgressStart);
+  assert.ok(snapshot.tasks[opusTaskId].progress > opusProgressStart);
+
+  // Animation clock check: Sonnet's clock freezes while Opus's clock advances
+  const sonnetAnim = advanceAvatarAnimClock({
+    currentAnimTimeSec: 2.0,
+    rawDeltaSec: 0.05,
+    isGlobalPaused: false,
+    workerStatus: snapshot.workers.sonnet.status,
+    reducedMotion: false,
+    simSpeedMultiplier: 1,
+  });
+  const opusAnim = advanceAvatarAnimClock({
+    currentAnimTimeSec: 2.0,
+    rawDeltaSec: 0.05,
+    isGlobalPaused: false,
+    workerStatus: snapshot.workers.opus.status,
+    reducedMotion: false,
+    simSpeedMultiplier: 1,
+  });
+
+  assert.equal(sonnetAnim, 2.0);
+  assert.equal(Number(opusAnim.toFixed(4)), 2.05);
+});
+
+// 6. A previously paused worker remains paused after Global Resume.
+test('6. A worker individually paused before Global Pause remains PAUSED after Global Resume', () => {
+  let snapshot = SimulationEngine.createInitialSnapshot(DEFAULT_SIMULATION_SEED);
+
+  // Step 1: Individually pause Sonnet
+  snapshot = SimulationEngine.pauseWorker(snapshot, 'sonnet');
+  assert.equal(snapshot.workers.sonnet.status, 'PAUSED');
+  const sonnetTaskId = snapshot.workers.sonnet.currentTaskId!;
+  const sonnetProgressBefore = snapshot.tasks[sonnetTaskId].progress;
+
+  // Step 2: Activate Global Pause
+  snapshot = SimulationEngine.setGlobalPaused(snapshot, true);
+  assert.equal(snapshot.isGlobalPaused, true);
+  assert.equal(snapshot.workers.sonnet.status, 'PAUSED');
+
+  // Step 3: Global Resume
+  snapshot = SimulationEngine.setGlobalPaused(snapshot, false);
+  assert.equal(snapshot.isGlobalPaused, false);
+  assert.equal(
+    snapshot.workers.sonnet.status,
+    'PAUSED',
+    'Sonnet must still be PAUSED after Global Resume',
+  );
+
+  // Step 4: Advance ticks after Global Resume -> Sonnet must still not progress
+  snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+  assert.equal(snapshot.workers.sonnet.status, 'PAUSED');
+  assert.equal(snapshot.tasks[sonnetTaskId].progress, sonnetProgressBefore);
+});
+
+// 7. FIFO task order is preserved.
+test('7. FIFO task queue order is strictly preserved when multiple tasks are queued on a worker', () => {
+  let snapshot = SimulationEngine.createBaselineSnapshot(DEFAULT_SIMULATION_SEED);
+
+  // Assign 3 tasks to IDLE worker haiku: Task 1 becomes active, Task 2 and Task 3 queue in FIFO order
+  snapshot = WorkerMockService.assignTask(snapshot, {
+    workerId: 'haiku',
+    title: 'FIFO First Active Task',
+  });
+  snapshot = WorkerMockService.assignTask(snapshot, {
+    workerId: 'haiku',
+    title: 'FIFO Second Queued Task',
+  });
+  snapshot = WorkerMockService.assignTask(snapshot, {
+    workerId: 'haiku',
+    title: 'FIFO Third Queued Task',
+  });
+
+  const haikuInitial = snapshot.workers.haiku;
+  const firstId = haikuInitial.currentTaskId!;
+  const [secondId, thirdId] = haikuInitial.taskQueueIds;
+
+  assert.equal(snapshot.tasks[firstId].title, 'FIFO First Active Task');
+  assert.equal(snapshot.tasks[secondId].title, 'FIFO Second Queued Task');
+  assert.equal(snapshot.tasks[thirdId].title, 'FIFO Third Queued Task');
+  assert.equal(snapshot.tasks[secondId].status, 'QUEUED');
+  assert.equal(snapshot.tasks[thirdId].status, 'QUEUED');
+
+  // Step until firstId completes and Haiku finishes COMPLETED celebration to promote secondId
+  for (let i = 0; i < 45; i++) {
+    snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+    if (
+      snapshot.tasks[firstId].status === 'COMPLETED' &&
+      snapshot.workers.haiku.currentTaskId === secondId
+    ) {
+      break;
+    }
+  }
+
+  assert.equal(snapshot.tasks[firstId].status, 'COMPLETED');
+  assert.equal(
+    snapshot.workers.haiku.currentTaskId,
+    secondId,
+    'Second task in FIFO queue must become active after first task completes',
+  );
+  assert.deepEqual(snapshot.workers.haiku.taskQueueIds, [thirdId]);
+});
+
+// 8. Reset clears active and queued task state.
+test('8. Reset clears active tasks, queued tasks, events, and SIMULATED metrics while running or paused', () => {
+  // Case A: Reset while running with active + queued tasks
+  let snapshot = SimulationEngine.createInitialSnapshot(DEFAULT_SIMULATION_SEED);
+  snapshot = WorkerMockService.assignTask(snapshot, {
+    workerId: 'sonnet',
+    title: 'Extra Queued Task Before Reset',
+  });
+  snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+
+  const resetFromRunning = SimulationEngine.resetToBaseline(DEFAULT_SIMULATION_SEED);
+  assert.equal(resetFromRunning.simTimeMs, 0);
+  assert.equal(resetFromRunning.tickCount, 0);
+  assert.equal(resetFromRunning.isGlobalPaused, false);
+  assert.equal(Object.keys(resetFromRunning.tasks).length, 0);
+  assert.equal(resetFromRunning.events.length, 0);
+
+  for (const wid of resetFromRunning.workerOrder) {
+    const w = resetFromRunning.workers[wid];
+    assert.equal(w.status, 'IDLE');
+    assert.equal(w.currentTaskId, null);
+    assert.deepEqual(w.taskQueueIds, []);
+    assert.deepEqual(w.completedTaskIds, []);
+    assert.equal(w.metrics.simulatedTokens, 0);
+    assert.equal(w.metrics.simulatedCostUsd, 0);
+    assert.equal(w.metrics.completedTasksCount, 0);
+    assert.equal(w.metrics.isSimulated, true);
+  }
+
+  // Case B: Reset via Zustand store while globally paused with active and queued tasks
+  useOfficeStore.getState().setGlobalPaused(true);
+  useOfficeStore.getState().assignMockTask({
+    workerId: 'opus',
+    title: 'Task Assigned While Paused',
+  });
+  useOfficeStore.getState().resetSimulationWithSeed(DEFAULT_SIMULATION_SEED);
+
+  const storeState = useOfficeStore.getState();
+  assert.equal(storeState.simTimeMs, 0);
+  assert.equal(storeState.tickCount, 0);
+  assert.equal(storeState.isGlobalPaused, false);
+  assert.equal(Object.keys(storeState.tasks).length, 0);
+  assert.equal(storeState.events.length, 0);
+  assert.equal(storeState.workers.opus.status, 'IDLE');
+  assert.equal(storeState.workers.opus.currentTaskId, null);
+  assert.equal(storeState.workers.opus.taskQueueIds.length, 0);
+});
+
+// 9. Reset restores deterministic random state.
+test('9. Reset restores deterministic PRNG state and produces identical subsequent simulation sequences', () => {
+  const seed = 774411;
+  let firstRun = SimulationEngine.resetToBaseline(seed);
+  assert.equal(firstRun.seed, seed);
+  assert.equal(firstRun.prngState, seed);
+
+  // Advance 15 ticks in first run
+  for (let i = 0; i < 15; i++) {
+    firstRun = SimulationEngine.stepSimulationTick(firstRun, FIXED_TICK_SIM_MS);
+  }
+
+  // Reset to same seed and advance 15 ticks in second run
+  let secondRun = SimulationEngine.resetToBaseline(seed);
+  assert.equal(secondRun.prngState, seed);
+
+  for (let i = 0; i < 15; i++) {
+    secondRun = SimulationEngine.stepSimulationTick(
+      secondRun,
+      FIXED_TICK_SIM_MS,
+    );
+  }
+
+  assert.equal(firstRun.simTimeMs, secondRun.simTimeMs);
+  assert.equal(firstRun.prngState, secondRun.prngState);
+  assert.deepEqual(
+    firstRun.events.map((e) => e.message),
+    secondRun.events.map((e) => e.message),
+  );
+});
+
+// 10. 1x, 2x, and 4x speed behave consistently.
+test('10. Speed multipliers (1x, 2x, 4x) scale simulation clock and avatar animation clock proportionally', () => {
+  const base1x = {
+    ...SimulationEngine.resetToBaseline(DEFAULT_SIMULATION_SEED),
+    simSpeedMultiplier: 1 as const,
+  };
+  const base2x = {
+    ...SimulationEngine.resetToBaseline(DEFAULT_SIMULATION_SEED),
+    simSpeedMultiplier: 2 as const,
+  };
+  const base4x = {
+    ...SimulationEngine.resetToBaseline(DEFAULT_SIMULATION_SEED),
+    simSpeedMultiplier: 4 as const,
+  };
+
+  const after1x = SimulationEngine.advanceByWallClockDelta(base1x, 500);
+  const after2x = SimulationEngine.advanceByWallClockDelta(base2x, 500);
+  const after4x = SimulationEngine.advanceByWallClockDelta(base4x, 500);
+
+  assert.equal(after1x.simTimeMs, 500);
+  assert.equal(after2x.simTimeMs, 1000);
+  assert.equal(after4x.simTimeMs, 2000);
+
+  // Avatar animation clock also scales proportionally by 1x, 2x, and 4x
+  const anim1x = advanceAvatarAnimClock({
+    currentAnimTimeSec: 0,
+    rawDeltaSec: 0.05,
+    isGlobalPaused: false,
+    workerStatus: 'BUSY',
+    reducedMotion: false,
+    simSpeedMultiplier: 1,
+  });
+  const anim2x = advanceAvatarAnimClock({
+    currentAnimTimeSec: 0,
+    rawDeltaSec: 0.05,
+    isGlobalPaused: false,
+    workerStatus: 'BUSY',
+    reducedMotion: false,
+    simSpeedMultiplier: 2,
+  });
+  const anim4x = advanceAvatarAnimClock({
+    currentAnimTimeSec: 0,
+    rawDeltaSec: 0.05,
+    isGlobalPaused: false,
+    workerStatus: 'BUSY',
+    reducedMotion: false,
+    simSpeedMultiplier: 4,
+  });
+
+  assert.equal(Number(anim1x.toFixed(4)), 0.05);
+  assert.equal(Number(anim2x.toFixed(4)), 0.1);
+  assert.equal(Number(anim4x.toFixed(4)), 0.2);
+});
+
+// 11. Step advances exactly the intended simulation interval.
+test('11. Step control advances simulation by the exact FIXED_TICK_SIM_MS (500ms) interval', () => {
+  useOfficeStore.getState().resetSimulationWithSeed(DEFAULT_SIMULATION_SEED);
+  const beforeSimTime = useOfficeStore.getState().simTimeMs;
+  const beforeTicks = useOfficeStore.getState().tickCount;
+
+  // Step once while running
+  useOfficeStore.getState().tickSimulation(FIXED_TICK_SIM_MS);
+  assert.equal(
+    useOfficeStore.getState().simTimeMs,
+    beforeSimTime + FIXED_TICK_SIM_MS,
+  );
+  assert.equal(useOfficeStore.getState().tickCount, beforeTicks + 1);
+
+  // Step once more
+  useOfficeStore.getState().tickSimulation(FIXED_TICK_SIM_MS);
+  assert.equal(
+    useOfficeStore.getState().simTimeMs,
+    beforeSimTime + FIXED_TICK_SIM_MS * 2,
+  );
+  assert.equal(useOfficeStore.getState().tickCount, beforeTicks + 2);
+});
+
+// 12. A failed GLB model displays its placeholder.
+test('12. A failed or invalid GLB model URL cleanly falls back to placeholder while preserving worker avatarConfig', () => {
+  ensureMinimalDomEnvironment();
+  useOfficeStore.getState().resetSimulationWithSeed(DEFAULT_SIMULATION_SEED);
+
+  const workerBefore = useOfficeStore.getState().workers.sonnet;
+  const originalFallbackType = workerBefore.avatarConfig.fallbackType;
+  const originalAccentColor = workerBefore.avatarConfig.accentColor;
+  const originalAnimationMap = { ...workerBefore.avatarConfig.animationMap };
+
+  // Set a failing GLB URL on sonnet and record load error
+  const brokenUrl = '/models/corrupted-sonnet-rig.glb';
+  useOfficeStore.getState().setWorkerModelUrl('sonnet', brokenUrl);
+  useOfficeStore
+    .getState()
+    .recordAvatarModelError('sonnet', brokenUrl, 'HTTP 404 Not Found');
+
+  const sonnetAfter = useOfficeStore.getState().workers.sonnet;
+  const errorsMap = useOfficeStore.getState().avatarLoadErrors;
+
+  // Resolver must switch to fallback-after-error placeholder mode
+  const resolution = resolveAvatarRenderMode(
+    'sonnet',
+    sonnetAfter.avatarConfig,
+    errorsMap,
+  );
+  assert.equal(resolution.mode, 'fallback-after-error');
+  assert.ok(resolution.errorDetail?.includes('HTTP 404 Not Found'));
+
+  // Preserved config assertions required by Fix B
+  assert.equal(sonnetAfter.avatarConfig.fallbackType, originalFallbackType);
+  assert.equal(sonnetAfter.avatarConfig.accentColor, originalAccentColor);
+  assert.equal(sonnetAfter.avatarConfig.modelUrl, brokenUrl);
+  assert.deepEqual(sonnetAfter.avatarConfig.animationMap, originalAnimationMap);
+});
+
+// 13. One avatar failure does not crash other avatars or the scene.
+test('13. AvatarModelErrorBoundary isolates a throwing GLB child so sibling avatars and scene remain mounted', () => {
+  ensureMinimalDomEnvironment();
+
+  const capturedErrors: Array<{ workerId: string; url: string; msg: string }> =
+    [];
+  const ThrowingGlbChild = (): React.ReactElement => {
+    throw new Error('Failed to parse GLB binary header');
+  };
+
+  const container = document.createElement('div');
+  const root = createRoot(container);
+
+  // Silence React's expected error boundary console output during the test
+  const origConsoleError = console.error;
+  const origConsoleWarn = console.warn;
+  console.error = () => {};
+  console.warn = () => {};
+  try {
+    flushSync(() => {
+      root.render(
+        React.createElement(
+          'div',
+          { id: 'scene-root' },
+          React.createElement(
+            AvatarModelErrorBoundary,
+            {
+              workerId: 'sonnet',
+              workerName: 'Claude Sonnet Worker',
+              modelUrl: '/models/broken-sonnet.glb',
+              fallback: React.createElement(
+                'span',
+                { id: 'sonnet-fallback' },
+                'SONNET_PLACEHOLDER_HUMANOID',
+              ),
+              onModelError: (wid, url, errMsg) => {
+                capturedErrors.push({
+                  workerId: wid,
+                  url,
+                  msg: errMsg,
+                });
+              },
+              children: React.createElement(ThrowingGlbChild),
+            },
+          ),
+          React.createElement(
+            AvatarModelErrorBoundary,
+            {
+              workerId: 'opus',
+              workerName: 'Claude Opus Analyst',
+              modelUrl: '/models/valid-opus.glb',
+              fallback: React.createElement(
+                'span',
+                { id: 'opus-fallback' },
+                'OPUS_PLACEHOLDER_HUMANOID',
+              ),
+              children: React.createElement(
+                'span',
+                { id: 'opus-glb' },
+                'OPUS_GLB_MOUNTED',
+              ),
+            },
+          ),
+        ),
+      );
+    });
+  } finally {
+    console.error = origConsoleError;
+    console.warn = origConsoleWarn;
+  }
+
+  // Sonnet caught the error once and rendered its fallback; Opus remained mounted
+  assert.equal(capturedErrors.length, 1);
+  assert.equal(capturedErrors[0].workerId, 'sonnet');
+  assert.ok(capturedErrors[0].msg.includes('Failed to parse GLB'));
+
+  const renderedText = collectDomTextAndIds(container as unknown as MockDomNode);
+  assert.ok(
+    renderedText.includes('SONNET_PLACEHOLDER_HUMANOID'),
+    'Failed avatar must render its placeholder fallback',
+  );
+  assert.ok(
+    renderedText.includes('OPUS_GLB_MOUNTED'),
+    'Sibling avatar Opus must remain mounted without crashing',
+  );
+
+  flushSync(() => {
+    root.unmount();
+  });
+});
+
+// 14. Updating one worker does not unnecessarily rerender every worker component.
+test('14. Updating one worker state re-renders only that worker component while the other 6 workers have 0 re-renders', () => {
+  ensureMinimalDomEnvironment();
+  useOfficeStore.getState().resetSimulationWithSeed(DEFAULT_SIMULATION_SEED);
+  resetWorkerRenderCounts();
+
+  const workerIds = useOfficeStore.getState().workerOrder;
+
+  const container = document.createElement('div');
+  const root = createRoot(container);
+
+  flushSync(() => {
+    root.render(
+      React.createElement(
+        'div',
+        null,
+        ...workerIds.map((wid) =>
+          React.createElement(RosterWorkerItem, {
+            key: `roster-${wid}`,
+            workerId: wid,
+          }),
+        ),
+        ...workerIds.map((wid) =>
+          React.createElement(WorldWorkerBadgeItem, {
+            key: `badge-${wid}`,
+            workerId: wid,
+          }),
+        ),
+      ),
+    );
+  });
+
+  // Verify initial mount rendered each worker item once
+  for (const wid of workerIds) {
+    assert.equal(getWorkerComponentRenderCount(wid, 'roster'), 1);
+    assert.equal(getWorkerComponentRenderCount(wid, 'badge'), 1);
+  }
+
+  // Reset profiler counters right before mutating ONLY 'sonnet'
+  resetWorkerRenderCounts();
+
+  flushSync(() => {
+    useOfficeStore.getState().assignMockTask({
+      workerId: 'sonnet',
+      title: 'Isolated Sonnet Task Assignment',
+    });
+  });
+
+  // Sonnet's roster and badge items must re-render
+  assert.ok(
+    getWorkerComponentRenderCount('sonnet', 'roster') >= 1,
+    'Updated worker sonnet roster item should re-render',
+  );
+  assert.ok(
+    getWorkerComponentRenderCount('sonnet', 'badge') >= 1,
+    'Updated worker sonnet badge item should re-render',
+  );
+
+  // All other 6 workers MUST have 0 re-renders
+  const otherWorkers = workerIds.filter((w) => w !== 'sonnet');
+  for (const otherId of otherWorkers) {
+    assert.equal(
+      getWorkerComponentRenderCount(otherId, 'roster'),
+      0,
+      `Unchanged worker ${otherId} roster item must NOT re-render when sonnet updates`,
+    );
+    assert.equal(
+      getWorkerComponentRenderCount(otherId, 'badge'),
+      0,
+      `Unchanged worker ${otherId} world badge item must NOT re-render when sonnet updates`,
+    );
+  }
+
+  flushSync(() => {
+    root.unmount();
+  });
 });

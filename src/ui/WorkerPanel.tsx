@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Box,
   CheckCircle2,
   Clock,
@@ -17,33 +18,37 @@ import { useOfficeStore } from '../workers/worker.state';
 import { WorkerControls } from './WorkerControls';
 
 /**
- * WorkerPanel Component (Selected Worker Profile Drawer)
+ * WorkerPanel Component (Selected Worker Profile Drawer — Phase 1.1)
  * Displays:
  * - Worker Identity, Role, Department, Workstation
  * - Explicit separation between Worker Status (`BUSY`/`IDLE`/`PAUSED`) and
  *   Current Task Status (`ROUTING`/`EXTRACTING`/`ANALYZING`/`VALIDATING`/`ARCHIVING`)
  * - Deterministic Task Progress bar & Stage Pipeline
  * - Task Queue (`QUEUED` items)
- * - Honest Character Asset & Rig Configuration (`PLACEHOLDER AVATAR — GLB READY`)
+ * - Honest Character Asset & Rig Configuration (`PLACEHOLDER AVATAR — GLB READY`
+ *   plus isolated GLB fallback diagnostics when a model URL fails to load)
  * - Simulated Telemetry (`SIMULATED` tokens & cost)
  */
 
 export function WorkerPanel() {
   const selectedWorkerId = useOfficeStore((s) => s.selectedWorkerId);
-  const workers = useOfficeStore((s) => s.workers);
+  const worker = useOfficeStore((s) =>
+    s.selectedWorkerId ? s.workers[s.selectedWorkerId] ?? null : null,
+  );
   const tasks = useOfficeStore((s) => s.tasks);
+  const avatarError = useOfficeStore((s) =>
+    s.selectedWorkerId ? s.avatarLoadErrors[s.selectedWorkerId] ?? null : null,
+  );
   const selectWorker = useOfficeStore((s) => s.selectWorker);
+  const setWorkerModelUrl = useOfficeStore((s) => s.setWorkerModelUrl);
 
-  if (!selectedWorkerId) {
+  if (!selectedWorkerId || !worker) {
     return null;
   }
 
-  const worker = workers[selectedWorkerId];
-  if (!worker) {
-    return null;
-  }
-
-  const activeTask = worker.currentTaskId ? tasks[worker.currentTaskId] ?? null : null;
+  const activeTask = worker.currentTaskId
+    ? tasks[worker.currentTaskId] ?? null
+    : null;
   const queuedTasks = worker.taskQueueIds
     .map((id) => tasks[id])
     .filter((t): t is NonNullable<typeof t> => Boolean(t));
@@ -319,24 +324,82 @@ export function WorkerPanel() {
         {/* 5. Interactive Controls (Pause/Resume + Assign Mock Task) */}
         <WorkerControls worker={worker} />
 
-        {/* 6. Honest Character Asset & Animation Rig Status */}
-        <section className="p-3 rounded-lg bg-slate-950/90 border border-slate-800/90 space-y-1.5">
-          <div className="flex items-center justify-between">
+        {/* 6. Honest Character Asset & Animation Rig Status + GLB Fallback Control */}
+        <section className="p-3 rounded-lg bg-slate-950/90 border border-slate-800/90 space-y-2">
+          <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
               <Box className="w-3.5 h-3.5 text-violet-400" />
               <span>3D Character Rig Status</span>
             </span>
-            <span className="font-mono text-[10px] text-amber-300">
-              {worker.avatarConfig.modelUrl
-                ? 'GLB MODEL LOADED'
-                : 'PLACEHOLDER AVATAR — GLB READY'}
+            <span
+              data-testid="avatar-rig-status-badge"
+              className={`font-mono text-[10px] font-semibold ${
+                avatarError
+                  ? 'text-amber-300'
+                  : worker.avatarConfig.modelUrl
+                    ? 'text-emerald-300'
+                    : 'text-amber-300'
+              }`}
+            >
+              {avatarError
+                ? 'FALLBACK ACTIVE — GLB FAILED'
+                : worker.avatarConfig.modelUrl
+                  ? 'GLB MODEL CONFIGURED'
+                  : 'PLACEHOLDER AVATAR — GLB READY'}
             </span>
           </div>
+
           <p className="text-[11px] text-slate-400 leading-snug">
-            Active Fallback: <code className="font-mono text-slate-200">{worker.avatarConfig.fallbackType}</code> · Pose Clip:{' '}
-            <code className="font-mono text-cyan-300">{worker.animationState}</code> (
-            {worker.avatarConfig.animationMap[worker.animationState]})
+            Active Fallback:{' '}
+            <code className="font-mono text-slate-200">
+              {worker.avatarConfig.fallbackType}
+            </code>{' '}
+            · Pose Clip:{' '}
+            <code className="font-mono text-cyan-300">
+              {worker.animationState}
+            </code>{' '}
+            ({worker.avatarConfig.animationMap[worker.animationState]})
           </p>
+
+          {avatarError && (
+            <div
+              data-testid="avatar-fallback-diagnostic"
+              className="flex items-start gap-1.5 p-2 rounded bg-amber-950/50 border border-amber-500/40 text-[10px] font-mono text-amber-200"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+              <div className="min-w-0 break-all">
+                <div>Isolated GLB Fallback: Articulated humanoid active.</div>
+                <div className="text-amber-300/80">{avatarError}</div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center gap-1.5 pt-1">
+            {worker.avatarConfig.modelUrl ? (
+              <button
+                type="button"
+                data-testid="restore-placeholder-rig-btn"
+                onClick={() => setWorkerModelUrl(worker.id, null)}
+                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-mono text-slate-200 border border-slate-700 cursor-pointer"
+              >
+                Reset to Default Placeholder Rig
+              </button>
+            ) : (
+              <button
+                type="button"
+                data-testid="simulate-missing-glb-btn"
+                onClick={() =>
+                  setWorkerModelUrl(
+                    worker.id,
+                    `/models/non-existent-${worker.id}.glb`,
+                  )
+                }
+                className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-mono text-slate-300 border border-slate-800 cursor-pointer"
+              >
+                Test Missing GLB Fallback
+              </button>
+            )}
+          </div>
         </section>
 
         {/* 7. Recent Completed Tasks by this Worker */}

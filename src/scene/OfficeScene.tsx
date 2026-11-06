@@ -1,6 +1,6 @@
 import { MapControls, OrthographicCamera } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import {
@@ -8,6 +8,7 @@ import {
   WORKSTATION_REGISTRY,
 } from '../workers/worker.registry';
 import { useOfficeStore } from '../workers/worker.state';
+import { RoomDefinition } from '../workers/worker.types';
 import { OfficeBuilding } from './OfficeBuilding';
 import { Room } from './Room';
 import {
@@ -15,8 +16,8 @@ import {
   IS_SOFTWARE_GL,
   SCENE_COLORS,
 } from './scene.constants';
-import { WorkerAvatar } from './WorkerAvatar';
-import { Workstation } from './Workstation';
+import { WorkerAvatarSceneItem } from './WorkerAvatar';
+import { WorkstationSceneItem } from './Workstation';
 import {
   roomLabelDomRefs,
   workerLabelDomRefs,
@@ -24,6 +25,7 @@ import {
 } from './WorldLabelsOverlay';
 
 const _projVec = new THREE.Vector3();
+const WORKSTATION_LIST = Object.values(WORKSTATION_REGISTRY);
 
 /**
  * SpatialLabelProjector
@@ -80,11 +82,6 @@ function SpatialLabelProjector() {
   return null;
 }
 
-/**
- * IsometricCameraRig
- * Manages orthographic isometric pan, zoom, and reset controls with safe bounds
- * so the SIREADER Virtual Office never disappears from the viewport.
- */
 function IsometricCameraRig() {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const { camera, invalidate } = useThree();
@@ -147,16 +144,44 @@ function IsometricCameraRig() {
   );
 }
 
-function OfficeSceneContent() {
-  const workers = useOfficeStore((s) => s.workers);
-  const workerOrder = useOfficeStore((s) => s.workerOrder);
-  const tasks = useOfficeStore((s) => s.tasks);
-  const selectedWorkerId = useOfficeStore((s) => s.selectedWorkerId);
-  const selectedRoomId = useOfficeStore((s) => s.selectedRoomId);
-  const graphicsPreset = useOfficeStore((s) => s.graphicsPreset);
-  const reducedMotion = useOfficeStore((s) => s.reducedMotion);
-  const selectWorker = useOfficeStore((s) => s.selectWorker);
+/**
+ * Granular memoized Room wrapper subscribing only to its primary worker's status
+ * and selection state.
+ */
+const RoomSceneItem = React.memo(function RoomSceneItem({
+  room,
+}: {
+  room: RoomDefinition;
+}) {
+  const workerStatus = useOfficeStore(
+    (s) => s.workers[room.primaryWorkerId]?.status ?? 'IDLE',
+  );
+  const isSelected = useOfficeStore(
+    (s) =>
+      s.selectedRoomId === room.id || s.selectedWorkerId === room.primaryWorkerId,
+  );
   const selectRoom = useOfficeStore((s) => s.selectRoom);
+
+  return (
+    <Room
+      room={room}
+      isSelected={isSelected}
+      workerStatus={workerStatus}
+      onSelectRoom={selectRoom}
+    />
+  );
+});
+
+/**
+ * OfficeSceneContent (Fix C — Granular Subscriptions)
+ * Does NOT subscribe to the entire `workers` or `tasks` map; only subscribes to
+ * `workerOrder` and `graphicsPreset` so individual worker updates only re-render
+ * the specific affected worker item.
+ */
+function OfficeSceneContent() {
+  const workerOrder = useOfficeStore((s) => s.workerOrder);
+  const graphicsPreset = useOfficeStore((s) => s.graphicsPreset);
+  const selectWorker = useOfficeStore((s) => s.selectWorker);
 
   const enableShadows = !IS_SOFTWARE_GL && graphicsPreset === 'high';
 
@@ -191,60 +216,25 @@ function OfficeSceneContent() {
       {/* 1. Static Office Building & Spine Corridor */}
       <OfficeBuilding onBackgroundClick={() => selectWorker(null)} />
 
-      {/* 2. Seven Department Rooms */}
+      {/* 2. Seven Department Rooms (Granular Memoized Items) */}
       <group name="DepartmentRoomsGroup">
-        {ROOM_LIST.map((room) => {
-          const worker = workers[room.primaryWorkerId];
-          const isRoomSelected =
-            selectedRoomId === room.id || selectedWorkerId === room.primaryWorkerId;
-          return (
-            <Room
-              key={room.id}
-              room={room}
-              isSelected={isRoomSelected}
-              workerStatus={worker ? worker.status : 'IDLE'}
-              onSelectRoom={(roomId, primaryWorkerId) =>
-                selectRoom(roomId, primaryWorkerId)
-              }
-            />
-          );
-        })}
+        {ROOM_LIST.map((room) => (
+          <RoomSceneItem key={room.id} room={room} />
+        ))}
       </group>
 
-      {/* 3. Interactive Workstations */}
+      {/* 3. Interactive Workstations (Granular Memoized Items) */}
       <group name="WorkstationsGroup">
-        {Object.values(WORKSTATION_REGISTRY).map((ws) => {
-          const worker = workers[ws.workerId];
-          return (
-            <Workstation
-              key={ws.id}
-              workstation={ws}
-              workerStatus={worker ? worker.status : 'IDLE'}
-              isSelected={selectedWorkerId === ws.workerId}
-              reducedMotion={reducedMotion}
-              onSelectWorker={(workerId) => selectWorker(workerId)}
-            />
-          );
-        })}
+        {WORKSTATION_LIST.map((ws) => (
+          <WorkstationSceneItem key={ws.id} workstation={ws} />
+        ))}
       </group>
 
-      {/* 4. Dynamic Worker Avatars */}
+      {/* 4. Dynamic Worker Avatars (Granular Memoized Items) */}
       <group name="WorkerAvatarsGroup">
-        {workerOrder.map((workerId) => {
-          const worker = workers[workerId];
-          if (!worker) return null;
-          const activeTask = worker.currentTaskId ? tasks[worker.currentTaskId] ?? null : null;
-          return (
-            <WorkerAvatar
-              key={worker.id}
-              worker={worker}
-              activeTask={activeTask}
-              isSelected={selectedWorkerId === worker.id}
-              reducedMotion={reducedMotion}
-              onSelectWorker={(id) => selectWorker(id)}
-            />
-          );
-        })}
+        {workerOrder.map((workerId) => (
+          <WorkerAvatarSceneItem key={workerId} workerId={workerId} />
+        ))}
       </group>
     </>
   );

@@ -6,7 +6,6 @@ import {
 } from './simulation.engine';
 import { AssignTaskInput, WorkerMockService } from './worker.mock-service';
 import {
-  ActivityEvent,
   RoomId,
   SimulationSnapshot,
   TaskEntity,
@@ -15,8 +14,11 @@ import {
 } from './worker.types';
 
 /**
- * Central Zustand Store for SIREADER Virtual Office (Phase 1 — Local Simulation Only)
- * Strictly decoupled from 3D per-frame rendering (`useFrame` uses refs only).
+ * Central Zustand Store for SIREADER Virtual Office (Phase 1.1 — Stabilized)
+ * - Supports granular per-worker subscriptions so updating one worker does not
+ *   re-render unrelated worker components.
+ * - Tracks isolated avatar GLB load errors per worker (`avatarLoadErrors`).
+ * - Implements deterministic baseline reset (`resetSimulationWithSeed`).
  */
 
 export type GraphicsPreset = 'high' | 'balanced';
@@ -31,6 +33,8 @@ export interface OfficeStoreState extends SimulationSnapshot {
   cameraZoomDeltaTrigger: { step: number; nonce: number };
   graphicsPreset: GraphicsPreset;
   reducedMotion: boolean;
+  /** Per-worker GLB model loading failure diagnostics (isolated fallback state) */
+  avatarLoadErrors: Record<string, string | undefined>;
 
   // Actions
   selectWorker: (workerId: WorkerId | null) => void;
@@ -42,6 +46,15 @@ export interface OfficeStoreState extends SimulationSnapshot {
   triggerCameraZoom: (step: number) => void;
   setGraphicsPreset: (preset: GraphicsPreset) => void;
   setReducedMotion: (reduced: boolean) => void;
+
+  // Avatar GLB Asset & Error Isolation Actions
+  setWorkerModelUrl: (workerId: WorkerId, modelUrl: string | null) => void;
+  recordAvatarModelError: (
+    workerId: WorkerId,
+    modelUrl: string,
+    errorMessage: string,
+  ) => void;
+  clearAvatarModelError: (workerId: WorkerId) => void;
 
   // Simulation & Worker Domain Actions
   tickSimulation: (stepSimMs?: number) => void;
@@ -98,6 +111,7 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
   cameraZoomDeltaTrigger: { step: 0, nonce: 0 },
   graphicsPreset: 'high',
   reducedMotion: false,
+  avatarLoadErrors: {},
 
   selectWorker: (workerId) =>
     set((state) => {
@@ -135,9 +149,65 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
   setGraphicsPreset: (preset) => set({ graphicsPreset: preset }),
   setReducedMotion: (reduced) => set({ reducedMotion: reduced }),
 
+  setWorkerModelUrl: (workerId, modelUrl) =>
+    set((state) => {
+      const worker = state.workers[workerId];
+      if (!worker) return state;
+      const nextErrors = { ...state.avatarLoadErrors };
+      delete nextErrors[workerId];
+
+      return {
+        avatarLoadErrors: nextErrors,
+        workers: {
+          ...state.workers,
+          [workerId]: {
+            ...worker,
+            avatarConfig: {
+              ...worker.avatarConfig,
+              modelUrl,
+            },
+          },
+        },
+      };
+    }),
+
+  recordAvatarModelError: (workerId, modelUrl, errorMessage) =>
+    set((state) => {
+      if (state.avatarLoadErrors[workerId] === errorMessage) {
+        return state;
+      }
+      const worker = state.workers[workerId];
+      const event = worker
+        ? WorkerMockService.createEvent(state, {
+            workerId: worker.id,
+            workerName: worker.name,
+            department: worker.department,
+            type: 'SIMULATION_CONTROL',
+            message: `[SIMULATED] Avatar GLB load fallback triggered for "${modelUrl}" (${errorMessage})`,
+            accentColor: '#F59E0B',
+          })
+        : null;
+
+      return {
+        avatarLoadErrors: {
+          ...state.avatarLoadErrors,
+          [workerId]: errorMessage,
+        },
+        events: event ? WorkerMockService.appendEvent(state, event) : state.events,
+      };
+    }),
+
+  clearAvatarModelError: (workerId) =>
+    set((state) => {
+      if (!state.avatarLoadErrors[workerId]) return state;
+      const nextErrors = { ...state.avatarLoadErrors };
+      delete nextErrors[workerId];
+      return { avatarLoadErrors: nextErrors };
+    }),
+
   tickSimulation: (stepSimMs = FIXED_TICK_SIM_MS) =>
     set((state) => {
-      // Allow manual step even when global pause is active if explicitly stepped by user
+      // Manual step advances exact stepSimMs even if globally paused, preserving isGlobalPaused
       const tempUnpaused: SimulationSnapshot = {
         ...state,
         isGlobalPaused: false,
@@ -170,10 +240,16 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
 
   setSimSpeedMultiplier: (speed) => set({ simSpeedMultiplier: speed }),
 
+  /**
+   * Restores a deterministic zero-task baseline (`t = 0`, `prngState = seed`,
+   * `tasks = {}`, `events = []`, all workers `IDLE` with zeroed metrics) whether
+   * called while running, while globally paused, with active tasks, or with queued tasks.
+   */
   resetSimulationWithSeed: (seed = DEFAULT_SIMULATION_SEED) => {
-    const fresh = SimulationEngine.createInitialSnapshot(seed);
+    const baseline = SimulationEngine.resetToBaseline(seed);
     set({
-      ...applySnapshotPatch(fresh),
+      ...applySnapshotPatch(baseline),
+      avatarLoadErrors: {},
       selectedWorkerId: 'sonnet',
       selectedRoomId: 'room_analysis',
     });

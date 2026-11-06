@@ -8,16 +8,98 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { OfficeScene } from '../scene/OfficeScene';
 import { ActivityFeed } from '../ui/ActivityFeed';
 import { TopBar } from '../ui/TopBar';
 import { WorkerPanel } from '../ui/WorkerPanel';
+import { recordWorkerComponentRender } from '../utils/renderProfiler';
 import { FIXED_TICK_SIM_MS } from '../workers/simulation.engine';
 import { useOfficeStore } from '../workers/worker.state';
+import { WorkerId } from '../workers/worker.types';
 
 /**
- * OfficeApp Shell (SIREADER Virtual Office — Phase 1)
+ * Granular Memoized Roster Worker Item (Phase 1.1 Fix C)
+ * Subscribes exclusively to a single worker, its active task, and its selection state
+ * so updating one worker never causes all 7 roster items to re-render.
+ */
+export const RosterWorkerItem = React.memo(function RosterWorkerItem({
+  workerId,
+}: {
+  workerId: WorkerId;
+}) {
+  recordWorkerComponentRender(workerId, 'roster');
+
+  const worker = useOfficeStore((s) => s.workers[workerId]);
+  const activeTaskId = worker?.currentTaskId ?? null;
+  const activeTask = useOfficeStore((s) =>
+    activeTaskId ? s.tasks[activeTaskId] ?? null : null,
+  );
+  const isSelected = useOfficeStore((s) => s.selectedWorkerId === workerId);
+  const selectWorker = useOfficeStore((s) => s.selectWorker);
+
+  if (!worker) return null;
+
+  return (
+    <button
+      type="button"
+      data-testid={`roster-worker-${worker.id}`}
+      onClick={() => selectWorker(worker.id)}
+      className={`w-full flex flex-col gap-0.5 p-2 rounded-md border text-left transition-all cursor-pointer ${
+        isSelected
+          ? 'bg-slate-900 border-cyan-400/80 shadow-[0_0_12px_rgba(6,182,212,0.2)]'
+          : 'bg-slate-900/60 border-slate-800/90 hover:bg-slate-900 hover:border-slate-700'
+      }`}
+      aria-label={`Select ${worker.name} in ${worker.department}`}
+    >
+      <div className="flex items-center justify-between gap-1.5">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span
+            className="w-2 h-2 rounded-sm shrink-0"
+            style={{ backgroundColor: worker.avatarConfig.accentColor }}
+          />
+          <span className="text-xs font-semibold text-white truncate">
+            {worker.name}
+          </span>
+        </div>
+        <span
+          className={`font-mono text-[9px] font-semibold px-1.5 py-0.5 rounded border shrink-0 ${
+            worker.status === 'PAUSED'
+              ? 'bg-amber-950 text-amber-300 border-amber-500/40'
+              : worker.status === 'BUSY' ||
+                  worker.status === 'WALKING' ||
+                  worker.status === 'TASK_RECEIVED'
+                ? 'bg-cyan-950 text-cyan-300 border-cyan-500/40'
+                : 'bg-slate-800 text-slate-400 border-slate-700'
+          }`}
+        >
+          {worker.status}
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between text-[10px] text-slate-400">
+        <span className="truncate">{worker.department}</span>
+        <span className="font-mono text-slate-400 shrink-0">
+          Queue: {worker.taskQueueIds.length}
+        </span>
+      </div>
+
+      {activeTask && (
+        <div className="flex items-center justify-between gap-2 pt-0.5">
+          <span className="font-mono text-[9px] text-sky-300 truncate">
+            {activeTask.status}: {activeTask.title}
+          </span>
+          <span className="font-mono text-[9px] text-slate-300 shrink-0">
+            {Math.round(activeTask.progress)}%
+          </span>
+        </div>
+      )}
+    </button>
+  );
+});
+
+/**
+ * OfficeApp Shell (SIREADER Virtual Office — Phase 1.1)
  * Integrates:
  * 1. Independent Simulation Engine Clock (decoupled from browser frame rate,
  *    with clamped delta so tab switching or browser lag never skips task stages).
@@ -30,15 +112,12 @@ import { useOfficeStore } from '../workers/worker.state';
 export function OfficeApp() {
   const isGlobalPaused = useOfficeStore((s) => s.isGlobalPaused);
   const advanceByWallClock = useOfficeStore((s) => s.advanceByWallClock);
-  const workers = useOfficeStore((s) => s.workers);
   const workerOrder = useOfficeStore((s) => s.workerOrder);
-  const tasks = useOfficeStore((s) => s.tasks);
   const selectedWorkerId = useOfficeStore((s) => s.selectedWorkerId);
   const isRosterOpen = useOfficeStore((s) => s.isRosterOpen);
   const graphicsPreset = useOfficeStore((s) => s.graphicsPreset);
   const reducedMotion = useOfficeStore((s) => s.reducedMotion);
 
-  const selectWorker = useOfficeStore((s) => s.selectWorker);
   const setRosterOpen = useOfficeStore((s) => s.setRosterOpen);
   const triggerCameraReset = useOfficeStore((s) => s.triggerCameraReset);
   const triggerCameraZoom = useOfficeStore((s) => s.triggerCameraZoom);
@@ -159,71 +238,9 @@ export function OfficeApp() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
-                {workerOrder.map((workerId) => {
-                  const worker = workers[workerId];
-                  if (!worker) return null;
-                  const activeTask = worker.currentTaskId
-                    ? tasks[worker.currentTaskId] ?? null
-                    : null;
-                  const isSelected = selectedWorkerId === worker.id;
-
-                  return (
-                    <button
-                      key={worker.id}
-                      type="button"
-                      onClick={() => selectWorker(worker.id)}
-                      className={`w-full flex flex-col gap-0.5 p-2 rounded-md border text-left transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-slate-900 border-cyan-400/80 shadow-[0_0_12px_rgba(6,182,212,0.2)]'
-                          : 'bg-slate-900/60 border-slate-800/90 hover:bg-slate-900 hover:border-slate-700'
-                      }`}
-                      aria-label={`Select ${worker.name} in ${worker.department}`}
-                    >
-                      <div className="flex items-center justify-between gap-1.5">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span
-                            className="w-2 h-2 rounded-sm shrink-0"
-                            style={{ backgroundColor: worker.avatarConfig.accentColor }}
-                          />
-                          <span className="text-xs font-semibold text-white truncate">
-                            {worker.name}
-                          </span>
-                        </div>
-                        <span
-                          className={`font-mono text-[9px] font-semibold px-1.5 py-0.5 rounded border shrink-0 ${
-                            worker.status === 'PAUSED'
-                              ? 'bg-amber-950 text-amber-300 border-amber-500/40'
-                              : worker.status === 'BUSY' ||
-                                  worker.status === 'WALKING' ||
-                                  worker.status === 'TASK_RECEIVED'
-                                ? 'bg-cyan-950 text-cyan-300 border-cyan-500/40'
-                                : 'bg-slate-800 text-slate-400 border-slate-700'
-                          }`}
-                        >
-                          {worker.status}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-slate-400">
-                        <span className="truncate">{worker.department}</span>
-                        <span className="font-mono text-slate-400 shrink-0">
-                          Queue: {worker.taskQueueIds.length}
-                        </span>
-                      </div>
-
-                      {activeTask && (
-                        <div className="flex items-center justify-between gap-2 pt-0.5">
-                          <span className="font-mono text-[9px] text-sky-300 truncate">
-                            {activeTask.status}: {activeTask.title}
-                          </span>
-                          <span className="font-mono text-[9px] text-slate-300 shrink-0">
-                            {Math.round(activeTask.progress)}%
-                          </span>
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
+                {workerOrder.map((workerId) => (
+                  <RosterWorkerItem key={workerId} workerId={workerId} />
+                ))}
               </div>
             </nav>
           ) : (

@@ -17,22 +17,23 @@ import {
 } from './worker.types';
 
 /**
- * SimulationEngine (Phase 1 — Deterministic Local Simulation Clock)
+ * SimulationEngine (Phase 1.1 — Deterministic Local Simulation Clock)
  *
- * Enforces the 3 critical architectural invariants:
- * 1. Frame-rate independence: Uses its own simulation clock step (`MAX_STEP_SIM_MS = 1000`).
- *    Even if a browser tab lags or sleeps for 30 seconds, `advanceTime` clamps and
- *    processes bounded simulation steps so tasks never skip stages unpredictably.
+ * Enforces the critical architectural invariants:
+ * 1. Frame-rate independence: Uses its own simulation clock step (`MAX_DELTA_CLAMP_MS = 1000`).
  * 2. Explicit Pause semantics:
- *    - Global Pause (`isGlobalPaused`): stops the entire simulation clock.
+ *    - Global Pause (`isGlobalPaused`): freezes the entire simulation clock and all workers.
  *    - Worker Pause (`worker.status === 'PAUSED'`): freezes ONLY that worker's
  *      current task progress while all other workers continue normally.
+ *    - Global Resume (`setGlobalPaused(false)`): never resumes a worker that was
+ *      individually paused before Global Pause.
  *    - Worker Resume: restores `statusBeforePause` and continues the active task
  *      from its exact `elapsedSimMs` and `progress` without resetting.
- * 3. Deterministic Task Progress vs Task Status:
- *    - `progress` (0..100) is computed strictly from `elapsedSimMs / totalDurationSimMs`.
- *    - `TaskStatus` only transitions when `progress` crosses the deterministic
- *      stage pipeline thresholds (`ROUTING`, `EXTRACTING`, `ANALYZING`, `VALIDATING`, `ARCHIVING`).
+ * 3. Deterministic Reset (`resetToBaseline`):
+ *    - Restores a clean, zero-task, zero-clock deterministic baseline (`simTimeMs = 0`,
+ *      `tickCount = 0`, `prngState = seed`, `tasks = {}`, `events = []`, all workers `IDLE`
+ *      with empty queues and zeroed `SIMULATED` metrics) whether called while running,
+ *      while globally paused, with active tasks, or with queued tasks.
  */
 
 export const DEFAULT_SIMULATION_SEED = 20261106;
@@ -73,12 +74,13 @@ function interpolatePosition(
 
 export class SimulationEngine {
   /**
-   * Creates a clean, deterministic initial SimulationSnapshot seeded with
-   * initial active and queued tasks across the 7 SIREADER workers.
+   * Creates a clean, zero-task deterministic baseline snapshot (`t = 0`).
+   * Used by `resetToBaseline` so Reset clears all active/queued tasks, activity events,
+   * worker states, and restores the exact seeded PRNG state.
    */
-  static createInitialSnapshot(seed: number = DEFAULT_SIMULATION_SEED): SimulationSnapshot {
+  static createBaselineSnapshot(seed: number = DEFAULT_SIMULATION_SEED): SimulationSnapshot {
     const workers = createInitialWorkersRegistry();
-    let snapshot: SimulationSnapshot = {
+    return {
       seed,
       prngState: seed,
       simTimeMs: 0,
@@ -90,6 +92,23 @@ export class SimulationEngine {
       tasks: {},
       events: [],
     };
+  }
+
+  /**
+   * Restores the simulation to the clean deterministic baseline (`t = 0`),
+   * clearing all active and queued tasks, resetting worker states and metrics,
+   * and restoring `prngState = seed`.
+   */
+  static resetToBaseline(seed: number = DEFAULT_SIMULATION_SEED): SimulationSnapshot {
+    return this.createBaselineSnapshot(seed);
+  }
+
+  /**
+   * Creates an initial snapshot for first app boot with deterministic demo tasks
+   * pre-assigned so the 3D office is immediately active upon opening.
+   */
+  static createInitialSnapshot(seed: number = DEFAULT_SIMULATION_SEED): SimulationSnapshot {
+    let snapshot = this.createBaselineSnapshot(seed);
 
     // Seed initial tasks deterministically so the office is immediately alive and inspectable
     snapshot = WorkerMockService.assignTask(snapshot, { workerId: 'supervisor' }, 0);
@@ -102,7 +121,7 @@ export class SimulationEngine {
     snapshot = WorkerMockService.assignTask(snapshot, { workerId: 'market_monitor' }, 0);
     snapshot = WorkerMockService.assignTask(snapshot, { workerId: 'data_archivist' }, 0);
 
-    // Advance 6 deterministic ticks (3000ms) so several workers are already BUSY in distinct stages
+    // Advance 6 deterministic ticks (3000ms) so workers are BUSY in distinct stages
     for (let i = 0; i < 6; i++) {
       snapshot = this.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
     }
@@ -112,14 +131,15 @@ export class SimulationEngine {
 
   /**
    * Advances the simulation from an external timer delta while clamping the maximum
-   * elapsed time so browser lag or background tab throttling never jumps across
-   * multiple stages at once.
+   * elapsed time (`MAX_DELTA_CLAMP_MS`) before applying `simSpeedMultiplier`, so
+   * `1x`, `2x`, and `4x` speeds advance simulation time consistently in fixed steps
+   * without skipping task stages.
    */
   static advanceByWallClockDelta(
     snapshot: SimulationSnapshot,
     rawElapsedMs: number,
   ): SimulationSnapshot {
-    if (snapshot.isGlobalPaused) {
+    if (snapshot.isGlobalPaused || rawElapsedMs <= 0) {
       return snapshot;
     }
 
@@ -206,7 +226,7 @@ export class SimulationEngine {
     const worker = snapshot.workers[workerId];
     if (!worker) return snapshot;
 
-    // Invariant #2: If this specific worker is PAUSED, freeze their state & task progress completely
+    // Invariant: If this specific worker is PAUSED, freeze their state & task progress completely
     if (worker.status === 'PAUSED') {
       return snapshot;
     }
@@ -286,7 +306,6 @@ export class SimulationEngine {
     // 3. Active Execution: BUSY -> progresses currentTask deterministically
     if (worker.status === 'BUSY') {
       if (!worker.currentTaskId) {
-        // Recover cleanly to IDLE or next queued task
         const idleWorker: WorkerEntity = {
           ...worker,
           status: 'IDLE',
@@ -411,6 +430,7 @@ export class SimulationEngine {
       return WorkerMockService.promoteNextQueuedTask(snapshot, workerId);
     }
 
+    // Return unchanged reference when worker is IDLE with empty queue
     return snapshot;
   }
 
@@ -509,8 +529,10 @@ export class SimulationEngine {
   }
 
   /**
-   * Toggles global simulation pause. When `isGlobalPaused === true`, the entire
-   * simulation clock halts until resumed.
+   * Toggles global simulation pause.
+   * - When `isGlobalPaused === true`, the entire simulation clock and all animations freeze.
+   * - When `isGlobalPaused === false` (Global Resume), any worker that was individually
+   *   `PAUSED` before Global Pause remains `PAUSED` (`worker.status` is untouched).
    */
   static setGlobalPaused(snapshot: SimulationSnapshot, isPaused: boolean): SimulationSnapshot {
     if (snapshot.isGlobalPaused === isPaused) return snapshot;
