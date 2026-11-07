@@ -4,6 +4,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GlobalQueuePanel } from '../ui/GlobalQueuePanel';
 import { TopBar } from '../ui/TopBar';
+import { WorkerControls } from '../ui/WorkerControls';
 import {
   DEFAULT_SIMULATION_SEED,
   FIXED_TICK_SIM_MS,
@@ -1504,6 +1505,35 @@ test('49. TopBar global pause and deterministic manual step remain operable', ()
     invokeReactProp(stepButton, 'onClick');
     assert.equal(useOfficeStore.getState().simTimeMs, timeBeforeStep + 500);
     assert.equal(useOfficeStore.getState().isGlobalPaused, true);
+  } finally {
+    act(() => root.unmount());
+  }
+});
+
+
+test('50. WorkerControls pause and resume buttons update the selected worker state', () => {
+  ensureMinimalDomEnvironment();
+  resetStore();
+
+  let worker = useOfficeStore.getState().workers.sonnet;
+  const container = document.createElement('div') as unknown as MockDomNode;
+  const root = createRoot(container as unknown as HTMLElement);
+  act(() => root.render(React.createElement(WorkerControls, { worker })));
+
+  try {
+    const pauseButton = findNodeByAriaLabel(container, 'Pause Sonnet Worker');
+    assert.ok(pauseButton);
+    invokeReactProp(pauseButton, 'onClick');
+    assert.equal(useOfficeStore.getState().workers.sonnet.status, 'PAUSED');
+
+    worker = useOfficeStore.getState().workers.sonnet;
+    act(() => root.render(React.createElement(WorkerControls, { worker })));
+
+    const resumeButton = findNodeByAriaLabel(container, 'Resume Sonnet Worker');
+    assert.ok(resumeButton);
+    invokeReactProp(resumeButton, 'onClick');
+    assert.equal(useOfficeStore.getState().workers.sonnet.status, 'IDLE');
+    assert.equal(useOfficeStore.getState().workers.sonnet.statusBeforePause, null);
   } finally {
     act(() => root.unmount());
   }
