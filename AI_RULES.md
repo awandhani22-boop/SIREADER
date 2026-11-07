@@ -6,11 +6,14 @@ Act as a senior frontend engineer, Three.js technical artist, interaction design
 ## Product objective
 Create a desktop-first virtual office for SIREADER, where human-like AI worker avatars represent software workers. Initial roster: Supervisor, Haiku, Sonnet, Opus, Decision Engineer, Market Monitor, and Data Archivist. The architecture must be data-driven and support 50–100 workers later without duplicating scene code.
 
-## Current scope boundaries (Phase 2.2 M3 — frontend simulation only)
+## Current scope boundaries (Phase 2.3 — browser QA and simulation UX closure)
+- Follow `docs/ROADMAP.md` as the canonical phase plan and final v1.0 acceptance criteria. Keep `docs/PROJECT_STATE.md` current after milestones.
+- The current execution target is Phase 2.3 only. Do not jump to Phase 3.2 until Phase 2.3 manual QA and exit gates pass.
+- Continue the existing Three.js frontend. Do not create a replacement application or a second repository for the same Virtual Office.
 - Frontend-only prototype.
 - Use local mock data and local state.
 - No Python backend connection, REST calls, WebSocket, Telegram, Supabase, MT5, or AI provider API.
-- Phase 2.2 scheduler, task lifecycle, global queue, token metrics, and USD costs remain local deterministic simulations; do not invoke real model providers or external execution services.
+- The completed Phase 2.2 scheduler, task lifecycle, global queue, token metrics, and USD costs remain local deterministic simulations during Phase 2.3; do not invoke real model providers or external execution services.
 - Keep priority ordering, worker matching, and dispatch decisions in `src/scheduler/` and the simulation runtime. UI components submit commands and present state; they do not reimplement scheduler policy.
 - `DEMO_MAX_QUEUE_CAP` is an automatic demo-generator safeguard only. It must never be presented or used as the global scheduler queue capacity.
 - No order placement or trading actions.
@@ -88,4 +91,4 @@ Never claim a build/test passed unless it was actually executed successfully.
 - Respect reduced-motion preference where feasible.
 
 ## Future integration boundary
-Future phases may add backend adapters through documented REST/WebSocket contracts. Phase 2.2 remains frontend-only and does not authorize backend or provider integration. Keep any later integration behind typed interfaces. Do not invent API endpoints or connect to the SIREADER backend until its contract is explicitly provided.
+Future phases may add backend adapters through documented REST/WebSocket contracts. Phases 2.2 and 2.3 remain frontend-only and do not authorize backend or provider integration. Phase 3.2 integration may begin only after the Phase 2.3 exit gate in `docs/ROADMAP.md` is satisfied. Keep any later integration behind typed interfaces. Do not invent API endpoints or connect to the SIREADER backend until its contract is explicitly provided.
