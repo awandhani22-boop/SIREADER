@@ -10,7 +10,7 @@ This document records the formal acceptance checks, verification evidence, and a
 
 ## 1. Acceptance Checklist (20 of 20 PASS)
 
-All 20 audit checklist criteria across Scope, Domain & Scheduler, and Simulation & UI have verified proof across source code, unit/integration tests, and confirmed browser execution.
+All 20 audit checklist criteria have supporting evidence from source review and automated unit/integration tests, with browser QA providing additional confirmation for the specific end-to-end lifecycle flow documented in Section 3.3.
 
 | # | Item | Status | Verification Evidence & Test Reference |
 |---|---|---|---|
