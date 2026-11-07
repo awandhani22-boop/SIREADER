@@ -1384,7 +1384,7 @@ test('46. GlobalQueuePanel renders structured FAILED activity diagnostics', () =
     const rendered = collectDomText(errorDetails);
     assert.ok(rendered.includes('The simulated provider request timed out.'));
     assert.ok(rendered.includes('SIMULATED_PROVIDER_TIMEOUT'));
-    assert.match(rendered, /Attempt\\s+2/);
+    assert.match(rendered, /Attempt\s+2/);
     assert.ok(rendered.includes('Recoverable'));
   } finally {
     act(() => root.unmount());
