@@ -53,6 +53,17 @@ function findNodeByTestId(node: MockDomNode, testId: string): MockDomNode | null
   return null;
 }
 
+function findNodeByAriaLabel(node: MockDomNode, ariaLabel: string): MockDomNode | null {
+  if (node.attributes?.['aria-label'] === ariaLabel) {
+    return node;
+  }
+  for (const child of node.children || []) {
+    const found = findNodeByAriaLabel(child, ariaLabel);
+    if (found) return found;
+  }
+  return null;
+}
+
 function invokeReactProp(node: MockDomNode | null, propName: string, ...args: unknown[]) {
   assert.ok(node, 'Expected target DOM node to exist');
   const reactPropsKey = Object.keys(node as unknown as Record<string, unknown>)
@@ -1435,6 +1446,64 @@ test('47. GlobalQueuePanel states when FAILED diagnostics are unavailable', () =
     const errorDetails = findNodeByTestId(container, 'activity-error-tsk_pool_ui_failed_without_error');
     assert.ok(errorDetails);
     assert.ok(collectDomText(errorDetails).includes('Failure details unavailable.'));
+  } finally {
+    act(() => root.unmount());
+  }
+});
+
+
+test('48. TopBar speed controls update the selected speed and expose pressed state', () => {
+  ensureMinimalDomEnvironment();
+  resetStore();
+
+  const container = document.createElement('div') as unknown as MockDomNode;
+  const root = createRoot(container as unknown as HTMLElement);
+  act(() => root.render(React.createElement(TopBar)));
+
+  try {
+    const speedTwo = findNodeByAriaLabel(container, 'Simulation speed 2x');
+    assert.ok(speedTwo, '2x speed control must be discoverable by its accessible name');
+    assert.equal(speedTwo.attributes['aria-pressed'], 'false');
+
+    invokeReactProp(speedTwo, 'onClick');
+
+    assert.equal(useOfficeStore.getState().simSpeedMultiplier, 2);
+    const selectedSpeedTwo = findNodeByAriaLabel(container, 'Simulation speed 2x');
+    assert.ok(selectedSpeedTwo);
+    assert.equal(selectedSpeedTwo.attributes['aria-pressed'], 'true');
+
+    const speedOne = findNodeByAriaLabel(container, 'Simulation speed 1x');
+    assert.ok(speedOne);
+    assert.equal(speedOne.attributes['aria-pressed'], 'false');
+  } finally {
+    act(() => root.unmount());
+  }
+});
+
+test('49. TopBar global pause and deterministic manual step remain operable', () => {
+  ensureMinimalDomEnvironment();
+  resetStore();
+
+  const container = document.createElement('div') as unknown as MockDomNode;
+  const root = createRoot(container as unknown as HTMLElement);
+  act(() => root.render(React.createElement(TopBar)));
+
+  try {
+    const pauseButton = findNodeByAriaLabel(container, 'Pause Global Simulation');
+    assert.ok(pauseButton);
+    invokeReactProp(pauseButton, 'onClick');
+    assert.equal(useOfficeStore.getState().isGlobalPaused, true);
+
+    const resumeButton = findNodeByAriaLabel(container, 'Resume Global Simulation');
+    assert.ok(resumeButton);
+    assert.equal(resumeButton.attributes['aria-pressed'], 'true');
+
+    const timeBeforeStep = useOfficeStore.getState().simTimeMs;
+    const stepButton = findNodeByAriaLabel(container, 'Step Simulation +500ms');
+    assert.ok(stepButton);
+    invokeReactProp(stepButton, 'onClick');
+    assert.equal(useOfficeStore.getState().simTimeMs, timeBeforeStep + 500);
+    assert.equal(useOfficeStore.getState().isGlobalPaused, true);
   } finally {
     act(() => root.unmount());
   }
