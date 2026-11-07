@@ -6,10 +6,13 @@ Act as a senior frontend engineer, Three.js technical artist, interaction design
 ## Product objective
 Create a desktop-first virtual office for SIREADER, where human-like AI worker avatars represent software workers. Initial roster: Supervisor, Haiku, Sonnet, Opus, Decision Engineer, Market Monitor, and Data Archivist. The architecture must be data-driven and support 50–100 workers later without duplicating scene code.
 
-## Phase 1 boundaries
+## Current scope boundaries (Phase 2.2 M3 — frontend simulation only)
 - Frontend-only prototype.
 - Use local mock data and local state.
 - No Python backend connection, REST calls, WebSocket, Telegram, Supabase, MT5, or AI provider API.
+- Phase 2.2 scheduler, task lifecycle, global queue, token metrics, and USD costs remain local deterministic simulations; do not invoke real model providers or external execution services.
+- Keep priority ordering, worker matching, and dispatch decisions in `src/scheduler/` and the simulation runtime. UI components submit commands and present state; they do not reimplement scheduler policy.
+- `DEMO_MAX_QUEUE_CAP` is an automatic demo-generator safeguard only. It must never be presented or used as the global scheduler queue capacity.
 - No order placement or trading actions.
 - Do not edit files outside `office-ui`.
 - Do not read, request, print, or copy secrets from `.env` or other credential files.
@@ -85,4 +88,4 @@ Never claim a build/test passed unless it was actually executed successfully.
 - Respect reduced-motion preference where feasible.
 
 ## Future integration boundary
-Phase 2+ may add backend adapters through documented REST/WebSocket contracts. Keep all future integration behind typed interfaces. Do not invent API endpoints or connect to the SIREADER backend until its contract is explicitly provided.
+Future phases may add backend adapters through documented REST/WebSocket contracts. Phase 2.2 remains frontend-only and does not authorize backend or provider integration. Keep any later integration behind typed interfaces. Do not invent API endpoints or connect to the SIREADER backend until its contract is explicitly provided.

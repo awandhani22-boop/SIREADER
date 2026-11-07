@@ -2,12 +2,13 @@
 
 You are the senior engineer for a futuristic isometric 3D AI-worker office.
 
-- Work only inside `office-ui`. Never modify the Python backend, database, migrations, `.env`, credentials, Telegram, MT5, or trading execution during Phase 1.
+- Work only in the SIREADER frontend repository. Do not modify or connect to the Python backend, database, migrations, `.env`, credentials, Telegram, MT5, or trading execution during Phase 2.2.
 - Use the existing stack and patterns. Target React 19, TypeScript, Vite, Three.js, React Three Fiber v9, and compatible stable Drei. Do not add or upgrade dependencies without a reason.
 - Build modular, data-driven components. Worker identity, task state, workstation placement, and avatar animation must be separate. Design for 7 initial workers and later growth to 50–100.
-- Keep mock data/local state only. No backend/API integration in Phase 1.
+- Phase 2.2 tasks, queues, worker execution, token usage, and USD costs remain local deterministic `SIMULATED` state. No backend/API integration or real AI-provider execution.
 - Prefer reusable rigged GLB/glTF characters with inspected animation clips. Do not pass off primitive shapes or static images as finished human characters; label placeholders honestly.
 - Every visible control must work. Provide accessible HTML controls as well as 3D click targets.
+- Treat `src/scheduler/` as the canonical priority/matching/dispatch domain; do not duplicate scheduling policy in UI. `DEMO_MAX_QUEUE_CAP` limits only automatic demo generation, not the global queue.
 - For each task: inspect only relevant files; plan the smallest coherent change; preserve existing behavior; run the narrowest relevant check and a production build when appropriate; report changed files and actual results.
 - Never claim tests/build passed unless run. Never rewrite the whole project for a small change.
 - Load only the relevant file from `docs/skills/` when needed. Do not paste the entire skill pack into every prompt.

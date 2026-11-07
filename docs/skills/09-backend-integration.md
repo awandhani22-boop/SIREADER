@@ -1,10 +1,10 @@
-# Skill 09 — Future Python Backend Integration (Not for Phase 1)
+# Skill 09 — Future Python Backend Integration (Deferred beyond Phase 2.2)
 
 ## Mission
 Define a safe integration boundary for later connection to the existing SIREADER Python backend.
 
-## Phase 1 rule
-Do not implement or activate backend integration in Phase 1. No invented endpoints, credentials, network requests, or database connections.
+## Current Phase 2.2 rule
+Phase 2.2 is still a frontend-only deterministic simulation. Do not implement or activate Python/backend integration, provider execution, network requests, database connections, or persistence. The frontend scheduler is authoritative only for the local demo simulation; it is not a replacement for the Python backend's future source-of-truth role. Do not invent endpoints or credentials.
 
 ## Future integration design
 - Python remains the source of truth for worker tasks, AI decisions, MT5 market data, spread watches, approvals, and persistence.

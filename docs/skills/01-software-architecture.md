@@ -44,3 +44,12 @@ Adapt to the existing project rather than blindly replacing its structure.
 - Scene code does not contain business rules for individual workers.
 - No backend, broker, or provider credentials appear in frontend files.
 - Components have clear ownership and names.
+
+
+## Phase 2.2 — Scheduler and simulation boundaries
+- Keep scheduler policy in `src/scheduler/`: priority ordering, capability-aware worker matching, worker selection, queue mutation, and dispatch-pass decisions.
+- Keep simulated time, worker/task progression, and deterministic demo generation in the simulation runtime. The runtime invokes dispatch in its defined tick/advance flow; UI code must not dispatch or assign workers independently.
+- Use pure store selectors for derived queue/activity views instead of copying scheduler policy into components.
+- Preserve backward-compatible runtime/service wrappers when adding diagnostic-returning methods; existing callers may still expect a `SimulationSnapshot`.
+- `DEMO_MAX_QUEUE_CAP = 3` limits automatic demo generation only, not the global scheduler queue.
+- All current runtime and worker activity is simulated; no real provider, backend worker, or persistence layer is connected.
