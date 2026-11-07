@@ -38,18 +38,27 @@ Phase 2.2 implementation baseline: `cf1083d`
 - **Real-time Loop Driver**: `OfficeApp` uses `window.setInterval` as a UI driver to advance real-time wall delta; core simulation engine logic remains purely deterministic.
 
 ## Verification status
-- **Automated Tests**: **256 passing, 0 failing** across 13 test files (`npx tsx --test src/**/*.test.ts`).
+- **Automated Tests (Phase 2.2 baseline)**: **256 passing, 0 failing** across 13 test files (`npx tsx --test src/**/*.test.ts`) before the Phase 2.3 additions. Four new UI regression tests were added in Phase 2.3 and are pending execution.
 - **TypeScript Typecheck**: **Clean (0 errors)** via `npm run lint` (`tsc --noEmit`).
 - **Production Build**: **Successful** via `npm run build` (built in ~1.0s).
 - **Purity Check**: **Clean (0 issues)** via `git diff --check`.
 - **Verification Environment**: Automated test, lint, and build execution results were reported by owner/local test environment and statically verified by reviewer (256 `test(` declarations across 13 files).
 - **Build Warnings (Nonfatal)**:
-  1. Vite config `__dirname` warning (`vite.config.ts:11:27` uses `__dirname` unsupported by native configLoader; planned deprecation in Vite in favor of `import.meta.dirname`).
+  1. Vite config path resolution was updated to ESM-safe `fileURLToPath(new URL('.', import.meta.url))`; verify the warning is gone on the next production build.
   2. Rolldown chunk size warning (`dist/assets/index-CapXtjpT.js` is ~1.4 MB minified, exceeding default 500 kB chunk warning threshold).
 - **Browser-level Manual QA Status**:
   - *Verified in Browser (Confirmed)*: Blocked task state $\rightarrow$ dispatch to RUNNING upon worker availability $\rightarrow$ completion $\rightarrow$ reset to baseline.
   - *Automated Component Assertions*: Queue panel tabs, RUNNING-only active counts, simulation labels, and deterministic timestamp ordering verified via `worker.state.test.ts` (45 tests).
   - *Unverified Visual Behavior & Browser Interactions*: 3D isometric scene visual rendering, live pause/resume button clicking, speed controls (1x, 2x, 4x) tempo dynamics in browser, FAILED activity card rendering, and manual enqueue form UI submission.
+
+## Phase 2.3 — In progress (2026-11-08)
+- `src/ui/GlobalQueuePanel.tsx`: FAILED pool-activity cards now show structured error message, code, attempt number, and recoverability; legacy records without an error payload explicitly show that diagnostics are unavailable.
+- `src/workers/worker.state.test.ts`: added UI regression tests 46–47 for both structured FAILED details and missing diagnostic payloads.
+- `src/ui/TopBar.tsx`: command bar can wrap below desktop width; toggle controls expose pressed state and semantic control groups.
+- `src/app/OfficeApp.tsx`: camera/graphics dock uses compact icon-only labels on narrow viewports and wraps within the viewport.
+- `vite.config.ts`: replaced ESM-incompatible `__dirname` alias resolution with `fileURLToPath(new URL('.', import.meta.url))`; build verification is still pending.
+- `src/workers/worker.state.test.ts`: added tests 48–49 for simulation speed state, global pause, and deterministic manual stepping. The four new tests have **not yet been executed**; do not count them as passing until the local suite runs.
+- Remaining browser-only acceptance: inspect the 3D scene at the target viewport, camera pan/zoom/reset behavior, all seven worker/avatar mappings, panel interactions, live pause/resume and speed tempo, responsive overlay collisions, and asset licensing/fallback.
 
 ## External backend milestone
 - **Phase 3.1 — Read-Only Observability API Gateway: COMPLETE (2026-11-08)** in the separate `awandhani22-boop/SIREADER-Python-Backend` repository. Supabase lockdown and dedicated `sireader_api_ro` access were verified; all five local GET endpoints returned 200; missing token returned 401; POST/PUT/PATCH/DELETE returned 405; 74 API tests and 50 core backend regression tests passed locally; API compile passed; GitHub Actions run `42397323807` succeeded. Backend remains a separate project boundary.
