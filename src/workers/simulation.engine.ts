@@ -303,7 +303,7 @@ export class SimulationEngine {
 
     const normalizedSnapshot = normalizeSimulationSnapshot(snapshot);
 
-    // Bound any single step so stage transitions are never skipped
+    // 1. Advance simulation clock (bounded so stage transitions are never skipped)
     const boundedStepMs = Math.min(stepSimMs, MAX_DELTA_CLAMP_MS);
     let nextSnapshot: SimulationSnapshot = {
       ...normalizedSnapshot,
@@ -313,9 +313,13 @@ export class SimulationEngine {
       tasks: { ...normalizedSnapshot.tasks },
     };
 
+    // 2. Step all workers and their active tasks in canonical workerOrder
     for (const workerId of nextSnapshot.workerOrder) {
       nextSnapshot = this.stepSingleWorker(nextSnapshot, workerId, boundedStepMs);
     }
+
+    // 3. Execute deterministic global scheduler dispatch pass
+    nextSnapshot = WorkerMockService.dispatchGlobalQueue(nextSnapshot);
 
     // Deterministic auto-dispatch: every 12 ticks, if an active simulation worker is IDLE
     // with an empty queue, use seeded PRNG to optionally dispatch a realistic office task
@@ -344,6 +348,7 @@ export class SimulationEngine {
       }
     }
 
+    // 4. Synchronize unified clock anchor
     clockAnchor.baseSimTimeMs = nextSnapshot.simTimeMs;
     clockAnchor.highWaterSimTimeMs = Math.max(
       clockAnchor.highWaterSimTimeMs,
@@ -654,6 +659,7 @@ export class SimulationEngine {
   /**
    * Resumes a paused worker from their exact previous state and task progress.
    * Never restarts or resets `elapsedSimMs` or `progress`.
+   * Immediately runs a global scheduler dispatch pass when `isGlobalPaused === false`.
    */
   static resumeWorker(snapshot: SimulationSnapshot, workerId: WorkerId): SimulationSnapshot {
     const normalizedSnapshot = normalizeSimulationSnapshot(snapshot);
@@ -691,7 +697,7 @@ export class SimulationEngine {
       accentColor: worker.avatarConfig.accentColor,
     });
 
-    const resumedSnapshot: SimulationSnapshot = {
+    let nextSnapshot: SimulationSnapshot = {
       ...normalizedSnapshot,
       workers: {
         ...normalizedSnapshot.workers,
@@ -700,11 +706,19 @@ export class SimulationEngine {
       events: WorkerMockService.appendEvent(normalizedSnapshot, event),
     };
 
-    if (restoredStatus === 'IDLE' && !updatedWorker.currentTaskId && updatedWorker.taskQueueIds.length > 0) {
-      return WorkerMockService.promoteNextQueuedTask(resumedSnapshot, workerId);
+    if (
+      restoredStatus === 'IDLE' &&
+      !updatedWorker.currentTaskId &&
+      updatedWorker.taskQueueIds.length > 0
+    ) {
+      nextSnapshot = WorkerMockService.promoteNextQueuedTask(nextSnapshot, workerId);
     }
 
-    return resumedSnapshot;
+    if (!nextSnapshot.isGlobalPaused) {
+      nextSnapshot = WorkerMockService.dispatchGlobalQueue(nextSnapshot);
+    }
+
+    return nextSnapshot;
   }
 
   /**
