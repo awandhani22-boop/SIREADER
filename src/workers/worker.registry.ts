@@ -3,7 +3,9 @@ import {
   RoomDefinition,
   RoomId,
   TaskCategory,
+  TaskPriority,
   TaskStageThreshold,
+  TaskType,
   WorkerEntity,
   WorkerId,
   WorkstationDefinition,
@@ -706,3 +708,162 @@ export const COST_PER_1K_TOKENS_SIMULATED: Record<WorkerId, number> = {
   market_monitor: 0.002,
   data_archivist: 0.0015,
 };
+
+
+export interface GlobalDemoTaskTemplate {
+  readonly title: string;
+  readonly description: string;
+  readonly category: TaskCategory;
+  readonly type: TaskType;
+  readonly priority: TaskPriority;
+  readonly durationSimMs: number;
+  readonly targetTokens: number;
+}
+
+/**
+ * 14 Canonical Unpinned Global Demo Task Templates (Phase 2.2 M3 Commit 7)
+ * Sourced across all 7 operational departments and validated against the
+ * canonical capability catalog without binding to any specific worker.
+ */
+export const GLOBAL_DEMO_TASK_TEMPLATES: readonly GlobalDemoTaskTemplate[] = Object.freeze([
+  // 1. ROUTING: INSTRUCTION_INTAKE
+  {
+    title: 'Intake Operational Instruction Batch',
+    description: 'Ingest raw multi-department instruction stream and normalize intent schema.',
+    category: 'ROUTING',
+    type: 'INSTRUCTION_INTAKE',
+    priority: 'NORMAL',
+    durationSimMs: 8000,
+    targetTokens: 650,
+  },
+  // 2. ROUTING: WORKFLOW_SUPERVISION
+  {
+    title: 'Coordinate Cross-Room Handoff Pipeline',
+    description: 'Synchronize multi-worker operational workflow stages and verify delivery checkpoints.',
+    category: 'ROUTING',
+    type: 'WORKFLOW_SUPERVISION',
+    priority: 'HIGH',
+    durationSimMs: 10000,
+    targetTokens: 820,
+  },
+  // 3. CLASSIFICATION: QUICK_RESEARCH
+  {
+    title: 'Fast Entity & Signal Triage',
+    description: 'Extract core entities, ticker references, and urgency flags from incoming feed.',
+    category: 'CLASSIFICATION',
+    type: 'QUICK_RESEARCH',
+    priority: 'NORMAL',
+    durationSimMs: 6000,
+    targetTokens: 750,
+  },
+  // 4. CLASSIFICATION: LIGHTWEIGHT_CLASSIFICATION
+  {
+    title: 'Classify Channel Message Urgency',
+    description: 'Filter incoming commentary into standard operational categories and urgency ranks.',
+    category: 'CLASSIFICATION',
+    type: 'LIGHTWEIGHT_CLASSIFICATION',
+    priority: 'NORMAL',
+    durationSimMs: 7000,
+    targetTokens: 880,
+  },
+  // 5. REASONING: DATA_ANALYSIS
+  {
+    title: 'Synthesize Cross-Sectional Market Analysis',
+    description: 'Correlate extracted research entities across multi-asset observation windows.',
+    category: 'REASONING',
+    type: 'DATA_ANALYSIS',
+    priority: 'HIGH',
+    durationSimMs: 12000,
+    targetTokens: 1800,
+  },
+  // 6. REASONING: STRUCTURED_REASONING
+  {
+    title: 'Formulate Analytical Thesis Brief',
+    description: 'Build structured reasoning chain with supporting facts and counter-arguments.',
+    category: 'REASONING',
+    type: 'STRUCTURED_REASONING',
+    priority: 'NORMAL',
+    durationSimMs: 11000,
+    targetTokens: 1650,
+  },
+  // 7. ESCALATION: COMPLEX_REASONING
+  {
+    title: 'Resolve Conflicting Macro Regime Scenarios',
+    description: 'Conduct deep multi-hypothesis synthesis on divergent economic indicators.',
+    category: 'ESCALATION',
+    type: 'COMPLEX_REASONING',
+    priority: 'CRITICAL',
+    durationSimMs: 16000,
+    targetTokens: 2800,
+  },
+  // 8. ESCALATION: DEEP_REVIEW
+  {
+    title: 'Deep Audit of Structural Anomaly',
+    description: 'Thoroughly review unprecedented edge-case divergence and formulate fallback strategy.',
+    category: 'ESCALATION',
+    type: 'DEEP_REVIEW',
+    priority: 'CRITICAL',
+    durationSimMs: 15000,
+    targetTokens: 2500,
+  },
+  // 9. DECISION_CHECK: RULE_VALIDATION
+  {
+    title: 'Verify Deterministic Guardrail Rules',
+    description: 'Validate operational parameter proposal against deterministic risk checklists.',
+    category: 'DECISION_CHECK',
+    type: 'RULE_VALIDATION',
+    priority: 'HIGH',
+    durationSimMs: 8000,
+    targetTokens: 780,
+  },
+  // 10. DECISION_CHECK: DECISION_EVALUATION
+  {
+    title: 'Evaluate Policy & Exposure Limits',
+    description: 'Execute comprehensive boundary check against exposure caps and safety invariants.',
+    category: 'DECISION_CHECK',
+    type: 'DECISION_EVALUATION',
+    priority: 'CRITICAL',
+    durationSimMs: 9000,
+    targetTokens: 920,
+  },
+  // 11. MARKET_WATCH: MARKET_MONITORING_SIMULATION
+  {
+    title: 'Simulated Order-Book Spread Monitor',
+    description: 'Track synthetic tick dispersion and flag abnormal spread widening events.',
+    category: 'MARKET_WATCH',
+    type: 'MARKET_MONITORING_SIMULATION',
+    priority: 'NORMAL',
+    durationSimMs: 9000,
+    targetTokens: 680,
+  },
+  // 12. MARKET_WATCH: MARKET_CONDITION_DETECTION
+  {
+    title: 'Detect Volatility Regime Transition',
+    description: 'Scan streaming volatility metrics to identify emerging high-frequency regime shifts.',
+    category: 'MARKET_WATCH',
+    type: 'MARKET_CONDITION_DETECTION',
+    priority: 'HIGH',
+    durationSimMs: 10000,
+    targetTokens: 850,
+  },
+  // 13. ARCHIVAL: DATA_ARCHIVING
+  {
+    title: 'Commit Decision Ledger Snapshot',
+    description: 'Hash and append reasoning trace, input parameters, and guardrail sign-offs to vault.',
+    category: 'ARCHIVAL',
+    type: 'DATA_ARCHIVING',
+    priority: 'NORMAL',
+    durationSimMs: 8000,
+    targetTokens: 600,
+  },
+  // 14. ARCHIVAL: ARTIFACT_INDEXING
+  {
+    title: 'Index Historical Evidence Artifacts',
+    description: 'Generate cryptographic index pointers and cross-reference audit trail chronology.',
+    category: 'ARCHIVAL',
+    type: 'ARTIFACT_INDEXING',
+    priority: 'LOW',
+    durationSimMs: 7000,
+    targetTokens: 520,
+  },
+]);

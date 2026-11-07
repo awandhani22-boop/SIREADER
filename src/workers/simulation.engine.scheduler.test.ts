@@ -2,19 +2,29 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { dispatchPass } from '../scheduler/task.dispatcher';
 import { createTaskEntity } from '../tasks/task.factory';
+import { TASK_TYPES } from '../tasks/task.types';
 import { validateTaskEntity } from '../tasks/task.validation';
 import {
   DEFAULT_SIMULATION_SEED,
+  DEMO_MAX_QUEUE_CAP,
   FIXED_TICK_SIM_MS,
   SimulationEngine,
 } from './simulation.engine';
-import { createCustomCapabilityRegistry } from './worker.capabilities';
+import {
+  createCustomCapabilityRegistry,
+  getWorkersSupportingTaskType,
+  mapTaskTypeToCategory,
+} from './worker.capabilities';
 import { getActiveTaskIds } from './worker.concurrency';
 import {
   type GlobalTaskInput,
   WorkerMockService,
 } from './worker.mock-service';
-import { COST_PER_1K_TOKENS_SIMULATED } from './worker.registry';
+import {
+  COST_PER_1K_TOKENS_SIMULATED,
+  GLOBAL_DEMO_TASK_TEMPLATES,
+  type GlobalDemoTaskTemplate,
+} from './worker.registry';
 import type {
   SimulationSnapshot,
   TaskEntity,
@@ -698,8 +708,8 @@ test('RT-11. Seeded replay determinism, 1x/2x/4x speed equivalence, and resetToB
   }
 });
 
-test('RT-12. Legacy 12-tick demo generator remains intact and waiting global tasks claim freed workers before demo filler', () => {
-  // 1. With empty global queue, tick 12 still runs the legacy per-worker auto-dispatch
+test('RT-12. Global 12-tick demo generator enqueues unpinned task and waiting global tasks claim freed workers before demo filler', () => {
+  // 1. With empty global queue, tick 12 enqueues an unpinned global demo task and immediately dispatches it
   let baseline = SimulationEngine.createBaselineSnapshot(DEFAULT_SIMULATION_SEED);
   for (let tick = 1; tick <= 12; tick++) {
     baseline = SimulationEngine.stepSimulationTick(baseline, FIXED_TICK_SIM_MS);
@@ -708,8 +718,15 @@ test('RT-12. Legacy 12-tick demo generator remains intact and waiting global tas
   assert.equal(Object.keys(baseline.tasks).length, 1);
   assert.equal(baseline.scheduler?.entries.length, 0);
 
-  // 2. If only opus is in workerOrder and a global COMPLEX_REASONING task is queued before tick 12,
-  // Step 3 dispatches the global task to opus on tick 12 so the legacy demo filler does not steal opus
+  const [demoTask] = Object.values(baseline.tasks);
+  assert.ok(demoTask);
+  assert.ok(demoTask.id.startsWith('tsk_pool_'));
+  assert.ok(demoTask.assignedWorkerId !== null);
+  assert.equal(demoTask.lifecycleStatus, 'RUNNING');
+
+  // 2. If only opus is in workerOrder and a global COMPLEX_REASONING task is queued before tick 12:
+  // At tick 12, demo generator enqueues a demo task (queue length reaches 2).
+  // Then Step 4 dispatches the higher-priority CRITICAL task to opus, leaving the demo task in the global queue!
   let singleWorkerSnap = SimulationEngine.createBaselineSnapshot(DEFAULT_SIMULATION_SEED);
   singleWorkerSnap = {
     ...singleWorkerSnap,
@@ -730,5 +747,199 @@ test('RT-12. Legacy 12-tick demo generator remains intact and waiting global tas
   );
   assert.equal(singleWorkerSnap.tickCount, 12);
   assert.equal(singleWorkerSnap.workers.opus.currentTaskId, queuedGlobalId);
-  assert.equal(singleWorkerSnap.scheduler?.entries.length, 0);
+  // Demo task remained safely in queue behind higher-priority task; opus was not stolen by demo generator!
+  assert.equal(singleWorkerSnap.scheduler?.entries.length, 1);
+});
+
+test('TV-1. Validation of all 14 GLOBAL_DEMO_TASK_TEMPLATES against TaskType, category, capabilities, and unassigned creation', () => {
+  assert.equal(GLOBAL_DEMO_TASK_TEMPLATES.length, 14);
+  const baseline = SimulationEngine.createBaselineSnapshot(DEFAULT_SIMULATION_SEED);
+
+  for (const template of GLOBAL_DEMO_TASK_TEMPLATES) {
+    // 1. TaskType must be one of the canonical TASK_TYPES
+    assert.equal(
+      (TASK_TYPES as readonly string[]).includes(template.type),
+      true,
+      `Invalid TaskType: ${template.type}`,
+    );
+
+    // 2. Category must strictly match mapTaskTypeToCategory(type)
+    assert.equal(
+      template.category,
+      mapTaskTypeToCategory(template.type),
+      `Category mismatch for ${template.type}`,
+    );
+
+    // 3. At least one worker has an active capability for the template's TaskType
+    const supportingWorkers = getWorkersSupportingTaskType(template.type);
+    assert.ok(
+      supportingWorkers.length >= 1,
+      `No supporting workers for ${template.type}`,
+    );
+
+    // 4. Factory creates a valid unassigned QUEUED TaskEntity with pool ID
+    const entity = WorkerMockService.createGlobalTaskEntity(baseline, template);
+    assert.equal(entity.assignedWorkerId, null);
+    assert.equal(entity.status, 'QUEUED');
+    assert.equal(entity.lifecycleStatus, 'QUEUED');
+    assert.equal(entity.type, template.type);
+    assert.equal(entity.category, template.category);
+    assert.ok(entity.id.startsWith('tsk_pool_'));
+    assert.equal(validateTaskEntity(entity).valid, true);
+
+    // 5. enqueueGlobalTask succeeds and adds to scheduler.entries
+    const enqueuedSnapshot = WorkerMockService.enqueueGlobalTask(baseline, template);
+    assert.equal(enqueuedSnapshot.scheduler?.entries.length, 1);
+    assert.equal(enqueuedSnapshot.events[0]?.type, 'TASK_QUEUED');
+    assert.equal(enqueuedSnapshot.events[0]?.workerId, null);
+  }
+});
+
+test('DM-1. Global demo task generation at tick 12 produces unpinned QUEUED task with tsk_pool ID', () => {
+  let snapshot = SimulationEngine.createBaselineSnapshot(DEFAULT_SIMULATION_SEED);
+  assert.equal(Object.keys(snapshot.tasks).length, 0);
+
+  // Advance 11 ticks (5500ms): zero demo tasks generated before tick 12
+  for (let tick = 1; tick <= 11; tick++) {
+    snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+    assert.equal(Object.keys(snapshot.tasks).length, 0);
+    assert.equal(snapshot.scheduler?.entries.length, 0);
+  }
+
+  // Tick 12 (6000ms): demo generator triggers
+  snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+  assert.equal(snapshot.tickCount, 12);
+  assert.equal(Object.keys(snapshot.tasks).length, 1);
+
+  const [createdTask] = Object.values(snapshot.tasks);
+  assert.ok(createdTask);
+  assert.ok(createdTask.id.startsWith('tsk_pool_'));
+  assert.equal(createdTask.createdAt, 6000);
+  assert.equal(createdTask.status, createdTask.stagePipeline[0]!.status);
+  assert.equal(createdTask.lifecycleStatus, 'RUNNING');
+});
+
+test('DM-2. Same-tick enqueue and dispatch: task enters queue in Step 3 and dispatches to idle worker in Step 4 of tick 12', () => {
+  let snapshot = SimulationEngine.createBaselineSnapshot(DEFAULT_SIMULATION_SEED);
+
+  // Advance to tick 12
+  for (let tick = 1; tick <= 12; tick++) {
+    snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+  }
+
+  // Because all workers are IDLE at baseline, the enqueued demo task was immediately dispatched on tick 12
+  assert.equal(snapshot.scheduler?.entries.length, 0);
+  assert.equal(snapshot.events.length, 2);
+
+  // Event sequence on tick 12: TASK_QUEUED followed by TASK_STARTED
+  const startedEvent = snapshot.events[0]!;
+  const queuedEvent = snapshot.events[1]!;
+  assert.equal(startedEvent.type, 'TASK_STARTED');
+  assert.equal(queuedEvent.type, 'TASK_QUEUED');
+  assert.equal(queuedEvent.workerId, null);
+  assert.equal(queuedEvent.workerName, 'Task Dispatcher');
+  assert.equal(startedEvent.taskId, queuedEvent.taskId);
+  assert.notEqual(startedEvent.id, queuedEvent.id);
+  assert.equal(startedEvent.simTimestampMs, 6000);
+  assert.equal(queuedEvent.simTimestampMs, 6000);
+
+  const assignedWorker = snapshot.workers[startedEvent.workerId!];
+  assert.ok(assignedWorker);
+  assert.equal(assignedWorker.status, 'TASK_RECEIVED');
+  assert.equal(assignedWorker.currentTaskId, startedEvent.taskId);
+});
+
+test('DM-3. Capability-based worker selection: demo tasks match worker capabilities without worker pinning', () => {
+
+  // Test across distinct template types to verify appropriate worker selection
+  for (const template of GLOBAL_DEMO_TASK_TEMPLATES) {
+    let snapshot = SimulationEngine.createBaselineSnapshot(DEFAULT_SIMULATION_SEED);
+    snapshot = WorkerMockService.enqueueGlobalTask(snapshot, template);
+    const taskId = snapshot.scheduler!.entries[0]!.taskId;
+
+    snapshot = WorkerMockService.dispatchGlobalQueue(snapshot);
+    const dispatchedTask = snapshot.tasks[taskId]!;
+    assert.ok(dispatchedTask.assignedWorkerId);
+
+    const capableWorkers = getWorkersSupportingTaskType(template.type).map((p) => p.workerId);
+    assert.ok(
+      (capableWorkers as readonly string[]).includes(dispatchedTask.assignedWorkerId!),
+      `Worker ${dispatchedTask.assignedWorkerId} is not capable for ${template.type}`,
+    );
+  }
+});
+
+test('DM-4. Queue cap guardrail enforcement (DEMO_MAX_QUEUE_CAP = 3) when all workers are busy', () => {
+  let snapshot = SimulationEngine.createBaselineSnapshot(DEFAULT_SIMULATION_SEED);
+
+  // Pause all workers so that NO tasks can ever be dispatched
+  for (const workerId of snapshot.workerOrder) {
+    snapshot = SimulationEngine.pauseWorker(snapshot, workerId);
+  }
+
+  // Pre-seed the global queue to the cap: DEMO_MAX_QUEUE_CAP (3)
+  for (let i = 0; i < DEMO_MAX_QUEUE_CAP; i++) {
+    snapshot = WorkerMockService.enqueueGlobalTask(snapshot, {
+      type: 'QUICK_RESEARCH',
+      title: `Pre-fill Task #${i + 1}`,
+      priority: 'NORMAL',
+    });
+  }
+  assert.equal(snapshot.scheduler?.entries.length, 3);
+  const eventsCountBefore = snapshot.events.length;
+
+  // Run through ticks 1 to 48 (covering tick 12, 24, 36, 48)
+  for (let tick = 1; tick <= 48; tick++) {
+    snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+    assert.equal(
+      snapshot.scheduler?.entries.length,
+      3,
+      `Queue length exceeded cap at tick ${tick}`,
+    );
+  }
+
+  // When queue cap prevented enqueue, NO new TASK_QUEUED events were emitted
+  assert.equal(snapshot.events.length, eventsCountBefore);
+  assert.equal(snapshot.scheduler?.entries.length, DEMO_MAX_QUEUE_CAP);
+});
+
+test('DM-5. Seeded replay determinism: identical seeds produce bit-identical demo generation trajectories', () => {
+  const runSimulation = (seed: number, ticks: number) => {
+    let snap = SimulationEngine.resetToBaseline(seed);
+    for (let t = 1; t <= ticks; t++) {
+      snap = SimulationEngine.stepSimulationTick(snap, FIXED_TICK_SIM_MS);
+    }
+    return snap;
+  };
+
+  const seed = 889900;
+  const runA = runSimulation(seed, 60); // 5 demo cycles (12, 24, 36, 48, 60)
+  const runB = runSimulation(seed, 60);
+
+  assert.equal(runA.simTimeMs, runB.simTimeMs);
+  assert.equal(runA.prngState, runB.prngState);
+  assert.equal(runA.tickCount, runB.tickCount);
+  assert.deepEqual(runA.tasks, runB.tasks);
+  assert.deepEqual(runA.scheduler, runB.scheduler);
+  assert.deepEqual(
+    runA.events.map((e) => ({ id: e.id, type: e.type, message: e.message })),
+    runB.events.map((e) => ({ id: e.id, type: e.type, message: e.message })),
+  );
+});
+
+test('DM-6. Legacy assignTask and boot initialization createInitialSnapshot remain fully compatible', () => {
+  // Boot snapshot initialization still creates 9 tasks pre-assigned across workers
+  const bootSnapshot = SimulationEngine.createInitialSnapshot(DEFAULT_SIMULATION_SEED);
+  assert.equal(Object.keys(bootSnapshot.tasks).length, 9);
+  assert.equal(bootSnapshot.scheduler?.entries.length, 0);
+
+  // Direct assignTask remains compatible for pinning tasks directly to worker queues
+  let snapshot = SimulationEngine.createBaselineSnapshot(DEFAULT_SIMULATION_SEED);
+  snapshot = WorkerMockService.assignTask(snapshot, { workerId: 'haiku' }, 0);
+  assert.equal(snapshot.workers.haiku.status, 'TASK_RECEIVED');
+  assert.ok(snapshot.workers.haiku.currentTaskId);
+
+  // Queue a second legacy task on the same worker
+  snapshot = WorkerMockService.assignTask(snapshot, { workerId: 'haiku' }, 1);
+  assert.equal(snapshot.workers.haiku.taskQueueIds.length, 1);
 });

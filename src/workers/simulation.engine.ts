@@ -1,5 +1,6 @@
 import {
   createInitialWorkersRegistry,
+  GLOBAL_DEMO_TASK_TEMPLATES,
   INITIAL_WORKER_ORDER,
   WORKER_TASK_TEMPLATES,
 } from './worker.registry';
@@ -53,6 +54,7 @@ import {
 export const DEFAULT_SIMULATION_SEED = 20261106;
 export const FIXED_TICK_SIM_MS = 500;
 export const MAX_DELTA_CLAMP_MS = 1000;
+export const DEMO_MAX_QUEUE_CAP = 3;
 
 const TASK_RECEIVED_DURATION_MS = 1000;
 const WALKING_DURATION_MS = 1500;
@@ -318,37 +320,33 @@ export class SimulationEngine {
       nextSnapshot = this.stepSingleWorker(nextSnapshot, workerId, boundedStepMs);
     }
 
-    // 3. Execute deterministic global scheduler dispatch pass
-    nextSnapshot = WorkerMockService.dispatchGlobalQueue(nextSnapshot);
-
-    // Deterministic auto-dispatch: every 12 ticks, if an active simulation worker is IDLE
-    // with an empty queue, use seeded PRNG to optionally dispatch a realistic office task
+    // 3. Deterministic demo task generator: every 12 ticks, if queue cap permits,
+    // consume two PRNG draws and enqueue an unpinned global task
     if (nextSnapshot.tickCount % 12 === 0) {
       const prng1 = nextSeededRandom(nextSnapshot.prngState);
       nextSnapshot.prngState = prng1.nextState;
 
-      const idleWorkers = nextSnapshot.workerOrder.filter((id) => {
-        const w = nextSnapshot.workers[id];
-        return w && w.status === 'IDLE' && !w.currentTaskId && w.taskQueueIds.length === 0;
-      });
+      const prng2 = nextSeededRandom(nextSnapshot.prngState);
+      nextSnapshot.prngState = prng2.nextState;
 
-      if (idleWorkers.length > 0 && prng1.value < 0.75) {
-        const prng2 = nextSeededRandom(nextSnapshot.prngState);
-        nextSnapshot.prngState = prng2.nextState;
-        const chosenIndex = Math.floor(prng2.value * idleWorkers.length);
-        const targetWorkerId = idleWorkers[chosenIndex];
-        const templates = WORKER_TASK_TEMPLATES[targetWorkerId] ?? WORKER_TASK_TEMPLATES.supervisor;
-        const templateIdx = nextSnapshot.tickCount % templates.length;
-
-        nextSnapshot = WorkerMockService.assignTask(
-          nextSnapshot,
-          { workerId: targetWorkerId },
-          templateIdx,
-        );
+      const currentQueueLength = nextSnapshot.scheduler?.entries.length ?? 0;
+      if (prng1.value < 0.75 && currentQueueLength < DEMO_MAX_QUEUE_CAP) {
+        const templateCount = GLOBAL_DEMO_TASK_TEMPLATES.length;
+        const chosenIndex = Math.floor(prng2.value * templateCount);
+        const template = GLOBAL_DEMO_TASK_TEMPLATES[chosenIndex];
+        if (template) {
+          nextSnapshot = WorkerMockService.enqueueGlobalTask(
+            nextSnapshot,
+            template,
+          );
+        }
       }
     }
 
-    // 4. Synchronize unified clock anchor
+    // 4. Execute deterministic global scheduler dispatch pass
+    nextSnapshot = WorkerMockService.dispatchGlobalQueue(nextSnapshot);
+
+    // 5. Synchronize unified clock anchor
     clockAnchor.baseSimTimeMs = nextSnapshot.simTimeMs;
     clockAnchor.highWaterSimTimeMs = Math.max(
       clockAnchor.highWaterSimTimeMs,
