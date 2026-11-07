@@ -4,7 +4,9 @@
 **Phase 2.3 — NEXT: Browser QA, Visual Closure & Simulation UX Stabilization.**
 Phases 1, 2.1, and 2.2 remain complete as recorded below. Phase 2.2 passed 256 automated tests, TypeScript compilation, and production build; the listed manual browser checks remain open and are the next priority. Do not restart the scheduler or create a replacement frontend.
 
+Product mission: [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md) — canonical purpose of SIREADER and its Virtual Office.
 Master roadmap: [`docs/ROADMAP.md`](ROADMAP.md) — authoritative phase order and v1.0 acceptance gates.
+Before every task, read PRODUCT_VISION.md, ROADMAP.md, and this PROJECT_STATE.md before inspecting code.
 Branch: `phase-2-2-task-dispatcher`<br>
 Phase 2.2 implementation baseline: `cf1083d`
 
