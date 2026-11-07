@@ -56,8 +56,8 @@ Phase 2.2 implementation baseline: `cf1083d`
 - `src/workers/worker.state.test.ts`: added UI regression tests 46–47 for both structured FAILED details and missing diagnostic payloads.
 - `src/ui/TopBar.tsx`: command bar can wrap below desktop width; toggle controls expose pressed state and semantic control groups.
 - `src/app/OfficeApp.tsx`: camera/graphics dock uses compact icon-only labels on narrow viewports and wraps within the viewport.
-- `vite.config.ts`: replaced ESM-incompatible `__dirname` alias resolution with `fileURLToPath(new URL('.', import.meta.url))`; build verification is still pending.
-- `src/workers/worker.state.test.ts`: added tests 48–49 for simulation speed state, global pause, and deterministic manual stepping, plus test 50 for the worker Pause/Resume controls. Five new UI regression tests have **not yet been executed**; do not count them as passing until the local suite runs.
+- `vite.config.ts`: replaced ESM-incompatible `__dirname` alias resolution with `fileURLToPath(new URL('.', import.meta.url))`; owner ran `npm run build` successfully after this change. The bundle remains ~1.41 MB minified (~380 kB gzip), triggering Vite's >500 kB chunk warning; evaluate measured code-splitting in Phase 6.2 rather than hiding the warning.
+- `src/workers/worker.state.test.ts`: added tests 48–49 for simulation speed state, global pause, and deterministic manual stepping, plus test 50 for the worker Pause/Resume controls. Five new UI regression tests were executed in the owner's local run: tests 47–50 passed, while test 46 initially failed because its text assertion expected one exact whitespace sequence. The assertion was changed to accept whitespace across JSX text nodes in commit `fc47abb`; a full rerun is still pending. The run reported 261 tests total (260 passed, 1 failed before the assertion fix).
 - Remaining browser-only acceptance: inspect the 3D scene at the target viewport, camera pan/zoom/reset behavior, all seven worker/avatar mappings, panel interactions, live pause/resume and speed tempo, responsive overlay collisions, and asset licensing/fallback.
 
 ## External backend milestone
