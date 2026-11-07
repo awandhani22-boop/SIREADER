@@ -16,6 +16,7 @@ import {
   createInitialSchedulerState,
   normalizeSimulationSnapshot,
 } from '../scheduler/scheduler.state';
+import type { DispatchPassResult } from '../scheduler/scheduler.types';
 import {
   updateTaskExecutionStage,
 } from '../tasks/task.transitions';
@@ -102,6 +103,21 @@ function interpolatePosition(
     Number((from[1] + (to[1] - from[1]) * t).toFixed(3)),
     Number((from[2] + (to[2] - from[2]) * t).toFixed(3)),
   ];
+}
+
+export interface SimulationTickResult {
+  readonly snapshot: SimulationSnapshot;
+  readonly dispatchResult?: DispatchPassResult<SimulationSnapshot>;
+}
+
+export interface SimulationAdvanceResult {
+  readonly snapshot: SimulationSnapshot;
+  readonly lastDispatchResult?: DispatchPassResult<SimulationSnapshot>;
+}
+
+export interface WorkerResumeResult {
+  readonly snapshot: SimulationSnapshot;
+  readonly dispatchResult?: DispatchPassResult<SimulationSnapshot>;
 }
 
 export class SimulationEngine {
@@ -259,12 +275,12 @@ export class SimulationEngine {
    * `1x`, `2x`, and `4x` speeds advance simulation time consistently in fixed steps
    * without skipping task stages.
    */
-  static advanceByWallClockDelta(
+  static advanceByWallClockDeltaWithDiagnostics(
     snapshot: SimulationSnapshot,
     rawElapsedMs: number,
-  ): SimulationSnapshot {
+  ): SimulationAdvanceResult {
     if (snapshot.isGlobalPaused || rawElapsedMs <= 0) {
-      return snapshot;
+      return { snapshot };
     }
 
     // Clamp wall-clock delta to MAX_DELTA_CLAMP_MS before applying speed multiplier
@@ -273,14 +289,19 @@ export class SimulationEngine {
 
     let current = normalizeSimulationSnapshot(snapshot);
     let remainingMs = totalSimMsToAdvance;
+    let lastDispatchResult: DispatchPassResult<SimulationSnapshot> | undefined;
 
     while (remainingMs >= FIXED_TICK_SIM_MS) {
-      current = this.stepSimulationTick(current, FIXED_TICK_SIM_MS);
+      const tickResult = this.stepSimulationTickWithDiagnostics(current, FIXED_TICK_SIM_MS);
+      current = tickResult.snapshot;
+      lastDispatchResult = tickResult.dispatchResult;
       remainingMs -= FIXED_TICK_SIM_MS;
     }
 
     if (remainingMs > 0) {
-      current = this.stepSimulationTick(current, remainingMs);
+      const tickResult = this.stepSimulationTickWithDiagnostics(current, remainingMs);
+      current = tickResult.snapshot;
+      lastDispatchResult = tickResult.dispatchResult;
     }
 
     clockAnchor.baseSimTimeMs = current.simTimeMs;
@@ -288,19 +309,29 @@ export class SimulationEngine {
       clockAnchor.highWaterSimTimeMs,
       current.simTimeMs,
     );
-    return current;
+    return {
+      snapshot: current,
+      lastDispatchResult,
+    };
+  }
+
+  static advanceByWallClockDelta(
+    snapshot: SimulationSnapshot,
+    rawElapsedMs: number,
+  ): SimulationSnapshot {
+    return this.advanceByWallClockDeltaWithDiagnostics(snapshot, rawElapsedMs).snapshot;
   }
 
   /**
-   * Advances the simulation by a single deterministic step (`stepSimMs`).
-   * Does not depend on `Date.now()` or `requestAnimationFrame`.
+   * Advances the simulation by a single deterministic step (`stepSimMs`) and
+   * captures full dispatch diagnostics from the actual final dispatch pass.
    */
-  static stepSimulationTick(
+  static stepSimulationTickWithDiagnostics(
     snapshot: SimulationSnapshot,
     stepSimMs: number = FIXED_TICK_SIM_MS,
-  ): SimulationSnapshot {
+  ): SimulationTickResult {
     if (snapshot.isGlobalPaused || stepSimMs <= 0) {
-      return snapshot;
+      return { snapshot };
     }
 
     const normalizedSnapshot = normalizeSimulationSnapshot(snapshot);
@@ -344,7 +375,8 @@ export class SimulationEngine {
     }
 
     // 4. Execute deterministic global scheduler dispatch pass
-    nextSnapshot = WorkerMockService.dispatchGlobalQueue(nextSnapshot);
+    const dispatchResult = WorkerMockService.dispatchGlobalQueueWithResult(nextSnapshot);
+    nextSnapshot = dispatchResult.snapshot;
 
     // 5. Synchronize unified clock anchor
     clockAnchor.baseSimTimeMs = nextSnapshot.simTimeMs;
@@ -352,7 +384,22 @@ export class SimulationEngine {
       clockAnchor.highWaterSimTimeMs,
       nextSnapshot.simTimeMs,
     );
-    return nextSnapshot;
+    return {
+      snapshot: nextSnapshot,
+      dispatchResult,
+    };
+  }
+
+  /**
+   * Advances the simulation by a single deterministic step (`stepSimMs`).
+   * Does not depend on `Date.now()` or `requestAnimationFrame`.
+   * Backward-compatible wrapper delegating to `stepSimulationTickWithDiagnostics()`.
+   */
+  static stepSimulationTick(
+    snapshot: SimulationSnapshot,
+    stepSimMs: number = FIXED_TICK_SIM_MS,
+  ): SimulationSnapshot {
+    return this.stepSimulationTickWithDiagnostics(snapshot, stepSimMs).snapshot;
   }
 
   private static stepSingleWorker(
@@ -659,10 +706,13 @@ export class SimulationEngine {
    * Never restarts or resets `elapsedSimMs` or `progress`.
    * Immediately runs a global scheduler dispatch pass when `isGlobalPaused === false`.
    */
-  static resumeWorker(snapshot: SimulationSnapshot, workerId: WorkerId): SimulationSnapshot {
+  static resumeWorkerWithDiagnostics(
+    snapshot: SimulationSnapshot,
+    workerId: WorkerId,
+  ): WorkerResumeResult {
     const normalizedSnapshot = normalizeSimulationSnapshot(snapshot);
     const worker = normalizedSnapshot.workers[workerId];
-    if (!worker || worker.status !== 'PAUSED') return normalizedSnapshot;
+    if (!worker || worker.status !== 'PAUSED') return { snapshot: normalizedSnapshot };
 
     const currentTask = worker.currentTaskId ? normalizedSnapshot.tasks[worker.currentTaskId] : null;
     const restoredStatus: WorkerStatus =
@@ -712,11 +762,20 @@ export class SimulationEngine {
       nextSnapshot = WorkerMockService.promoteNextQueuedTask(nextSnapshot, workerId);
     }
 
+    let dispatchResult: DispatchPassResult<SimulationSnapshot> | undefined;
     if (!nextSnapshot.isGlobalPaused) {
-      nextSnapshot = WorkerMockService.dispatchGlobalQueue(nextSnapshot);
+      dispatchResult = WorkerMockService.dispatchGlobalQueueWithResult(nextSnapshot);
+      nextSnapshot = dispatchResult.snapshot;
     }
 
-    return nextSnapshot;
+    return {
+      snapshot: nextSnapshot,
+      dispatchResult,
+    };
+  }
+
+  static resumeWorker(snapshot: SimulationSnapshot, workerId: WorkerId): SimulationSnapshot {
+    return this.resumeWorkerWithDiagnostics(snapshot, workerId).snapshot;
   }
 
   /**

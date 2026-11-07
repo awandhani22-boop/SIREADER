@@ -4,7 +4,11 @@ import {
   FIXED_TICK_SIM_MS,
   SimulationEngine,
 } from './simulation.engine';
-import { AssignTaskInput, WorkerMockService } from './worker.mock-service';
+import {
+  AssignTaskInput,
+  GlobalTaskInput,
+  WorkerMockService,
+} from './worker.mock-service';
 import {
   RoomId,
   SimulationSnapshot,
@@ -12,14 +16,26 @@ import {
   WorkerEntity,
   WorkerId,
 } from './worker.types';
+import type {
+  BlockedTaskRecord,
+  DispatchPassResult,
+  QueuedTaskEntry,
+  SchedulerSnapshotState,
+} from '../scheduler/scheduler.types';
+import type {
+  TaskLifecycleStatus,
+  TaskPriority,
+} from '../tasks/task.types';
+import { orderQueue } from '../scheduler/priority.scheduler';
 
 /**
- * Central Zustand Store for SIREADER Virtual Office (Phase 1.1 Final Audit)
+ * Central Zustand Store for SIREADER Virtual Office (Phase 2.2 M3 — Commit 8)
  * - Supports granular per-worker subscriptions so updating one worker does not
  *   re-render unrelated worker components.
  * - Tracks isolated avatar GLB load errors per worker (`avatarLoadErrors`).
  * - Implements deterministic baseline reset (`resetSimulationWithSeed`).
  * - Synchronizes `SimulationEngine` real-time clock anchor on pause/resume/speed changes.
+ * - Integrates global task queue, dispatch diagnostics, and activity history.
  */
 
 export type GraphicsPreset = 'high' | 'balanced';
@@ -37,6 +53,12 @@ export interface OfficeStoreState extends SimulationSnapshot {
   /** Per-worker GLB model loading failure diagnostics (isolated fallback state) */
   avatarLoadErrors: Record<string, string | undefined>;
 
+  // Global Queue Drawer & Diagnostics State
+  isGlobalQueueOpen: boolean;
+  lastBlockedRecords: readonly BlockedTaskRecord[];
+  lastDispatchDiagnosticsAtSimMs: number | null;
+  lastDispatchDiagnosticsTickCount: number | null;
+
   // Actions
   selectWorker: (workerId: WorkerId | null) => void;
   selectRoom: (roomId: RoomId | null, primaryWorkerId?: WorkerId) => void;
@@ -47,6 +69,14 @@ export interface OfficeStoreState extends SimulationSnapshot {
   triggerCameraZoom: (step: number) => void;
   setGraphicsPreset: (preset: GraphicsPreset) => void;
   setReducedMotion: (reduced: boolean) => void;
+
+  // Global Queue UI Actions
+  setGlobalQueueOpen: (isOpen: boolean) => void;
+  toggleGlobalQueueOpen: () => void;
+  enqueueGlobalMockTask: (
+    input?: GlobalTaskInput,
+    templateIndex?: number,
+  ) => { ok: boolean; taskId?: string };
 
   // Avatar GLB Asset & Error Isolation Actions
   setWorkerModelUrl: (workerId: WorkerId, modelUrl: string | null) => void;
@@ -101,6 +131,36 @@ function applySnapshotPatch(
   };
 }
 
+interface DiagnosticPatch {
+  readonly lastBlockedRecords: readonly BlockedTaskRecord[];
+  readonly lastDispatchDiagnosticsAtSimMs: number | null;
+  readonly lastDispatchDiagnosticsTickCount: number | null;
+}
+
+function syncDiagnostics(
+  state: OfficeStoreState,
+  nextSnapshot: SimulationSnapshot,
+  dispatchResult?: DispatchPassResult<SimulationSnapshot>,
+): DiagnosticPatch {
+  const remainingTaskIds = new Set(nextSnapshot.scheduler?.entries.map((e) => e.taskId) ?? []);
+
+  // When no dispatch result or dispatch pass was skipped due to global pause:
+  if (!dispatchResult || dispatchResult.skipped === 'GLOBALLY_PAUSED') {
+    return {
+      lastBlockedRecords: state.lastBlockedRecords.filter((b) => remainingTaskIds.has(b.taskId)),
+      lastDispatchDiagnosticsAtSimMs: state.lastDispatchDiagnosticsAtSimMs,
+      lastDispatchDiagnosticsTickCount: state.lastDispatchDiagnosticsTickCount,
+    };
+  }
+
+  // An actual dispatch pass occurred:
+  return {
+    lastBlockedRecords: dispatchResult.blocked.filter((b) => remainingTaskIds.has(b.taskId)),
+    lastDispatchDiagnosticsAtSimMs: nextSnapshot.simTimeMs,
+    lastDispatchDiagnosticsTickCount: nextSnapshot.tickCount,
+  };
+}
+
 const initialSnapshot = SimulationEngine.createInitialSnapshot(DEFAULT_SIMULATION_SEED);
 
 export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
@@ -115,6 +175,12 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
   graphicsPreset: 'high',
   reducedMotion: false,
   avatarLoadErrors: {},
+
+  // Global Queue initial state
+  isGlobalQueueOpen: false,
+  lastBlockedRecords: [],
+  lastDispatchDiagnosticsAtSimMs: null,
+  lastDispatchDiagnosticsTickCount: null,
 
   selectWorker: (workerId) =>
     set((state) => {
@@ -138,6 +204,9 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
   setActivityFeedOpen: (isOpen) => set({ isActivityFeedOpen: isOpen }),
   setDepartmentFilter: (department) => set({ departmentFilter: department }),
 
+  setGlobalQueueOpen: (isOpen) => set({ isGlobalQueueOpen: isOpen }),
+  toggleGlobalQueueOpen: () => set((state) => ({ isGlobalQueueOpen: !state.isGlobalQueueOpen })),
+
   triggerCameraReset: () =>
     set((state) => ({ cameraResetTrigger: state.cameraResetTrigger + 1 })),
 
@@ -151,6 +220,32 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
 
   setGraphicsPreset: (preset) => set({ graphicsPreset: preset }),
   setReducedMotion: (reduced) => set({ reducedMotion: reduced }),
+
+  enqueueGlobalMockTask: (input, templateIndex) => {
+    const state = get();
+    const next = WorkerMockService.enqueueGlobalTask(state, input, templateIndex);
+
+    if (next === state) {
+      return { ok: false };
+    }
+
+    const newEntry = next.scheduler?.entries.find(
+      (e) => !state.scheduler?.entries.some((prev) => prev.taskId === e.taskId),
+    );
+    const taskId = newEntry?.taskId;
+
+    const remainingTaskIds = new Set(next.scheduler?.entries.map((e) => e.taskId) ?? []);
+    const preservedBlocked = state.lastBlockedRecords.filter((b) =>
+      remainingTaskIds.has(b.taskId),
+    );
+
+    set({
+      ...applySnapshotPatch(next),
+      lastBlockedRecords: preservedBlocked,
+    });
+
+    return { ok: true, taskId };
+  },
 
   setWorkerModelUrl: (workerId, modelUrl) =>
     set((state) => {
@@ -215,9 +310,11 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
         ...state,
         isGlobalPaused: false,
       };
-      const next = SimulationEngine.stepSimulationTick(tempUnpaused, stepSimMs);
+      const res = SimulationEngine.stepSimulationTickWithDiagnostics(tempUnpaused, stepSimMs);
+      const diagPatch = syncDiagnostics(state, res.snapshot, res.dispatchResult);
       return {
-        ...applySnapshotPatch(next),
+        ...applySnapshotPatch(res.snapshot),
+        ...diagPatch,
         isGlobalPaused: state.isGlobalPaused,
       };
     }),
@@ -225,23 +322,34 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
   advanceByWallClock: (rawDeltaMs) =>
     set((state) => {
       if (state.isGlobalPaused) return state;
-      const next = SimulationEngine.advanceByWallClockDelta(state, rawDeltaMs);
-      return applySnapshotPatch(next);
+      const res = SimulationEngine.advanceByWallClockDeltaWithDiagnostics(state, rawDeltaMs);
+      const diagPatch = syncDiagnostics(state, res.snapshot, res.lastDispatchResult);
+      return {
+        ...applySnapshotPatch(res.snapshot),
+        ...diagPatch,
+      };
     }),
 
   setGlobalPaused: (isPaused) =>
     set((state) => {
       let current: SimulationSnapshot = state;
+      let latestDispatch: DispatchPassResult<SimulationSnapshot> | undefined;
       if (isPaused && !state.isGlobalPaused) {
         const pendingWallMs = SimulationEngine.getPendingRealtimeWallDeltaMs(
           performance.now(),
         );
         if (pendingWallMs > 0) {
-          current = SimulationEngine.advanceByWallClockDelta(current, pendingWallMs);
+          const advanceRes = SimulationEngine.advanceByWallClockDeltaWithDiagnostics(current, pendingWallMs);
+          current = advanceRes.snapshot;
+          latestDispatch = advanceRes.lastDispatchResult;
         }
       }
       const next = SimulationEngine.setGlobalPaused(current, isPaused);
-      return applySnapshotPatch(next);
+      const diagPatch = syncDiagnostics(state, next, latestDispatch);
+      return {
+        ...applySnapshotPatch(next),
+        ...diagPatch,
+      };
     }),
 
   toggleGlobalPaused: () => {
@@ -252,11 +360,14 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
   setSimSpeedMultiplier: (speed) =>
     set((state) => {
       let current: SimulationSnapshot = state;
+      let latestDispatch: DispatchPassResult<SimulationSnapshot> | undefined;
       if (!state.isGlobalPaused) {
         const now = performance.now();
         const pendingWallMs = SimulationEngine.getPendingRealtimeWallDeltaMs(now);
         if (pendingWallMs > 0) {
-          current = SimulationEngine.advanceByWallClockDelta(current, pendingWallMs);
+          const advanceRes = SimulationEngine.advanceByWallClockDeltaWithDiagnostics(current, pendingWallMs);
+          current = advanceRes.snapshot;
+          latestDispatch = advanceRes.lastDispatchResult;
           SimulationEngine.syncRealtimeClockAnchor(
             { ...current, simSpeedMultiplier: speed },
             now,
@@ -264,8 +375,10 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
           );
         }
       }
+      const diagPatch = syncDiagnostics(state, current, latestDispatch);
       return {
         ...applySnapshotPatch(current),
+        ...diagPatch,
         simSpeedMultiplier: speed,
       };
     }),
@@ -282,6 +395,9 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
       avatarLoadErrors: {},
       selectedWorkerId: 'sonnet',
       selectedRoomId: 'room_analysis',
+      lastBlockedRecords: [],
+      lastDispatchDiagnosticsAtSimMs: null,
+      lastDispatchDiagnosticsTickCount: null,
     });
   },
 
@@ -305,8 +421,12 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
 
   resumeWorker: (workerId) =>
     set((state) => {
-      const next = SimulationEngine.resumeWorker(state, workerId);
-      return applySnapshotPatch(next);
+      const res = SimulationEngine.resumeWorkerWithDiagnostics(state, workerId);
+      const diagPatch = syncDiagnostics(state, res.snapshot, res.dispatchResult);
+      return {
+        ...applySnapshotPatch(res.snapshot),
+        ...diagPatch,
+      };
     }),
 
   toggleWorkerPause: (workerId) => {
@@ -321,16 +441,118 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
 }));
 
 /**
+ * Pure selector helpers for enriched global scheduler queue entries (WAITING & BLOCKED)
+ */
+export interface EnrichedQueuedTask {
+  readonly taskId: string;
+  readonly sequence: number;
+  readonly enqueuedAtSimMs: number;
+  readonly task: TaskEntity | null;
+  readonly priority: TaskPriority | 'UNKNOWN';
+  readonly blockedRecord?: BlockedTaskRecord;
+  readonly isBlocked: boolean;
+  readonly waitDurationSimMs: number;
+  readonly dispatchOrderIndex: number;
+}
+
+export function selectGlobalQueueEntries(
+  scheduler: SchedulerSnapshotState | undefined,
+  tasks: Record<string, TaskEntity>,
+  lastBlocked: readonly BlockedTaskRecord[] = [],
+  currentSimTimeMs = 0,
+): readonly EnrichedQueuedTask[] {
+  if (!scheduler || !Array.isArray(scheduler.entries) || scheduler.entries.length === 0) {
+    return [];
+  }
+
+  const orderedItems = orderQueue(scheduler.entries, tasks);
+
+  return orderedItems.map((item, index) => {
+    const { entry, task } = item;
+    const priority: TaskPriority | 'UNKNOWN' = task ? task.priority : 'UNKNOWN';
+    const blockedRecord = lastBlocked.find((b) => b.taskId === entry.taskId);
+    const waitDurationSimMs = Math.max(0, currentSimTimeMs - entry.enqueuedAtSimMs);
+
+    return {
+      taskId: entry.taskId,
+      sequence: entry.sequence,
+      enqueuedAtSimMs: entry.enqueuedAtSimMs,
+      task,
+      priority,
+      blockedRecord,
+      isBlocked: Boolean(blockedRecord),
+      waitDurationSimMs,
+      dispatchOrderIndex: index + 1,
+    };
+  });
+}
+
+/**
+ * Pure selector helpers for pool task execution and completion history (RUNNING, COMPLETED, FAILED)
+ */
+export interface GlobalTaskActivityItem {
+  readonly task: TaskEntity;
+  readonly lifecycleStatus: TaskLifecycleStatus;
+  readonly assignedWorkerId: WorkerId | null;
+  readonly progress: number;
+  readonly lastActiveSimMs: number;
+}
+
+export function selectGlobalTaskActivity(
+  tasks: Record<string, TaskEntity>,
+  scheduler: SchedulerSnapshotState | undefined,
+  limit = 20,
+): readonly GlobalTaskActivityItem[] {
+  const queuedTaskIds = new Set(scheduler?.entries.map((e) => e.taskId) ?? []);
+
+  const poolTasks: GlobalTaskActivityItem[] = [];
+
+  for (const task of Object.values(tasks)) {
+    // Only pool tasks
+    if (!task.id.startsWith('tsk_pool_')) continue;
+    // Must not be currently in scheduler queue
+    if (queuedTaskIds.has(task.id)) continue;
+
+    // Filter strictly to RUNNING, COMPLETED, FAILED
+    const ls = task.lifecycleStatus;
+    if (ls !== 'RUNNING' && ls !== 'COMPLETED' && ls !== 'FAILED') {
+      continue;
+    }
+
+    // For RUNNING tasks, require assignedWorkerId !== null
+    if (ls === 'RUNNING' && task.assignedWorkerId === null) {
+      continue;
+    }
+
+    const lastActiveSimMs =
+      task.completedAtSimMs ?? task.startedAtSimMs ?? task.createdAtSimMs ?? 0;
+
+    poolTasks.push({
+      task,
+      lifecycleStatus: ls,
+      assignedWorkerId: task.assignedWorkerId,
+      progress: Math.round(task.progress),
+      lastActiveSimMs,
+    });
+  }
+
+  // Sort newest activity first
+  poolTasks.sort((a, b) => b.lastActiveSimMs - a.lastActiveSimMs);
+
+  return poolTasks.slice(0, Math.max(1, limit));
+}
+
+/**
  * Pure selector helpers for aggregated SIMULATED office telemetry
  */
 export function selectGlobalSimulatedTotals(
   workers: Record<WorkerId, WorkerEntity>,
   tasks: Record<string, TaskEntity>,
+  scheduler?: SchedulerSnapshotState,
 ) {
   let totalTokens = 0;
   let totalCostUsd = 0;
   let totalCompleted = 0;
-  let totalQueued = 0;
   let activeWorkersCount = 0;
   let pausedWorkersCount = 0;
 
@@ -338,7 +560,6 @@ export function selectGlobalSimulatedTotals(
     totalTokens += worker.metrics.simulatedTokens;
     totalCostUsd += worker.metrics.simulatedCostUsd;
     totalCompleted += worker.metrics.completedTasksCount;
-    totalQueued += worker.taskQueueIds.length;
     if (
       worker.status === 'BUSY' ||
       worker.status === 'WALKING' ||
@@ -350,6 +571,13 @@ export function selectGlobalSimulatedTotals(
       pausedWorkersCount += 1;
     }
   }
+
+  const totalQueued =
+    (scheduler?.entries.length ?? 0) +
+    Object.values(workers).reduce(
+      (sum, worker) => sum + (worker.taskQueueIds?.length ?? 0),
+      0,
+    );
 
   const activeTasksCount = Object.values(tasks).filter(
     (t) => t.status !== 'QUEUED' && t.status !== 'COMPLETED' && t.status !== 'FAILED',

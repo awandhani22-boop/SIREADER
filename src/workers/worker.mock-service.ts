@@ -18,6 +18,7 @@ import {
   enqueueTask,
   type DispatchPassOptions,
 } from '../scheduler/task.dispatcher';
+import type { DispatchPassResult } from '../scheduler/scheduler.types';
 import {
   createTaskEntity as buildValidatedTaskEntity,
   createTaskEntitySafe,
@@ -578,11 +579,26 @@ export class WorkerMockService {
    * Returns `dispatchPass(snapshot, options).snapshot` directly without duplicating
    * dispatcher logic or re-emitting `TASK_STARTED` events.
    */
+  /**
+   * Thin service wrapper around dispatchPass() from src/scheduler/task.dispatcher.ts.
+   * Returns the full DispatchPassResult<SimulationSnapshot> without duplicating
+   * dispatcher logic or re-emitting TASK_STARTED events.
+   */
+  static dispatchGlobalQueueWithResult(
+    snapshot: SimulationSnapshot,
+    options?: DispatchPassOptions,
+  ): DispatchPassResult<SimulationSnapshot> {
+    return dispatchPass(snapshot, options);
+  }
+
+  /**
+   * Backward-compatible wrapper returning only snapshot from dispatchGlobalQueueWithResult().
+   */
   static dispatchGlobalQueue(
     snapshot: SimulationSnapshot,
     options?: DispatchPassOptions,
   ): SimulationSnapshot {
-    return dispatchPass(snapshot, options).snapshot;
+    return this.dispatchGlobalQueueWithResult(snapshot, options).snapshot;
   }
 
   /**

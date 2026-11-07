@@ -1,5 +1,6 @@
 import {
   Activity,
+  ListOrdered,
   Pause,
   Play,
   RotateCcw,
@@ -30,6 +31,9 @@ export function TopBar() {
   const simSpeedMultiplier = useOfficeStore((s) => s.simSpeedMultiplier);
   const isRosterOpen = useOfficeStore((s) => s.isRosterOpen);
   const isActivityFeedOpen = useOfficeStore((s) => s.isActivityFeedOpen);
+  const scheduler = useOfficeStore((s) => s.scheduler);
+  const isGlobalQueueOpen = useOfficeStore((s) => s.isGlobalQueueOpen);
+  const toggleGlobalQueueOpen = useOfficeStore((s) => s.toggleGlobalQueueOpen);
 
   const toggleGlobalPaused = useOfficeStore((s) => s.toggleGlobalPaused);
   const setSimSpeedMultiplier = useOfficeStore((s) => s.setSimSpeedMultiplier);
@@ -38,7 +42,7 @@ export function TopBar() {
   const setRosterOpen = useOfficeStore((s) => s.setRosterOpen);
   const setActivityFeedOpen = useOfficeStore((s) => s.setActivityFeedOpen);
 
-  const totals = selectGlobalSimulatedTotals(workers, tasks);
+  const totals = selectGlobalSimulatedTotals(workers, tasks, scheduler);
 
   return (
     <header className="relative z-30 flex items-center justify-between gap-4 px-4 h-12 bg-[#090F1D] border-b border-slate-800/90 text-slate-100 shrink-0">
@@ -129,6 +133,20 @@ export function TopBar() {
       <div className="flex items-center gap-2 shrink-0">
         {/* Roster & Feed Drawer Toggles */}
         <div className="flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-md border border-slate-800">
+          <button
+            type="button"
+            data-testid="toggle-global-queue-btn"
+            onClick={toggleGlobalQueueOpen}
+            className={`flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded transition-colors cursor-pointer whitespace-nowrap ${
+              isGlobalQueueOpen
+                ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/40'
+                : 'text-slate-400 hover:text-white'
+            }`}
+            aria-label="Toggle Global Task Queue Panel"
+          >
+            <ListOrdered className="w-3 h-3" />
+            <span data-testid="topbar-pool-queue-count">Queue ({scheduler?.entries.length ?? 0})</span>
+          </button>
           <button
             type="button"
             onClick={() => setRosterOpen(!isRosterOpen)}

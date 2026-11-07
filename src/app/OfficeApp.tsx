@@ -13,6 +13,7 @@ import { OfficeScene } from '../scene/OfficeScene';
 import { ActivityFeed } from '../ui/ActivityFeed';
 import { TopBar } from '../ui/TopBar';
 import { WorkerPanel } from '../ui/WorkerPanel';
+import { GlobalQueuePanel } from '../ui/GlobalQueuePanel';
 import { recordWorkerComponentRender } from '../utils/renderProfiler';
 import {
   FIXED_TICK_SIM_MS,
@@ -119,6 +120,7 @@ export function OfficeApp() {
   const advanceByWallClock = useOfficeStore((s) => s.advanceByWallClock);
   const workerOrder = useOfficeStore((s) => s.workerOrder);
   const selectedWorkerId = useOfficeStore((s) => s.selectedWorkerId);
+  const isGlobalQueueOpen = useOfficeStore((s) => s.isGlobalQueueOpen);
   const isRosterOpen = useOfficeStore((s) => s.isRosterOpen);
   const graphicsPreset = useOfficeStore((s) => s.graphicsPreset);
   const reducedMotion = useOfficeStore((s) => s.reducedMotion);
@@ -284,10 +286,17 @@ export function OfficeApp() {
           <ActivityFeed />
         </div>
 
-        {/* Right Selected Worker Detail Drawer */}
-        {selectedWorkerId && (
+        {/* Right Selected Worker Detail Drawer (hidden when Global Queue Drawer is open) */}
+        {selectedWorkerId && !isGlobalQueueOpen && (
           <div className="absolute top-0 right-0 bottom-0 z-20 flex pointer-events-auto max-w-full">
             <WorkerPanel />
+          </div>
+        )}
+
+        {/* Right Global Task Queue Drawer */}
+        {isGlobalQueueOpen && (
+          <div className="absolute top-0 right-0 bottom-0 z-20 flex pointer-events-auto max-w-full">
+            <GlobalQueuePanel />
           </div>
         )}
       </main>
