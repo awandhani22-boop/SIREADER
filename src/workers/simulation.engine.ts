@@ -4,6 +4,9 @@ import {
   WORKER_TASK_TEMPLATES,
 } from './worker.registry';
 import {
+  getActiveTaskIds,
+} from './worker.concurrency';
+import {
   deriveAnimationForWorker,
   resolveTaskStageStatus,
   WorkerMockService,
@@ -434,9 +437,10 @@ export class SimulationEngine {
       };
     }
 
-    // 3. Active Execution: BUSY -> progresses currentTask deterministically
+    // 3. Active Execution: BUSY -> progresses all active tasks deterministically
     if (worker.status === 'BUSY') {
-      if (!worker.currentTaskId) {
+      const capturedActiveIds = getActiveTaskIds(worker);
+      if (capturedActiveIds.length === 0) {
         const idleWorker: WorkerEntity = {
           ...worker,
           status: 'IDLE',
@@ -454,80 +458,20 @@ export class SimulationEngine {
         return WorkerMockService.promoteNextQueuedTask(updated, workerId);
       }
 
-      const task = snapshot.tasks[worker.currentTaskId];
-      if (!task) return snapshot;
-
-      const nextElapsedMs = Math.min(task.totalDurationSimMs, task.elapsedSimMs + stepSimMs);
-      const nextProgress = Number(
-        ((nextElapsedMs / task.totalDurationSimMs) * 100).toFixed(2),
-      );
-
-      // Complete task if progress reaches 100%
-      if (nextElapsedMs >= task.totalDurationSimMs || nextProgress >= 100) {
-        return WorkerMockService.completeCurrentTask(snapshot, workerId);
+      let workingSnapshot = snapshot;
+      for (const taskId of capturedActiveIds) {
+        const latestWorker = workingSnapshot.workers[workerId];
+        if (!latestWorker || !getActiveTaskIds(latestWorker).includes(taskId)) {
+          continue;
+        }
+        workingSnapshot = this.stepActiveTask(
+          workingSnapshot,
+          workerId,
+          taskId,
+          stepSimMs,
+        );
       }
-
-      // Compute deterministic stage status from nextProgress
-      const previousStageStatus = task.status;
-      const nextStageStatus = resolveTaskStageStatus(task, nextProgress);
-
-      // Compute proportional simulated tokens and cost
-      const nextSimTokens = Math.round((nextProgress / 100) * task.targetTokens);
-      const tokenDelta = Math.max(0, nextSimTokens - task.simulatedTokens);
-      const nextSimCost = Number(
-        ((nextSimTokens / 1000) * task.costPerThousandTokensUsd).toFixed(6),
-      );
-      const costDelta = Math.max(0, nextSimCost - task.simulatedCostUsd);
-
-      const stageUpdateOutcome = updateTaskExecutionStage(task, nextStageStatus, {
-        simTimeMs: snapshot.simTimeMs,
-        elapsedSimMs: nextElapsedMs,
-        progress: nextProgress,
-        simulatedTokens: nextSimTokens,
-        simulatedCostUsd: nextSimCost,
-      });
-      if (!stageUpdateOutcome.ok) {
-        return snapshot;
-      }
-      const updatedTask = stageUpdateOutcome.task;
-
-      const updatedWorker: WorkerEntity = {
-        ...worker,
-        animationState: deriveAnimationForWorker('BUSY', nextStageStatus),
-        metrics: {
-          ...worker.metrics,
-          simulatedTokens: worker.metrics.simulatedTokens + tokenDelta,
-          simulatedCostUsd: Number((worker.metrics.simulatedCostUsd + costDelta).toFixed(6)),
-          lastActivitySimMs: snapshot.simTimeMs,
-        },
-      };
-
-      let nextEvents = snapshot.events;
-      if (nextStageStatus !== previousStageStatus) {
-        const stageEvent = WorkerMockService.createEvent(snapshot, {
-          workerId: worker.id,
-          workerName: worker.name,
-          department: worker.department,
-          taskId: updatedTask.id,
-          type: 'TASK_STAGE_CHANGED',
-          message: `[SIMULATED] "${updatedTask.title}" transitioned ${previousStageStatus} → ${nextStageStatus} (${Math.round(nextProgress)}%)`,
-          accentColor: worker.avatarConfig.accentColor,
-        });
-        nextEvents = WorkerMockService.appendEvent(snapshot, stageEvent);
-      }
-
-      return {
-        ...snapshot,
-        tasks: {
-          ...snapshot.tasks,
-          [updatedTask.id]: updatedTask,
-        },
-        workers: {
-          ...snapshot.workers,
-          [workerId]: updatedWorker,
-        },
-        events: nextEvents,
-      };
+      return workingSnapshot;
     }
 
     // 4. Transition: COMPLETED -> IDLE (or next queued task)
@@ -568,6 +512,103 @@ export class SimulationEngine {
 
     // Return unchanged reference when worker is IDLE with empty queue
     return snapshot;
+  }
+
+  /**
+   * Advances a single active task on a BUSY worker by `stepSimMs`, preserving
+   * exact single-task progress, stage, token, cost, and completion arithmetic.
+   */
+  private static stepActiveTask(
+    snapshot: SimulationSnapshot,
+    workerId: WorkerId,
+    taskId: string,
+    stepSimMs: number,
+  ): SimulationSnapshot {
+    const worker = snapshot.workers[workerId];
+    if (!worker) return snapshot;
+
+    const task = snapshot.tasks[taskId];
+    if (!task) return snapshot;
+
+    const nextElapsedMs = Math.min(task.totalDurationSimMs, task.elapsedSimMs + stepSimMs);
+    const nextProgress = Number(
+      ((nextElapsedMs / task.totalDurationSimMs) * 100).toFixed(2),
+    );
+
+    // Complete task if progress reaches 100%
+    if (nextElapsedMs >= task.totalDurationSimMs || nextProgress >= 100) {
+      return WorkerMockService.completeTask(snapshot, workerId, taskId);
+    }
+
+    // Compute deterministic stage status from nextProgress
+    const previousStageStatus = task.status;
+    const nextStageStatus = resolveTaskStageStatus(task, nextProgress);
+
+    // Compute proportional simulated tokens and cost
+    const nextSimTokens = Math.round((nextProgress / 100) * task.targetTokens);
+    const tokenDelta = Math.max(0, nextSimTokens - task.simulatedTokens);
+    const nextSimCost = Number(
+      ((nextSimTokens / 1000) * task.costPerThousandTokensUsd).toFixed(6),
+    );
+    const costDelta = Math.max(0, nextSimCost - task.simulatedCostUsd);
+
+    const stageUpdateOutcome = updateTaskExecutionStage(task, nextStageStatus, {
+      simTimeMs: snapshot.simTimeMs,
+      elapsedSimMs: nextElapsedMs,
+      progress: nextProgress,
+      simulatedTokens: nextSimTokens,
+      simulatedCostUsd: nextSimCost,
+    });
+    if (!stageUpdateOutcome.ok) {
+      return snapshot;
+    }
+    const updatedTask = stageUpdateOutcome.task;
+
+    const primaryTaskId = worker.currentTaskId;
+    const primaryStageStatus =
+      primaryTaskId === taskId
+        ? nextStageStatus
+        : primaryTaskId
+          ? snapshot.tasks[primaryTaskId]?.status ?? nextStageStatus
+          : nextStageStatus;
+
+    const updatedWorker: WorkerEntity = {
+      ...worker,
+      animationState: deriveAnimationForWorker('BUSY', primaryStageStatus),
+      metrics: {
+        ...worker.metrics,
+        simulatedTokens: worker.metrics.simulatedTokens + tokenDelta,
+        simulatedCostUsd: Number((worker.metrics.simulatedCostUsd + costDelta).toFixed(6)),
+        lastActivitySimMs: snapshot.simTimeMs,
+      },
+    };
+
+    let nextEvents = snapshot.events;
+    if (nextStageStatus !== previousStageStatus) {
+      const stageEvent = WorkerMockService.createEvent(snapshot, {
+        workerId: worker.id,
+        workerName: worker.name,
+        department: worker.department,
+        taskId: updatedTask.id,
+        type: 'TASK_STAGE_CHANGED',
+        message: `[SIMULATED] "${updatedTask.title}" transitioned ${previousStageStatus} → ${nextStageStatus} (${Math.round(nextProgress)}%)`,
+        accentColor: worker.avatarConfig.accentColor,
+      });
+      nextEvents = WorkerMockService.appendEvent(snapshot, stageEvent);
+    }
+
+    return {
+      ...snapshot,
+      tasks: {
+        ...snapshot.tasks,
+        [updatedTask.id]: updatedTask,
+      },
+      workers: {
+        ...snapshot.workers,
+        [workerId]: updatedWorker,
+      },
+      events: nextEvents,
+    };
   }
 
   /**

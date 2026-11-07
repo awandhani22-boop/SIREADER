@@ -7,6 +7,7 @@ import {
   mapCategoryToDefaultTaskType,
 } from './worker.capabilities';
 import {
+  getActiveTaskIds,
   withTaskActivated,
   withTaskDeactivated,
 } from './worker.concurrency';
@@ -375,18 +376,28 @@ export class WorkerMockService {
   }
 
   /**
-   * Marks the current active task of a worker as COMPLETED via the canonical
+   * Marks a specific active task of a worker as COMPLETED via the canonical
    * `transitionTaskStatus(task, 'COMPLETED', ...)` state machine helper and updates
    * simulated metrics.
+   *
+   * - Validates that the worker exists, the task exists, and `taskId` is currently active
+   *   (`getActiveTaskIds(worker).includes(taskId)`). Returns `snapshot` unchanged otherwise.
+   * - Uses `withTaskDeactivated` as the only mechanism for updating `activeTaskIds` and `currentTaskId`.
+   * - When other active tasks remain, keeps the worker `BUSY` and preserves `transitionSimMs`.
+   * - When the last active task completes, transitions the worker to `COMPLETED`.
    */
-  static completeCurrentTask(
+  static completeTask(
     snapshot: SimulationSnapshot,
     workerId: WorkerId,
+    taskId: string,
   ): SimulationSnapshot {
     const worker = snapshot.workers[workerId];
-    if (!worker || !worker.currentTaskId) return snapshot;
+    if (!worker || !taskId) return snapshot;
 
-    const currentTask = snapshot.tasks[worker.currentTaskId];
+    const activeIds = getActiveTaskIds(worker);
+    if (!activeIds.includes(taskId)) return snapshot;
+
+    const currentTask = snapshot.tasks[taskId];
     if (!currentTask) return snapshot;
 
     const finalTokens = currentTask.targetTokens;
@@ -423,13 +434,20 @@ export class WorkerMockService {
 
     const completedTask = transitionOutcome.task;
     const workerWithDeactivatedTask = withTaskDeactivated(worker, completedTask.id);
+    const hasRemainingActive = workerWithDeactivatedTask.activeTaskIds.length > 0;
+    const nextPrimaryTask =
+      hasRemainingActive && workerWithDeactivatedTask.currentTaskId
+        ? snapshot.tasks[workerWithDeactivatedTask.currentTaskId] ?? null
+        : null;
 
     const updatedWorker: WorkerEntity = {
       ...workerWithDeactivatedTask,
-      status: 'COMPLETED',
-      transitionSimMs: 0,
+      status: hasRemainingActive ? 'BUSY' : 'COMPLETED',
+      transitionSimMs: hasRemainingActive ? worker.transitionSimMs : 0,
       completedTaskIds: [completedTask.id, ...worker.completedTaskIds].slice(0, 25),
-      animationState: deriveAnimationForWorker('COMPLETED', 'COMPLETED'),
+      animationState: hasRemainingActive
+        ? deriveAnimationForWorker('BUSY', nextPrimaryTask?.status ?? null)
+        : deriveAnimationForWorker('COMPLETED', 'COMPLETED'),
       metrics: {
         ...worker.metrics,
         simulatedTokens: worker.metrics.simulatedTokens + tokenDelta,
@@ -464,19 +482,42 @@ export class WorkerMockService {
   }
 
   /**
-   * Marks the current active task of a worker as FAILED via the canonical
-   * `transitionTaskStatus(task, 'FAILED', ...)` state machine helper and updates
-   * simulated error metrics.
+   * Marks the current primary active task of a worker as COMPLETED.
+   * Thin wrapper over `completeTask` using `worker.currentTaskId`.
    */
-  static failCurrentTask(
+  static completeCurrentTask(
     snapshot: SimulationSnapshot,
     workerId: WorkerId,
-    errorOverride?: Partial<TaskErrorDetail>,
   ): SimulationSnapshot {
     const worker = snapshot.workers[workerId];
     if (!worker || !worker.currentTaskId) return snapshot;
+    return this.completeTask(snapshot, workerId, worker.currentTaskId);
+  }
 
-    const currentTask = snapshot.tasks[worker.currentTaskId];
+  /**
+   * Marks a specific active task of a worker as FAILED via the canonical
+   * `transitionTaskStatus(task, 'FAILED', ...)` state machine helper and updates
+   * simulated error metrics.
+   *
+   * - Validates that the worker exists, the task exists, and `taskId` is currently active
+   *   (`getActiveTaskIds(worker).includes(taskId)`). Returns `snapshot` unchanged otherwise.
+   * - Uses `withTaskDeactivated` as the only mechanism for updating `activeTaskIds` and `currentTaskId`.
+   * - When other active tasks remain, keeps the worker `BUSY` and preserves `transitionSimMs`.
+   * - When the last active task fails, transitions the worker to `IDLE`.
+   */
+  static failTask(
+    snapshot: SimulationSnapshot,
+    workerId: WorkerId,
+    taskId: string,
+    errorOverride?: Partial<TaskErrorDetail>,
+  ): SimulationSnapshot {
+    const worker = snapshot.workers[workerId];
+    if (!worker || !taskId) return snapshot;
+
+    const activeIds = getActiveTaskIds(worker);
+    if (!activeIds.includes(taskId)) return snapshot;
+
+    const currentTask = snapshot.tasks[taskId];
     if (!currentTask) return snapshot;
 
     const transitionOutcome = transitionTaskStatus(currentTask, 'FAILED', {
@@ -501,12 +542,19 @@ export class WorkerMockService {
 
     const failedTask = transitionOutcome.task;
     const workerWithDeactivatedTask = withTaskDeactivated(worker, failedTask.id);
+    const hasRemainingActive = workerWithDeactivatedTask.activeTaskIds.length > 0;
+    const nextPrimaryTask =
+      hasRemainingActive && workerWithDeactivatedTask.currentTaskId
+        ? snapshot.tasks[workerWithDeactivatedTask.currentTaskId] ?? null
+        : null;
 
     const updatedWorker: WorkerEntity = {
       ...workerWithDeactivatedTask,
-      status: 'IDLE',
-      transitionSimMs: 0,
-      animationState: deriveAnimationForWorker('IDLE', null),
+      status: hasRemainingActive ? 'BUSY' : 'IDLE',
+      transitionSimMs: hasRemainingActive ? worker.transitionSimMs : 0,
+      animationState: hasRemainingActive
+        ? deriveAnimationForWorker('BUSY', nextPrimaryTask?.status ?? null)
+        : deriveAnimationForWorker('IDLE', null),
       metrics: {
         ...worker.metrics,
         errorCount: worker.metrics.errorCount + 1,
@@ -536,5 +584,19 @@ export class WorkerMockService {
       },
       events: this.appendEvent(snapshot, event),
     };
+  }
+
+  /**
+   * Marks the current primary active task of a worker as FAILED.
+   * Thin wrapper over `failTask` using `worker.currentTaskId`.
+   */
+  static failCurrentTask(
+    snapshot: SimulationSnapshot,
+    workerId: WorkerId,
+    errorOverride?: Partial<TaskErrorDetail>,
+  ): SimulationSnapshot {
+    const worker = snapshot.workers[workerId];
+    if (!worker || !worker.currentTaskId) return snapshot;
+    return this.failTask(snapshot, workerId, worker.currentTaskId, errorOverride);
   }
 }
