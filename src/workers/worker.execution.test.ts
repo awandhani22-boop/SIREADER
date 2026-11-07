@@ -429,6 +429,19 @@ test('12. Same-tick dual completion: two active tasks reaching 100% on the same 
   assert.equal(completedEvents.length, 2);
   assert.equal(completedEvents[1].taskId, task1Id);
   assert.equal(completedEvents[0].taskId, task2Id);
+  assert.notEqual(
+    completedEvents[0].id,
+    completedEvents[1].id,
+    'Same-tick TASK_COMPLETED events must have distinct event IDs',
+  );
+
+  const allEventIds = afterTick.events.map((e) => e.id);
+  const uniqueEventIds = new Set(allEventIds);
+  assert.equal(
+    uniqueEventIds.size,
+    allEventIds.length,
+    'Event log must not contain duplicate event IDs after same-tick dual completion',
+  );
   assert.deepEqual(haiku.completedTaskIds, [task2Id, task1Id]);
 });
 
@@ -481,4 +494,51 @@ test('13. Reverse completion order: secondary task (activeTaskIds[1]) has shorte
   assert.equal(haikuAfterTick3.currentTaskId, null);
   assert.equal(haikuAfterTick3.metrics.completedTasksCount, 2);
   assert.equal(haikuAfterTick3.metrics.simulatedTokens, 1400);
+});
+
+test('14. Multi-task worker pause & resume: pausing a worker freezes elapsedSimMs and progress for both active tasks, and resuming continues both tasks', () => {
+  const { snapshot: initial, task1Id, task2Id } = createTwoActiveTasksOnHaiku({
+    firstDurationSimMs: 4000,
+    secondDurationSimMs: 5000,
+    firstTargetTokens: 1000,
+    secondTargetTokens: 2000,
+  });
+
+  // Advance 1 tick while BUSY so both tasks have non-zero progress
+  let snapshot = SimulationEngine.stepSimulationTick(initial, FIXED_TICK_SIM_MS);
+  assert.equal(snapshot.tasks[task1Id].elapsedSimMs, 500);
+  assert.equal(snapshot.tasks[task1Id].progress, 12.5);
+  assert.equal(snapshot.tasks[task2Id].elapsedSimMs, 500);
+  assert.equal(snapshot.tasks[task2Id].progress, 10);
+
+  // Pause haiku
+  snapshot = SimulationEngine.pauseWorker(snapshot, 'haiku');
+  assert.equal(snapshot.workers.haiku.status, 'PAUSED');
+  assert.equal(snapshot.workers.haiku.statusBeforePause, 'BUSY');
+  assert.deepEqual(snapshot.workers.haiku.activeTaskIds, [task1Id, task2Id]);
+  assert.equal(snapshot.workers.haiku.currentTaskId, task1Id);
+
+  // Advance 4 simulation ticks while haiku is PAUSED
+  for (let i = 0; i < 4; i++) {
+    snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+  }
+
+  // Both active tasks on haiku must remain completely frozen
+  assert.equal(snapshot.workers.haiku.status, 'PAUSED');
+  assert.equal(snapshot.tasks[task1Id].elapsedSimMs, 500);
+  assert.equal(snapshot.tasks[task1Id].progress, 12.5);
+  assert.equal(snapshot.tasks[task2Id].elapsedSimMs, 500);
+  assert.equal(snapshot.tasks[task2Id].progress, 10);
+
+  // Resume haiku and step 1 tick -> both tasks must resume and advance by +500ms
+  snapshot = SimulationEngine.resumeWorker(snapshot, 'haiku');
+  assert.equal(snapshot.workers.haiku.status, 'BUSY');
+  assert.deepEqual(snapshot.workers.haiku.activeTaskIds, [task1Id, task2Id]);
+  assert.equal(snapshot.workers.haiku.currentTaskId, task1Id);
+
+  snapshot = SimulationEngine.stepSimulationTick(snapshot, FIXED_TICK_SIM_MS);
+  assert.equal(snapshot.tasks[task1Id].elapsedSimMs, 1000);
+  assert.equal(snapshot.tasks[task1Id].progress, 25);
+  assert.equal(snapshot.tasks[task2Id].elapsedSimMs, 1000);
+  assert.equal(snapshot.tasks[task2Id].progress, 20);
 });
