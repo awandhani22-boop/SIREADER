@@ -33,7 +33,28 @@ export type DispatchBlockReason =
   | 'NO_CAPABLE_WORKER'
   | 'ALL_CAPABLE_WORKERS_AT_CAPACITY'
   | 'ALL_CAPABLE_WORKERS_BLOCKED_STATE'
-  | 'ALL_CAPABLE_WORKERS_RESERVED_BY_LEGACY_QUEUE';
+  | 'ALL_CAPABLE_WORKERS_RESERVED_BY_LEGACY_QUEUE'
+  | 'CAPABLE_WORKERS_UNAVAILABLE_MIXED'
+  | 'TASK_NOT_DISPATCHABLE';
+
+export type EnqueueRejection =
+  | 'TASK_NOT_QUEUED'
+  | 'DUPLICATE_ENTRY'
+  | 'TASK_ALREADY_TRACKED'
+  | 'PINNED_TASK_NOT_ALLOWED'
+  | 'INVALID_TASK';
+
+export type EnqueueResult<TSnapshot> =
+  | {
+      readonly ok: true;
+      readonly snapshot: TSnapshot;
+      readonly entry: QueuedTaskEntry;
+    }
+  | {
+      readonly ok: false;
+      readonly snapshot: TSnapshot;
+      readonly reason: EnqueueRejection;
+    };
 
 export interface DispatchedTaskRecord {
   readonly taskId: string;
@@ -51,4 +72,20 @@ export interface BlockedTaskRecord {
   readonly priority: TaskPriority;
   readonly sequence: number;
   readonly reason: DispatchBlockReason;
+  readonly detail?: string;
+}
+
+export interface DroppedEntryRecord {
+  readonly taskId: string;
+  readonly sequence: number;
+  readonly reason: DispatchBlockReason;
+  readonly detail?: string;
+}
+
+export interface DispatchPassResult<TSnapshot> {
+  readonly snapshot: TSnapshot;
+  readonly dispatched: readonly DispatchedTaskRecord[];
+  readonly blocked: readonly BlockedTaskRecord[];
+  readonly dropped: readonly DroppedEntryRecord[];
+  readonly skipped?: 'GLOBALLY_PAUSED';
 }
