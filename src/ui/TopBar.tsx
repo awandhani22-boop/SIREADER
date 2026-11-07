@@ -45,7 +45,7 @@ export function TopBar() {
   const totals = selectGlobalSimulatedTotals(workers, tasks, scheduler);
 
   return (
-    <header className="relative z-30 flex items-center justify-between gap-4 px-4 h-12 bg-[#090F1D] border-b border-slate-800/90 text-slate-100 shrink-0">
+    <header className="relative z-30 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2 min-h-12 bg-[#090F1D] border-b border-slate-800/90 text-slate-100 shrink-0 xl:flex-nowrap xl:gap-4 xl:px-4 xl:py-0 xl:h-12">
       {/* Zone 1: Brand Identity & Simulation Mode Notice */}
       <div className="flex items-center gap-2.5 shrink-0">
         <span className="w-2.5 h-2.5 rounded-sm bg-cyan-400 shrink-0" />
@@ -65,8 +65,9 @@ export function TopBar() {
 
       {/* Zone 2: Global Simulated Office Telemetry (All explicitly marked SIMULATED) */}
       <div
-        className="hidden lg:flex items-center gap-3.5 text-[11px] text-slate-300 whitespace-nowrap"
+        role="group"
         aria-label="Global Simulated Metrics"
+        className="hidden lg:flex items-center gap-3.5 text-[11px] text-slate-300 whitespace-nowrap"
       >
         <div className="flex items-center gap-1">
           <span className="text-slate-400">Sim Clock:</span>
@@ -130,9 +131,9 @@ export function TopBar() {
       </div>
 
       {/* Zone 3: Simulation Engine & Drawer Controls */}
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-2 xl:w-auto xl:flex-nowrap xl:shrink-0 xl:justify-end">
         {/* Roster & Feed Drawer Toggles */}
-        <div className="flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-md border border-slate-800">
+        <div role="group" aria-label="Office panel controls" className="flex flex-wrap sm:flex-nowrap items-center gap-1 bg-slate-900/90 p-0.5 rounded-md border border-slate-800">
           <button
             type="button"
             data-testid="toggle-global-queue-btn"
@@ -143,6 +144,7 @@ export function TopBar() {
                 : 'text-slate-400 hover:text-white'
             }`}
             aria-label="Toggle Global Task Queue Panel"
+            aria-pressed={isGlobalQueueOpen}
           >
             <ListOrdered className="w-3 h-3" />
             <span data-testid="topbar-pool-queue-count">Pool Queue ({scheduler?.entries.length ?? 0})</span>
@@ -156,6 +158,7 @@ export function TopBar() {
                 : 'text-slate-400 hover:text-white'
             }`}
             aria-label="Toggle Worker Roster"
+            aria-pressed={isRosterOpen}
           >
             <Users className="w-3 h-3" />
             <span>Roster</span>
@@ -169,6 +172,7 @@ export function TopBar() {
                 : 'text-slate-400 hover:text-white'
             }`}
             aria-label="Toggle Simulated Activity Feed"
+            aria-pressed={isActivityFeedOpen}
           >
             <Activity className="w-3 h-3" />
             <span>Feed</span>
@@ -176,7 +180,7 @@ export function TopBar() {
         </div>
 
         {/* Simulation Clock Controls */}
-        <div className="flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-md border border-slate-800">
+        <div role="group" aria-label="Simulation controls" className="flex flex-wrap sm:flex-nowrap items-center gap-1 bg-slate-900/90 p-0.5 rounded-md border border-slate-800">
           <button
             type="button"
             onClick={toggleGlobalPaused}
@@ -186,6 +190,7 @@ export function TopBar() {
                 : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
             }`}
             aria-label={isGlobalPaused ? 'Resume Global Simulation' : 'Pause Global Simulation'}
+            aria-pressed={isGlobalPaused}
           >
             {isGlobalPaused ? (
               <>
@@ -222,6 +227,8 @@ export function TopBar() {
                   : 'text-slate-400 hover:text-slate-200'
               }`}
               aria-label={`Simulation speed ${spd}x`}
+              aria-pressed={simSpeedMultiplier === spd}
+              data-testid={`simulation-speed-${spd}x`}
             >
               {spd}x
             </button>
