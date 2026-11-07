@@ -2,14 +2,24 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createTaskEntity } from '../tasks/task.factory';
 import type {
+  PermanentWorkerId,
   TaskLifecycleStatus,
   TaskPriority,
   TaskStatus,
   TaskType,
+  WorkerCapabilityProfile,
 } from '../tasks/task.types';
-import { mapTaskTypeToCategory } from '../workers/worker.capabilities';
-import { withTaskActivated } from '../workers/worker.concurrency';
 import {
+  createCustomCapabilityRegistry,
+  getAllWorkerCapabilityProfiles,
+  mapTaskTypeToCategory,
+} from '../workers/worker.capabilities';
+import {
+  assertWorkerConcurrencyInvariant,
+  withTaskActivated,
+} from '../workers/worker.concurrency';
+import {
+  COST_PER_1K_TOKENS_SIMULATED,
   createInitialWorkersRegistry,
   INITIAL_WORKER_ORDER,
 } from '../workers/worker.registry';
@@ -25,7 +35,11 @@ import type {
   QueuedTaskEntry,
   SchedulerSnapshotState,
 } from './scheduler.types';
-import { enqueueExistingTaskById, enqueueTask } from './task.dispatcher';
+import {
+  dispatchPass,
+  enqueueExistingTaskById,
+  enqueueTask,
+} from './task.dispatcher';
 
 const SEED = 20261106;
 
@@ -1080,4 +1094,1281 @@ test('28. Existing task cannot be enqueued twice via enqueueExistingTaskById', (
   }
   assert.equal(firstAttempt.snapshot.scheduler?.entries.length, 1);
   assert.equal(firstAttempt.snapshot.scheduler?.nextSequence, 2);
+});
+
+// ============================================================================
+// Commit 5 — Deterministic Global Dispatch Pass (`dispatchPass`) Tests
+// ============================================================================
+
+function enqueueMany(
+  initialSnapshot: SimulationSnapshot,
+  tasks: readonly TaskEntity[],
+): SimulationSnapshot {
+  let current = initialSnapshot;
+  for (const task of tasks) {
+    const res = enqueueTask(current, task);
+    assert.equal(res.ok, true, `Expected enqueueTask to succeed for ${task.id}`);
+    current = res.snapshot;
+  }
+  return current;
+}
+
+function buildSharedTwoSlotRegistry(): Readonly<
+  Record<PermanentWorkerId, WorkerCapabilityProfile>
+> {
+  const baseProfiles = getAllWorkerCapabilityProfiles();
+  const haikuProfile = baseProfiles.find((p) => p.workerId === 'haiku')!;
+  const summarizationCap = haikuProfile.capabilities.find(
+    (c) => c.capabilityId === 'summarization',
+  )!;
+  const map = {} as Record<PermanentWorkerId, WorkerCapabilityProfile>;
+  for (const profile of baseProfiles) {
+    if (profile.workerId === 'supervisor') {
+      map.supervisor = {
+        ...profile,
+        maxConcurrency: 2,
+        capabilities: [...profile.capabilities, summarizationCap],
+        supportedTaskTypes: [...profile.supportedTaskTypes, 'SUMMARIZATION'],
+      };
+    } else {
+      map[profile.workerId] = profile;
+    }
+  }
+  return map;
+}
+
+test('DP-1. Global pause returns exact snapshot reference with empty results and skipped GLOBALLY_PAUSED', () => {
+  const queuedTask = makeUnassignedQueuedTask({
+    id: 'tsk_dp_paused_1',
+    sequenceNumber: 101,
+    type: 'DATA_ANALYSIS',
+  });
+  let snapshot = createCleanSnapshot({ isGlobalPaused: true });
+  const enq = enqueueTask(snapshot, queuedTask);
+  assert.equal(enq.ok, true);
+  snapshot = enq.snapshot;
+
+  const result = dispatchPass(snapshot);
+
+  assert.strictEqual(result.snapshot, snapshot);
+  assert.equal(result.skipped, 'GLOBALLY_PAUSED');
+  assert.deepEqual(result.dispatched, []);
+  assert.deepEqual(result.blocked, []);
+  assert.deepEqual(result.dropped, []);
+});
+
+test('DP-2. Global pause does not normalize a malformed scheduler', () => {
+  const malformedScheduler = {
+    entries: 'corrupt-entries',
+    nextSequence: -999,
+  } as unknown as SchedulerSnapshotState;
+
+  const snapshot = createCleanSnapshot({
+    isGlobalPaused: true,
+    scheduler: malformedScheduler,
+  });
+
+  const result = dispatchPass(snapshot);
+
+  assert.strictEqual(result.snapshot, snapshot);
+  assert.strictEqual(result.snapshot.scheduler, malformedScheduler);
+  assert.equal(result.skipped, 'GLOBALLY_PAUSED');
+});
+
+test('DP-3. Queue entries are processed strictly by priority (CRITICAL > HIGH > NORMAL > LOW)', () => {
+  // sonnet supports DATA_ANALYSIS with maxConcurrency = 1; queue 4 tasks in reverse priority order
+  const lowTask = makeUnassignedQueuedTask({
+    id: 'tsk_prio_low',
+    sequenceNumber: 102,
+    type: 'DATA_ANALYSIS',
+    priority: 'LOW',
+  });
+  const normalTask = makeUnassignedQueuedTask({
+    id: 'tsk_prio_normal',
+    sequenceNumber: 103,
+    type: 'DATA_ANALYSIS',
+    priority: 'NORMAL',
+  });
+  const highTask = makeUnassignedQueuedTask({
+    id: 'tsk_prio_high',
+    sequenceNumber: 104,
+    type: 'DATA_ANALYSIS',
+    priority: 'HIGH',
+  });
+  const criticalTask = makeUnassignedQueuedTask({
+    id: 'tsk_prio_critical',
+    sequenceNumber: 105,
+    type: 'DATA_ANALYSIS',
+    priority: 'CRITICAL',
+  });
+
+  const snapshot = enqueueMany(createCleanSnapshot(), [
+    lowTask,
+    normalTask,
+    highTask,
+    criticalTask,
+  ]);
+
+  const result = dispatchPass(snapshot);
+
+  assert.equal(result.dispatched.length, 1);
+  assert.equal(result.dispatched[0].taskId, 'tsk_prio_critical');
+  assert.equal(result.dispatched[0].priority, 'CRITICAL');
+  assert.equal(result.dispatched[0].workerId, 'sonnet');
+
+  // Remaining 3 were evaluated in HIGH -> NORMAL -> LOW order and blocked by sonnet AT_CAPACITY
+  assert.deepEqual(
+    result.blocked.map((b) => b.taskId),
+    ['tsk_prio_high', 'tsk_prio_normal', 'tsk_prio_low'],
+  );
+});
+
+test('DP-4. FIFO ordering by sequence within equal priority (and originalIndex tie-break)', () => {
+  // haiku supports SUMMARIZATION with maxConcurrency = 2
+  const firstSeq = makeUnassignedQueuedTask({
+    id: 'tsk_fifo_seq_2',
+    sequenceNumber: 106,
+    type: 'SUMMARIZATION',
+    priority: 'HIGH',
+  });
+  const secondSeq = makeUnassignedQueuedTask({
+    id: 'tsk_fifo_seq_5',
+    sequenceNumber: 107,
+    type: 'SUMMARIZATION',
+    priority: 'HIGH',
+  });
+  const thirdSeq = makeUnassignedQueuedTask({
+    id: 'tsk_fifo_seq_9',
+    sequenceNumber: 108,
+    type: 'SUMMARIZATION',
+    priority: 'HIGH',
+  });
+
+  // Intentionally place entries out of sequence order and with misleading enqueuedAtSimMs
+  const snapshot = createCleanSnapshot({
+    tasks: {
+      [firstSeq.id]: firstSeq,
+      [secondSeq.id]: secondSeq,
+      [thirdSeq.id]: thirdSeq,
+    },
+    scheduler: {
+      entries: [
+        { taskId: thirdSeq.id, sequence: 9, enqueuedAtSimMs: 100 },
+        { taskId: firstSeq.id, sequence: 2, enqueuedAtSimMs: 9000 },
+        { taskId: secondSeq.id, sequence: 5, enqueuedAtSimMs: 5000 },
+      ],
+      nextSequence: 10,
+    },
+  });
+
+  const result = dispatchPass(snapshot);
+
+  assert.deepEqual(
+    result.dispatched.map((d) => d.taskId),
+    ['tsk_fifo_seq_2', 'tsk_fifo_seq_5'],
+  );
+  assert.deepEqual(
+    result.blocked.map((b) => b.taskId),
+    ['tsk_fifo_seq_9'],
+  );
+
+  // Also verify duplicate sequence tie-breaks by originalIndex ascending
+  const dupA = makeUnassignedQueuedTask({
+    id: 'tsk_dup_idx_0',
+    sequenceNumber: 109,
+    type: 'DATA_ANALYSIS',
+    priority: 'NORMAL',
+  });
+  const dupB = makeUnassignedQueuedTask({
+    id: 'tsk_dup_idx_1',
+    sequenceNumber: 110,
+    type: 'DATA_ANALYSIS',
+    priority: 'NORMAL',
+  });
+  const snapDupSeq = createCleanSnapshot({
+    tasks: { [dupA.id]: dupA, [dupB.id]: dupB },
+    scheduler: {
+      entries: [
+        { taskId: dupA.id, sequence: 4, enqueuedAtSimMs: 1000 },
+        { taskId: dupB.id, sequence: 4, enqueuedAtSimMs: 500 },
+      ],
+      nextSequence: 5,
+    },
+  });
+  const resDupSeq = dispatchPass(snapDupSeq);
+  assert.equal(resDupSeq.dispatched.length, 1);
+  assert.equal(resDupSeq.dispatched[0].taskId, 'tsk_dup_idx_0');
+});
+
+test('DP-5. Missing task entity is recorded in dropped with MISSING_TASK_ENTITY and creates no replacement task', () => {
+  const snapshot = createCleanSnapshot({
+    scheduler: {
+      entries: [
+        { taskId: 'tsk_ghost_404', sequence: 3, enqueuedAtSimMs: 1500 },
+      ],
+      nextSequence: 4,
+    },
+  });
+
+  const result = dispatchPass(snapshot);
+
+  assert.deepEqual(result.dispatched, []);
+  assert.deepEqual(result.blocked, []);
+  assert.deepEqual(result.dropped, [
+    {
+      taskId: 'tsk_ghost_404',
+      sequence: 3,
+      reason: 'MISSING_TASK_ENTITY',
+    },
+  ]);
+  assert.deepEqual(result.snapshot.tasks, {});
+  assert.strictEqual(result.snapshot.events, snapshot.events);
+});
+
+test('DP-6. Missing task entry is removed from final global queue while preserving nextSequence', () => {
+  const blockedTask = makeUnassignedQueuedTask({
+    id: 'tsk_blocked_survivor',
+    sequenceNumber: 111,
+    type: 'DATA_ANALYSIS',
+  });
+  const baseWorkers = createInitialWorkersRegistry();
+  const survivorEntry: QueuedTaskEntry = {
+    taskId: blockedTask.id,
+    sequence: 2,
+    enqueuedAtSimMs: 1500,
+  };
+
+  const snapshot = createCleanSnapshot({
+    tasks: { [blockedTask.id]: blockedTask },
+    workers: {
+      ...baseWorkers,
+      sonnet: { ...baseWorkers.sonnet, status: 'PAUSED' },
+    },
+    scheduler: {
+      entries: [
+        { taskId: 'tsk_missing_1', sequence: 1, enqueuedAtSimMs: 1000 },
+        survivorEntry,
+      ],
+      nextSequence: 7,
+    },
+  });
+
+  const result = dispatchPass(snapshot);
+
+  assert.equal(result.dropped.length, 1);
+  assert.equal(result.dropped[0].taskId, 'tsk_missing_1');
+  assert.deepEqual(result.snapshot.scheduler, {
+    entries: [survivorEntry],
+    nextSequence: 7,
+  });
+  assert.strictEqual(result.snapshot.scheduler?.entries[0], survivorEntry);
+});
+
+test('DP-7. Non-QUEUED task in queue is not dispatched, gets TASK_NOT_DISPATCHABLE with detail, and stays unmodified', () => {
+  const baseTask = makeUnassignedQueuedTask({
+    id: 'tsk_already_running',
+    sequenceNumber: 112,
+    type: 'DATA_ANALYSIS',
+  });
+  const nonQueuedTask: TaskEntity = {
+    ...baseTask,
+    status: 'PENDING',
+    lifecycleStatus: 'PENDING',
+    queuedAt: null,
+  };
+
+  const snapshot = createCleanSnapshot({
+    tasks: { [nonQueuedTask.id]: nonQueuedTask },
+    scheduler: {
+      entries: [{ taskId: nonQueuedTask.id, sequence: 1, enqueuedAtSimMs: 1000 }],
+      nextSequence: 2,
+    },
+  });
+
+  const result = dispatchPass(snapshot);
+
+  assert.deepEqual(result.dispatched, []);
+  assert.deepEqual(result.dropped, []);
+  assert.equal(result.blocked.length, 1);
+  assert.equal(result.blocked[0].taskId, nonQueuedTask.id);
+  assert.equal(result.blocked[0].reason, 'TASK_NOT_DISPATCHABLE');
+  assert.ok(
+    typeof result.blocked[0].detail === 'string' &&
+      result.blocked[0].detail.length > 0,
+  );
+  assert.strictEqual(result.snapshot.tasks[nonQueuedTask.id], nonQueuedTask);
+});
+
+test('DP-8. Pinned task in queue is not dispatched, gets TASK_NOT_DISPATCHABLE with detail, and stays unmodified', () => {
+  const pinnedTask = createTaskEntity({
+    id: 'tsk_pinned_in_global_queue',
+    sequenceNumber: 113,
+    seed: SEED,
+    simTimeMs: 2500,
+    type: 'DATA_ANALYSIS',
+    title: 'Pinned Task',
+    status: 'QUEUED',
+    assignedWorkerId: 'sonnet',
+  });
+
+  const snapshot = createCleanSnapshot({
+    tasks: { [pinnedTask.id]: pinnedTask },
+    scheduler: {
+      entries: [{ taskId: pinnedTask.id, sequence: 1, enqueuedAtSimMs: 2500 }],
+      nextSequence: 2,
+    },
+  });
+
+  const result = dispatchPass(snapshot);
+
+  assert.deepEqual(result.dispatched, []);
+  assert.deepEqual(result.dropped, []);
+  assert.equal(result.blocked.length, 1);
+  assert.equal(result.blocked[0].taskId, pinnedTask.id);
+  assert.equal(result.blocked[0].reason, 'TASK_NOT_DISPATCHABLE');
+  assert.ok(
+    typeof result.blocked[0].detail === 'string' &&
+      result.blocked[0].detail.includes('sonnet'),
+  );
+  assert.strictEqual(result.snapshot.tasks[pinnedTask.id], pinnedTask);
+});
+
+test('DP-9. Task without any capable worker receives NO_CAPABLE_WORKER', () => {
+  const task = makeUnassignedQueuedTask({
+    id: 'tsk_no_capable',
+    sequenceNumber: 114,
+    type: 'DATA_ARCHIVING',
+  });
+  const snapshot = enqueueMany(createCleanSnapshot(), [task]);
+
+  // Disable data_archivist capability in custom registry
+  const disabledRegistry = createCustomCapabilityRegistry({
+    disabledCapabilityIds: ['data_archiving'],
+  });
+
+  const result = dispatchPass(snapshot, {
+    capabilityRegistry: disabledRegistry,
+  });
+
+  assert.deepEqual(result.dispatched, []);
+  assert.equal(result.blocked.length, 1);
+  assert.equal(result.blocked[0].reason, 'NO_CAPABLE_WORKER');
+
+  // Also verify NO_CAPABLE_WORKER when the sole capable worker is absent from workerOrder
+  const snapshotWithoutArchivistOrder = {
+    ...snapshot,
+    workerOrder: INITIAL_WORKER_ORDER.filter((id) => id !== 'data_archivist'),
+  };
+  const resultMissingFromOrder = dispatchPass(snapshotWithoutArchivistOrder);
+  assert.equal(resultMissingFromOrder.blocked.length, 1);
+  assert.equal(resultMissingFromOrder.blocked[0].reason, 'NO_CAPABLE_WORKER');
+});
+
+test('DP-10. All capable workers at capacity produces ALL_CAPABLE_WORKERS_AT_CAPACITY', () => {
+  const activeTask = createTaskEntity({
+    id: 'tsk_sonnet_busy_1',
+    sequenceNumber: 115,
+    seed: SEED,
+    simTimeMs: 1000,
+    type: 'DATA_ANALYSIS',
+    title: 'Active Sonnet Task',
+    status: 'ANALYZING',
+    assignedWorkerId: 'sonnet',
+  });
+  const waitingGlobalTask = makeUnassignedQueuedTask({
+    id: 'tsk_waiting_capacity',
+    sequenceNumber: 116,
+    type: 'DATA_ANALYSIS',
+  });
+
+  const baseWorkers = createInitialWorkersRegistry();
+  const busySonnet: WorkerEntity = {
+    ...withTaskActivated(baseWorkers.sonnet, activeTask.id),
+    status: 'BUSY',
+  };
+
+  let snapshot = createCleanSnapshot({
+    tasks: { [activeTask.id]: activeTask },
+    workers: { ...baseWorkers, sonnet: busySonnet },
+  });
+  snapshot = enqueueMany(snapshot, [waitingGlobalTask]);
+
+  const result = dispatchPass(snapshot);
+
+  assert.deepEqual(result.dispatched, []);
+  assert.equal(result.blocked.length, 1);
+  assert.equal(result.blocked[0].reason, 'ALL_CAPABLE_WORKERS_AT_CAPACITY');
+});
+
+test('DP-11. All capable workers in PAUSED, COMPLETED, or ERROR produces ALL_CAPABLE_WORKERS_BLOCKED_STATE', () => {
+  const task = makeUnassignedQueuedTask({
+    id: 'tsk_blocked_state',
+    sequenceNumber: 117,
+    type: 'DECISION_EVALUATION',
+  });
+  const baseWorkers = createInitialWorkersRegistry();
+
+  // DECISION_EVALUATION is supported by opus and decision_engineer; set one PAUSED and one ERROR
+  let snapshot = createCleanSnapshot({
+    workers: {
+      ...baseWorkers,
+      opus: { ...baseWorkers.opus, status: 'PAUSED' },
+      decision_engineer: { ...baseWorkers.decision_engineer, status: 'ERROR' },
+    },
+  });
+  snapshot = enqueueMany(snapshot, [task]);
+
+  const result = dispatchPass(snapshot);
+
+  assert.deepEqual(result.dispatched, []);
+  assert.equal(result.blocked.length, 1);
+  assert.equal(result.blocked[0].reason, 'ALL_CAPABLE_WORKERS_BLOCKED_STATE');
+});
+
+test('DP-12. All capable workers with pending legacy taskQueueIds produces ALL_CAPABLE_WORKERS_RESERVED_BY_LEGACY_QUEUE', () => {
+  const task = makeUnassignedQueuedTask({
+    id: 'tsk_legacy_reserved',
+    sequenceNumber: 118,
+    type: 'SUMMARIZATION',
+  });
+  const baseWorkers = createInitialWorkersRegistry();
+
+  let snapshot = createCleanSnapshot({
+    workers: {
+      ...baseWorkers,
+      haiku: {
+        ...baseWorkers.haiku,
+        status: 'IDLE',
+        taskQueueIds: ['tsk_legacy_haiku_waiting'],
+      },
+    },
+  });
+  snapshot = enqueueMany(snapshot, [task]);
+
+  const result = dispatchPass(snapshot);
+
+  assert.deepEqual(result.dispatched, []);
+  assert.equal(result.blocked.length, 1);
+  assert.equal(
+    result.blocked[0].reason,
+    'ALL_CAPABLE_WORKERS_RESERVED_BY_LEGACY_QUEUE',
+  );
+});
+
+test('DP-13. Mixed exclusions across capable workers produces CAPABLE_WORKERS_UNAVAILABLE_MIXED', () => {
+  const activeTask = createTaskEntity({
+    id: 'tsk_de_active',
+    sequenceNumber: 119,
+    seed: SEED,
+    simTimeMs: 1000,
+    type: 'DECISION_EVALUATION',
+    title: 'Decision Engineer Active',
+    status: 'ANALYZING',
+    assignedWorkerId: 'decision_engineer',
+  });
+  const globalTask = makeUnassignedQueuedTask({
+    id: 'tsk_mixed_exclusion',
+    sequenceNumber: 120,
+    type: 'DECISION_EVALUATION',
+  });
+
+  const baseWorkers = createInitialWorkersRegistry();
+  // opus -> PAUSED (BLOCKED_STATE); decision_engineer -> AT_CAPACITY
+  let snapshot = createCleanSnapshot({
+    tasks: { [activeTask.id]: activeTask },
+    workers: {
+      ...baseWorkers,
+      opus: { ...baseWorkers.opus, status: 'PAUSED' },
+      decision_engineer: {
+        ...withTaskActivated(baseWorkers.decision_engineer, activeTask.id),
+        status: 'BUSY',
+      },
+    },
+  });
+  snapshot = enqueueMany(snapshot, [globalTask]);
+
+  const result = dispatchPass(snapshot);
+
+  assert.deepEqual(result.dispatched, []);
+  assert.equal(result.blocked.length, 1);
+  assert.equal(result.blocked[0].reason, 'CAPABLE_WORKERS_UNAVAILABLE_MIXED');
+  assert.ok(typeof result.blocked[0].detail === 'string');
+});
+
+test('DP-14. Non-capable workers do not influence exclusion classification', () => {
+  // Task requires DATA_ARCHIVING (supported ONLY by data_archivist)
+  // data_archivist is AT_CAPACITY, while non-capable workers are PAUSED, ERROR, and LEGACY_QUEUE_RESERVED
+  const activeArchiveTask = createTaskEntity({
+    id: 'tsk_archivist_busy',
+    sequenceNumber: 121,
+    seed: SEED,
+    simTimeMs: 1000,
+    type: 'DATA_ARCHIVING',
+    title: 'Active Archive Task',
+    status: 'ARCHIVING',
+    assignedWorkerId: 'data_archivist',
+  });
+  const globalArchiveTask = makeUnassignedQueuedTask({
+    id: 'tsk_archivist_waiting',
+    sequenceNumber: 122,
+    type: 'DATA_ARCHIVING',
+  });
+
+  const baseWorkers = createInitialWorkersRegistry();
+  let snapshot = createCleanSnapshot({
+    tasks: { [activeArchiveTask.id]: activeArchiveTask },
+    workers: {
+      ...baseWorkers,
+      supervisor: { ...baseWorkers.supervisor, status: 'PAUSED' },
+      haiku: { ...baseWorkers.haiku, taskQueueIds: ['tsk_legacy_1'] },
+      opus: { ...baseWorkers.opus, status: 'ERROR' },
+      data_archivist: {
+        ...withTaskActivated(
+          baseWorkers.data_archivist,
+          activeArchiveTask.id,
+        ),
+        status: 'BUSY',
+      },
+    },
+  });
+  snapshot = enqueueMany(snapshot, [globalArchiveTask]);
+
+  const result = dispatchPass(snapshot);
+
+  assert.equal(result.blocked.length, 1);
+  assert.equal(
+    result.blocked[0].reason,
+    'ALL_CAPABLE_WORKERS_AT_CAPACITY',
+    'Non-capable PAUSED/ERROR/LEGACY workers must not turn AT_CAPACITY into MIXED',
+  );
+});
+
+test('DP-15. Worker with lowest load ratio is selected even if more expensive and later in workerOrder', () => {
+  const sharedRegistry = buildSharedTwoSlotRegistry();
+  // haiku (maxConcurrency=2, cost=0.001) has 1 active task -> load 1/2 = 0.5
+  // supervisor (maxConcurrency=2, cost=0.003) has 0 active tasks -> load 0/2 = 0.0
+  const haikuActiveTask = createTaskEntity({
+    id: 'tsk_haiku_busy_slot_1',
+    sequenceNumber: 123,
+    seed: SEED,
+    simTimeMs: 1000,
+    type: 'SUMMARIZATION',
+    title: 'Haiku Slot 1',
+    status: 'EXTRACTING',
+    assignedWorkerId: 'haiku',
+  });
+  const globalTask = makeUnassignedQueuedTask({
+    id: 'tsk_pick_lowest_load',
+    sequenceNumber: 124,
+    type: 'SUMMARIZATION',
+  });
+
+  const baseWorkers = createInitialWorkersRegistry();
+  let snapshot = createCleanSnapshot({
+    workerOrder: [
+      'haiku',
+      'supervisor',
+      'sonnet',
+      'opus',
+      'decision_engineer',
+      'market_monitor',
+      'data_archivist',
+    ],
+    tasks: { [haikuActiveTask.id]: haikuActiveTask },
+    workers: {
+      ...baseWorkers,
+      haiku: {
+        ...withTaskActivated(baseWorkers.haiku, haikuActiveTask.id),
+        status: 'BUSY',
+      },
+    },
+  });
+  snapshot = enqueueMany(snapshot, [globalTask]);
+
+  const result = dispatchPass(snapshot, {
+    capabilityRegistry: sharedRegistry,
+  });
+
+  assert.equal(result.dispatched.length, 1);
+  assert.equal(result.dispatched[0].workerId, 'supervisor');
+  assert.equal(result.dispatched[0].loadRatioBeforeDispatch, 0);
+});
+
+test('DP-16. Equal load ratio ties break by lowest simulated cost rate', () => {
+  // DECISION_EVALUATION is supported by opus (0.015) and decision_engineer (0.002)
+  const task = makeUnassignedQueuedTask({
+    id: 'tsk_tie_cost',
+    sequenceNumber: 125,
+    type: 'DECISION_EVALUATION',
+  });
+  // Place opus BEFORE decision_engineer in workerOrder; cheaper decision_engineer must still win
+  const snapshot = enqueueMany(
+    createCleanSnapshot({
+      workerOrder: [...INITIAL_WORKER_ORDER],
+    }),
+    [task],
+  );
+
+  const resDefaultCosts = dispatchPass(snapshot);
+  assert.equal(resDefaultCosts.dispatched.length, 1);
+  assert.equal(resDefaultCosts.dispatched[0].workerId, 'decision_engineer');
+  assert.equal(
+    resDefaultCosts.dispatched[0].costRateUsd,
+    COST_PER_1K_TOKENS_SIMULATED.decision_engineer,
+  );
+
+  // Flip custom costRates so opus is cheaper -> opus must win
+  const resFlippedCosts = dispatchPass(snapshot, {
+    costRates: { opus: 0.0005, decision_engineer: 0.02 },
+  });
+  assert.equal(resFlippedCosts.dispatched.length, 1);
+  assert.equal(resFlippedCosts.dispatched[0].workerId, 'opus');
+  assert.equal(resFlippedCosts.dispatched[0].costRateUsd, 0.0005);
+});
+
+test('DP-17. Equal load ratio and equal cost rate ties break by workerOrder', () => {
+  const task = makeUnassignedQueuedTask({
+    id: 'tsk_tie_order',
+    sequenceNumber: 126,
+    type: 'DECISION_EVALUATION',
+  });
+  const equalCosts = { opus: 0.002, decision_engineer: 0.002 };
+
+  const snapOpusFirst = enqueueMany(
+    createCleanSnapshot({
+      workerOrder: [
+        'opus',
+        'decision_engineer',
+        'supervisor',
+        'haiku',
+        'sonnet',
+        'market_monitor',
+        'data_archivist',
+      ],
+    }),
+    [task],
+  );
+  const resOpusFirst = dispatchPass(snapOpusFirst, { costRates: equalCosts });
+  assert.equal(resOpusFirst.dispatched[0].workerId, 'opus');
+
+  const snapDeFirst = enqueueMany(
+    createCleanSnapshot({
+      workerOrder: [
+        'decision_engineer',
+        'opus',
+        'supervisor',
+        'haiku',
+        'sonnet',
+        'market_monitor',
+        'data_archivist',
+      ],
+    }),
+    [task],
+  );
+  const resDeFirst = dispatchPass(snapDeFirst, { costRates: equalCosts });
+  assert.equal(resDeFirst.dispatched[0].workerId, 'decision_engineer');
+});
+
+test('DP-18. Equal load ratio, equal cost rate, and absent selectionWorkerOrder ties break by string comparison', () => {
+  const task = makeUnassignedQueuedTask({
+    id: 'tsk_tie_string',
+    sequenceNumber: 127,
+    type: 'DECISION_EVALUATION',
+  });
+
+  // Put 'opus' first in snapshot.workerOrder so candidate discovery lists 'opus' before 'decision_engineer',
+  // then pass empty selectionWorkerOrder [] so tie-break #4 ('decision_engineer' < 'opus') decides
+  const snapshot = enqueueMany(
+    createCleanSnapshot({
+      workerOrder: ['opus', 'decision_engineer'],
+    }),
+    [task],
+  );
+
+  const result = dispatchPass(snapshot, {
+    costRates: { opus: 0.002, decision_engineer: 0.002 },
+    selectionWorkerOrder: [],
+  });
+
+  assert.equal(result.dispatched.length, 1);
+  assert.equal(result.dispatched[0].workerId, 'decision_engineer');
+});
+
+test('DP-19. Multi-dispatch never exceeds worker maxConcurrency', () => {
+  // haiku has maxConcurrency = 2; enqueue 4 SUMMARIZATION tasks
+  const tasks = [1, 2, 3, 4].map((n) =>
+    makeUnassignedQueuedTask({
+      id: `tsk_haiku_cap_${n}`,
+      sequenceNumber: 130 + n,
+      type: 'SUMMARIZATION',
+    }),
+  );
+  const snapshot = enqueueMany(createCleanSnapshot(), tasks);
+
+  const result = dispatchPass(snapshot);
+
+  assert.equal(result.dispatched.length, 2);
+  assert.deepEqual(
+    result.dispatched.map((d) => d.taskId),
+    ['tsk_haiku_cap_1', 'tsk_haiku_cap_2'],
+  );
+  assert.equal(result.dispatched[0].loadRatioBeforeDispatch, 0);
+  assert.equal(result.dispatched[1].loadRatioBeforeDispatch, 0.5);
+
+  assert.equal(result.blocked.length, 2);
+  assert.deepEqual(
+    result.blocked.map((b) => ({ id: b.taskId, reason: b.reason })),
+    [
+      { id: 'tsk_haiku_cap_3', reason: 'ALL_CAPABLE_WORKERS_AT_CAPACITY' },
+      { id: 'tsk_haiku_cap_4', reason: 'ALL_CAPABLE_WORKERS_AT_CAPACITY' },
+    ],
+  );
+
+  assertWorkerConcurrencyInvariant(result.snapshot.workers.haiku, 2);
+});
+
+test('DP-20. Multi-dispatch recomputes load and balances dispatches across workers after each step', () => {
+  const sharedRegistry = buildSharedTwoSlotRegistry();
+  // haiku (max=2, cost=0.001) and supervisor (max=2, cost=0.003) both support SUMMARIZATION
+  const tasks = [1, 2, 3, 4, 5].map((n) =>
+    makeUnassignedQueuedTask({
+      id: `tsk_balance_${n}`,
+      sequenceNumber: 140 + n,
+      type: 'SUMMARIZATION',
+    }),
+  );
+  const snapshot = enqueueMany(createCleanSnapshot(), tasks);
+
+  const result = dispatchPass(snapshot, {
+    capabilityRegistry: sharedRegistry,
+  });
+
+  // Expected sequence:
+  // 1 -> haiku (0/2 == 0/2, cheaper 0.001 < 0.003)
+  // 2 -> supervisor (0/2 < 1/2)
+  // 3 -> haiku (1/2 == 1/2, cheaper 0.001 < 0.003)
+  // 4 -> supervisor (1/2 < 2/2)
+  // 5 -> blocked (both at 2/2)
+  assert.deepEqual(
+    result.dispatched.map((d) => ({
+      taskId: d.taskId,
+      workerId: d.workerId,
+      loadBefore: d.loadRatioBeforeDispatch,
+    })),
+    [
+      { taskId: 'tsk_balance_1', workerId: 'haiku', loadBefore: 0 },
+      { taskId: 'tsk_balance_2', workerId: 'supervisor', loadBefore: 0 },
+      { taskId: 'tsk_balance_3', workerId: 'haiku', loadBefore: 0.5 },
+      { taskId: 'tsk_balance_4', workerId: 'supervisor', loadBefore: 0.5 },
+    ],
+  );
+  assert.equal(result.blocked.length, 1);
+  assert.equal(result.blocked[0].taskId, 'tsk_balance_5');
+  assert.equal(result.blocked[0].reason, 'ALL_CAPABLE_WORKERS_AT_CAPACITY');
+});
+
+test('DP-21. activeTaskIds, currentTaskId, and worker status remain consistent for IDLE and already-BUSY workers', () => {
+  // Case A: IDLE haiku receives 2 tasks -> status transitions to TASK_RECEIVED, currentTaskId === first task
+  const t1 = makeUnassignedQueuedTask({
+    id: 'tsk_cons_1',
+    sequenceNumber: 151,
+    type: 'SUMMARIZATION',
+  });
+  const t2 = makeUnassignedQueuedTask({
+    id: 'tsk_cons_2',
+    sequenceNumber: 152,
+    type: 'SUMMARIZATION',
+  });
+  const snapIdle = enqueueMany(createCleanSnapshot(), [t1, t2]);
+  const resIdle = dispatchPass(snapIdle);
+
+  const haikuAfterIdle = resIdle.snapshot.workers.haiku;
+  assert.equal(haikuAfterIdle.status, 'TASK_RECEIVED');
+  assert.deepEqual(haikuAfterIdle.activeTaskIds, ['tsk_cons_1', 'tsk_cons_2']);
+  assert.equal(haikuAfterIdle.currentTaskId, 'tsk_cons_1');
+  assertWorkerConcurrencyInvariant(haikuAfterIdle, 2);
+
+  // Case B: Already-BUSY haiku with 1 active task receives a 2nd concurrent task -> stays BUSY & keeps primary currentTaskId
+  const existingRunning = createTaskEntity({
+    id: 'tsk_haiku_primary',
+    sequenceNumber: 153,
+    seed: SEED,
+    simTimeMs: 1000,
+    type: 'SUMMARIZATION',
+    title: 'Primary Running Task',
+    status: 'EXTRACTING',
+    assignedWorkerId: 'haiku',
+  });
+  const secondaryQueued = makeUnassignedQueuedTask({
+    id: 'tsk_haiku_secondary',
+    sequenceNumber: 154,
+    type: 'SUMMARIZATION',
+  });
+  const baseWorkers = createInitialWorkersRegistry();
+  let snapBusy = createCleanSnapshot({
+    tasks: { [existingRunning.id]: existingRunning },
+    workers: {
+      ...baseWorkers,
+      haiku: {
+        ...withTaskActivated(baseWorkers.haiku, existingRunning.id),
+        status: 'BUSY',
+        animationState: 'typing',
+      },
+    },
+  });
+  snapBusy = enqueueMany(snapBusy, [secondaryQueued]);
+
+  const resBusy = dispatchPass(snapBusy);
+  const haikuAfterBusy = resBusy.snapshot.workers.haiku;
+  assert.equal(haikuAfterBusy.status, 'BUSY');
+  assert.deepEqual(haikuAfterBusy.activeTaskIds, [
+    'tsk_haiku_primary',
+    'tsk_haiku_secondary',
+  ]);
+  assert.equal(haikuAfterBusy.currentTaskId, 'tsk_haiku_primary');
+  assertWorkerConcurrencyInvariant(haikuAfterBusy, 2);
+});
+
+test('DP-22. Dispatched task transitions cleanly through QUEUED -> ASSIGNED -> RUNNING with accurate metadata', () => {
+  const queuedTask = makeUnassignedQueuedTask({
+    id: 'tsk_lifecycle_check',
+    sequenceNumber: 155,
+    simTimeMs: 1000,
+    type: 'DATA_ARCHIVING',
+    priority: 'HIGH',
+  });
+  let snapshot = createCleanSnapshot({ simTimeMs: 1000 });
+  snapshot = enqueueMany(snapshot, [queuedTask]);
+  const snapshotAtDispatch: SimulationSnapshot = {
+    ...snapshot,
+    simTimeMs: 4500,
+  };
+
+  const result = dispatchPass(snapshotAtDispatch);
+
+  assert.equal(result.dispatched.length, 1);
+  const activated = result.snapshot.tasks[queuedTask.id];
+  assert.equal(activated.lifecycleStatus, 'RUNNING');
+  assert.equal(activated.status, 'VALIDATING'); // initial stage of ARCHIVAL pipeline
+  assert.equal(activated.assignedWorkerId, 'data_archivist');
+  assert.equal(activated.workerId, 'data_archivist');
+  assert.equal(activated.attemptCount, 1);
+  assert.equal(activated.createdAt, 1000);
+  assert.equal(activated.queuedAt, 1000);
+  assert.equal(activated.startedAt, 4500);
+  assert.equal(activated.startedAtSimMs, 4500);
+  assert.equal(activated.updatedAt, 4500);
+  assert.equal(
+    activated.costPerThousandTokensUsd,
+    COST_PER_1K_TOKENS_SIMULATED.data_archivist,
+  );
+});
+
+test('DP-23. Blocked task remains in global queue and dispatches on subsequent pass once worker frees up', () => {
+  const t1 = makeUnassignedQueuedTask({
+    id: 'tsk_sonnet_first',
+    sequenceNumber: 156,
+    type: 'DATA_ANALYSIS',
+  });
+  const t2 = makeUnassignedQueuedTask({
+    id: 'tsk_sonnet_second',
+    sequenceNumber: 157,
+    type: 'DATA_ANALYSIS',
+  });
+
+  const snapshot = enqueueMany(createCleanSnapshot(), [t1, t2]);
+  const pass1 = dispatchPass(snapshot);
+
+  assert.equal(pass1.dispatched.length, 1);
+  assert.equal(pass1.dispatched[0].taskId, 'tsk_sonnet_first');
+  assert.equal(pass1.blocked.length, 1);
+  assert.equal(pass1.blocked[0].taskId, 'tsk_sonnet_second');
+  assert.deepEqual(
+    pass1.snapshot.scheduler?.entries.map((e) => e.taskId),
+    ['tsk_sonnet_second'],
+  );
+
+  // Free sonnet on a later snapshot and verify t2 now dispatches cleanly
+  const freedSnapshot: SimulationSnapshot = {
+    ...pass1.snapshot,
+    simTimeMs: 6000,
+    workers: {
+      ...pass1.snapshot.workers,
+      sonnet: {
+        ...pass1.snapshot.workers.sonnet,
+        status: 'IDLE',
+        transitionSimMs: 0,
+        activeTaskIds: [],
+        currentTaskId: null,
+      },
+    },
+  };
+  const pass2 = dispatchPass(freedSnapshot);
+  assert.equal(pass2.dispatched.length, 1);
+  assert.equal(pass2.dispatched[0].taskId, 'tsk_sonnet_second');
+  assert.deepEqual(pass2.snapshot.scheduler?.entries, []);
+});
+
+test('DP-24. Blocked task does not modify task entity reference or properties', () => {
+  const blockedTask = makeUnassignedQueuedTask({
+    id: 'tsk_untouched_when_blocked',
+    sequenceNumber: 158,
+    type: 'DATA_ANALYSIS',
+  });
+  const baseWorkers = createInitialWorkersRegistry();
+  let snapshot = createCleanSnapshot({
+    workers: {
+      ...baseWorkers,
+      sonnet: { ...baseWorkers.sonnet, status: 'PAUSED' },
+    },
+  });
+  snapshot = enqueueMany(snapshot, [blockedTask]);
+
+  const result = dispatchPass(snapshot);
+
+  assert.equal(result.blocked.length, 1);
+  assert.strictEqual(result.snapshot.tasks[blockedTask.id], blockedTask);
+  assert.equal(result.snapshot.tasks[blockedTask.id].status, 'QUEUED');
+  assert.equal(result.snapshot.tasks[blockedTask.id].assignedWorkerId, null);
+});
+
+test('DP-25. Event IDs are strictly unique across multiple dispatches in the same pass and zero events emit on block/drop', () => {
+  const tasks = [
+    makeUnassignedQueuedTask({
+      id: 'tsk_evt_1',
+      sequenceNumber: 161,
+      type: 'SUMMARIZATION',
+    }),
+    makeUnassignedQueuedTask({
+      id: 'tsk_evt_2',
+      sequenceNumber: 162,
+      type: 'SUMMARIZATION',
+    }),
+    makeUnassignedQueuedTask({
+      id: 'tsk_evt_3',
+      sequenceNumber: 163,
+      type: 'DATA_ANALYSIS',
+    }),
+    makeUnassignedQueuedTask({
+      id: 'tsk_evt_blocked',
+      sequenceNumber: 164,
+      type: 'DATA_ANALYSIS',
+    }),
+  ];
+
+  let snapshot = enqueueMany(createCleanSnapshot(), tasks);
+  // Also inject a missing-task entry so dropped > 0 in the same pass
+  snapshot = {
+    ...snapshot,
+    scheduler: {
+      entries: [
+        ...(snapshot.scheduler?.entries ?? []),
+        { taskId: 'tsk_evt_ghost', sequence: 99, enqueuedAtSimMs: 2500 },
+      ],
+      nextSequence: 100,
+    },
+  };
+
+  const initialEventCount = snapshot.events.length;
+  const result = dispatchPass(snapshot);
+
+  assert.equal(result.dispatched.length, 3);
+  assert.equal(result.blocked.length, 1);
+  assert.equal(result.dropped.length, 1);
+  // Exactly 3 new TASK_STARTED events added (none for blocked or dropped)
+  assert.equal(result.snapshot.events.length, initialEventCount + 3);
+
+  const allIds = result.snapshot.events.map((e) => e.id);
+  const uniqueIds = new Set(allIds);
+  assert.equal(uniqueIds.size, allIds.length);
+
+  for (let i = 0; i < 3; i++) {
+    assert.equal(result.snapshot.events[i].type, 'TASK_STARTED');
+    assert.equal(result.snapshot.events[i].isSimulated, true);
+  }
+});
+
+test('DP-26. Event cap 80 is strictly respected with unique monotonic event IDs at capacity', () => {
+  const prefilledEvents: ActivityEvent[] = [];
+  for (let i = 80; i >= 1; i--) {
+    prefilledEvents.push({
+      id: `evt_2000_${100 + i}`,
+      simTimestampMs: 2000,
+      workerId: null,
+      workerName: 'System',
+      department: 'Command',
+      taskId: null,
+      type: 'SIMULATION_CONTROL',
+      message: `[SIMULATED] Historical event #${i}`,
+      accentColor: '#22d3ee',
+      isSimulated: true,
+    });
+  }
+  assert.equal(prefilledEvents.length, 80);
+  assert.equal(prefilledEvents[0].id, 'evt_2000_180');
+
+  const tasks = [
+    makeUnassignedQueuedTask({
+      id: 'tsk_cap80_1',
+      sequenceNumber: 171,
+      type: 'SUMMARIZATION',
+    }),
+    makeUnassignedQueuedTask({
+      id: 'tsk_cap80_2',
+      sequenceNumber: 172,
+      type: 'DATA_ANALYSIS',
+    }),
+    makeUnassignedQueuedTask({
+      id: 'tsk_cap80_3',
+      sequenceNumber: 173,
+      type: 'DATA_ARCHIVING',
+    }),
+  ];
+
+  const snapshot = enqueueMany(
+    createCleanSnapshot({ events: prefilledEvents, simTimeMs: 3000 }),
+    tasks,
+  );
+  const result = dispatchPass(snapshot);
+
+  assert.equal(result.dispatched.length, 3);
+  assert.equal(result.snapshot.events.length, 80);
+  assert.deepEqual(
+    result.snapshot.events.slice(0, 3).map((e) => e.id),
+    ['evt_3000_183', 'evt_3000_182', 'evt_3000_181'],
+  );
+  assert.equal(
+    new Set(result.snapshot.events.map((e) => e.id)).size,
+    80,
+  );
+});
+
+test('DP-27. Deep-frozen input snapshot is never mutated across dispatch, block, drop, and pause passes', () => {
+  const dispatchableTask = makeUnassignedQueuedTask({
+    id: 'tsk_freeze_disp',
+    sequenceNumber: 175,
+    type: 'DATA_ANALYSIS',
+  });
+  const blockedTask = makeUnassignedQueuedTask({
+    id: 'tsk_freeze_blk',
+    sequenceNumber: 176,
+    type: 'DATA_ANALYSIS',
+  });
+
+  let snapshot = enqueueMany(createCleanSnapshot(), [
+    dispatchableTask,
+    blockedTask,
+  ]);
+  snapshot = {
+    ...snapshot,
+    scheduler: {
+      entries: [
+        ...(snapshot.scheduler?.entries ?? []),
+        { taskId: 'tsk_freeze_missing', sequence: 50, enqueuedAtSimMs: 2500 },
+      ],
+      nextSequence: 51,
+    },
+  };
+
+  const frozenSnapshot = deepFreeze(snapshot);
+  const resActive = dispatchPass(frozenSnapshot);
+  assert.equal(resActive.dispatched.length, 1);
+  assert.equal(resActive.blocked.length, 1);
+  assert.equal(resActive.dropped.length, 1);
+
+  const frozenPaused = deepFreeze({
+    ...createCleanSnapshot(),
+    isGlobalPaused: true,
+  });
+  const resPaused = dispatchPass(frozenPaused);
+  assert.strictEqual(resPaused.snapshot, frozenPaused);
+});
+
+test('DP-28. Unchanged workers, unchanged tasks, and workerOrder preserve exact object references', () => {
+  const unrelatedStoredTask = makeUnassignedQueuedTask({
+    id: 'tsk_unrelated_stored',
+    sequenceNumber: 177,
+    type: 'COMPLEX_REASONING',
+  });
+  const dispatchedTask = makeUnassignedQueuedTask({
+    id: 'tsk_only_sonnet',
+    sequenceNumber: 178,
+    type: 'DATA_ANALYSIS',
+  });
+
+  let snapshot = createCleanSnapshot({
+    tasks: { [unrelatedStoredTask.id]: unrelatedStoredTask },
+  });
+  snapshot = enqueueMany(snapshot, [dispatchedTask]);
+
+  const result = dispatchPass(snapshot);
+
+  assert.equal(result.dispatched.length, 1);
+  assert.equal(result.dispatched[0].workerId, 'sonnet');
+  assert.strictEqual(result.snapshot.workerOrder, snapshot.workerOrder);
+  assert.strictEqual(
+    result.snapshot.tasks[unrelatedStoredTask.id],
+    unrelatedStoredTask,
+  );
+  assert.notStrictEqual(
+    result.snapshot.workers.sonnet,
+    snapshot.workers.sonnet,
+  );
+
+  for (const wid of INITIAL_WORKER_ORDER) {
+    if (wid !== 'sonnet') {
+      assert.strictEqual(
+        result.snapshot.workers[wid],
+        snapshot.workers[wid],
+        `Unchanged worker "${wid}" reference must be preserved`,
+      );
+    }
+  }
+});
+
+test('DP-29. Final scheduler preserves unprocessed/blocked entry references and relative order', () => {
+  // sonnet is PAUSED so DATA_ANALYSIS tasks stay blocked; haiku is IDLE so SUMMARIZATION dispatches
+  const blockedLowFirst = makeUnassignedQueuedTask({
+    id: 'tsk_keep_order_low_1',
+    sequenceNumber: 181,
+    type: 'DATA_ANALYSIS',
+    priority: 'LOW',
+  });
+  const dispatchedHighMiddle = makeUnassignedQueuedTask({
+    id: 'tsk_dispatch_middle',
+    sequenceNumber: 182,
+    type: 'SUMMARIZATION',
+    priority: 'HIGH',
+  });
+  const blockedCriticalLast = makeUnassignedQueuedTask({
+    id: 'tsk_keep_order_crit_3',
+    sequenceNumber: 183,
+    type: 'DATA_ANALYSIS',
+    priority: 'CRITICAL',
+  });
+
+  const baseWorkers = createInitialWorkersRegistry();
+  let snapshot = createCleanSnapshot({
+    workers: {
+      ...baseWorkers,
+      sonnet: { ...baseWorkers.sonnet, status: 'PAUSED' },
+    },
+  });
+  snapshot = enqueueMany(snapshot, [
+    blockedLowFirst,
+    dispatchedHighMiddle,
+    blockedCriticalLast,
+  ]);
+
+  const entryBefore0 = snapshot.scheduler!.entries[0];
+  const entryBefore2 = snapshot.scheduler!.entries[2];
+
+  const result = dispatchPass(snapshot);
+
+  assert.equal(result.dispatched.length, 1);
+  assert.equal(result.dispatched[0].taskId, 'tsk_dispatch_middle');
+  assert.equal(result.blocked.length, 2);
+
+  // Surviving entries preserve exact references and original queue order (no accidental reordering)
+  assert.equal(result.snapshot.scheduler?.entries.length, 2);
+  assert.strictEqual(result.snapshot.scheduler?.entries[0], entryBefore0);
+  assert.strictEqual(result.snapshot.scheduler?.entries[1], entryBefore2);
+  assert.equal(result.snapshot.scheduler?.nextSequence, 4);
+});
+
+test('DP-30. dispatchPass is strictly deterministic across repeated calls on identical inputs', () => {
+  const tasks = [
+    makeUnassignedQueuedTask({
+      id: 'tsk_det_1',
+      sequenceNumber: 191,
+      type: 'DECISION_EVALUATION',
+      priority: 'HIGH',
+    }),
+    makeUnassignedQueuedTask({
+      id: 'tsk_det_2',
+      sequenceNumber: 192,
+      type: 'DECISION_EVALUATION',
+      priority: 'CRITICAL',
+    }),
+    makeUnassignedQueuedTask({
+      id: 'tsk_det_3',
+      sequenceNumber: 193,
+      type: 'DECISION_EVALUATION',
+      priority: 'NORMAL',
+    }),
+    makeUnassignedQueuedTask({
+      id: 'tsk_det_4',
+      sequenceNumber: 194,
+      type: 'SUMMARIZATION',
+      priority: 'LOW',
+    }),
+  ];
+
+  const snapshot = deepFreeze(enqueueMany(createCleanSnapshot(), tasks));
+
+  const run1 = dispatchPass(snapshot);
+  const run2 = dispatchPass(snapshot);
+  const run3 = dispatchPass(snapshot);
+
+  assert.deepEqual(run1, run2);
+  assert.deepEqual(run2, run3);
+});
+
+test('DP-31. Empty normalized scheduler preserves exact snapshot reference; missing scheduler normalizes cleanly', () => {
+  const cleanEmpty = createCleanSnapshot();
+  const resClean = dispatchPass(cleanEmpty);
+  assert.strictEqual(resClean.snapshot, cleanEmpty);
+  assert.deepEqual(resClean.dispatched, []);
+  assert.deepEqual(resClean.blocked, []);
+  assert.deepEqual(resClean.dropped, []);
+  assert.equal(resClean.skipped, undefined);
+
+  const missingScheduler = createCleanSnapshot();
+  delete missingScheduler.scheduler;
+  const resNormalized = dispatchPass(missingScheduler);
+  assert.notStrictEqual(resNormalized.snapshot, missingScheduler);
+  assert.deepEqual(resNormalized.snapshot.scheduler, {
+    entries: [],
+    nextSequence: 1,
+  });
+  assert.strictEqual(resNormalized.snapshot.tasks, missingScheduler.tasks);
+  assert.strictEqual(resNormalized.snapshot.workers, missingScheduler.workers);
+  assert.strictEqual(resNormalized.snapshot.events, missingScheduler.events);
+});
+
+test('DP-32. Eligible non-IDLE worker statuses (WAITING, TASK_RECEIVED, WALKING, BUSY) all accept global dispatch when capacity remains', () => {
+  const eligibleStatuses = [
+    'WAITING',
+    'TASK_RECEIVED',
+    'WALKING',
+    'BUSY',
+  ] as const;
+
+  for (const status of eligibleStatuses) {
+    const task = makeUnassignedQueuedTask({
+      id: `tsk_status_${status.toLowerCase()}`,
+      sequenceNumber: 201,
+      type: 'SUMMARIZATION',
+    });
+    const baseWorkers = createInitialWorkersRegistry();
+    let snapshot = createCleanSnapshot({
+      workers: {
+        ...baseWorkers,
+        haiku: {
+          ...baseWorkers.haiku,
+          status,
+          transitionSimMs: 250,
+        },
+      },
+    });
+    snapshot = enqueueMany(snapshot, [task]);
+
+    const result = dispatchPass(snapshot);
+    assert.equal(
+      result.dispatched.length,
+      1,
+      `Expected worker in ${status} state with remaining capacity to accept dispatch`,
+    );
+    assert.equal(result.dispatched[0].workerId, 'haiku');
+  }
 });
