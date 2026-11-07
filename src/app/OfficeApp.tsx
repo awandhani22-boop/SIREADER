@@ -179,17 +179,18 @@ export function OfficeApp() {
 
         {/* Top-Center Floating Isometric Camera & Graphics Dock */}
         <div
+          role="group"
           aria-label="Isometric Camera and Graphics Controls"
-          className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 px-2 py-1 bg-[#0B1220] border border-slate-800/95 rounded-lg shadow-xl pointer-events-auto"
+          className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-center gap-1 px-2 py-1 bg-[#0B1220] border border-slate-800/95 rounded-lg shadow-xl pointer-events-auto sm:max-w-none sm:flex-nowrap"
         >
           <button
             type="button"
             onClick={() => triggerCameraZoom(4)}
-            className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer whitespace-nowrap"
+            className="flex items-center gap-1 px-1 sm:px-2 py-1 text-[11px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer whitespace-nowrap"
             aria-label="Zoom In Camera"
           >
             <ZoomIn className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Zoom In</span>
+            <span className="hidden sm:inline">Zoom In</span>
           </button>
           <button
             type="button"
@@ -198,7 +199,7 @@ export function OfficeApp() {
             aria-label="Zoom Out Camera"
           >
             <ZoomOut className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Zoom Out</span>
+            <span className="hidden sm:inline">Zoom Out</span>
           </button>
           <button
             type="button"
@@ -207,7 +208,7 @@ export function OfficeApp() {
             aria-label="Reset Isometric View"
           >
             <Camera className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Reset Isometric View</span>
+            <span className="hidden sm:inline">Reset Isometric View</span>
           </button>
           <span className="text-slate-700 px-0.5" aria-hidden="true">
             |
@@ -217,16 +218,16 @@ export function OfficeApp() {
             onClick={() =>
               setGraphicsPreset(graphicsPreset === 'high' ? 'balanced' : 'high')
             }
-            className="flex items-center gap-1 px-2 py-1 font-mono text-[10px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer whitespace-nowrap"
+            className="flex items-center gap-1 px-1 sm:px-2 py-1 font-mono text-[10px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer whitespace-nowrap"
             aria-label="Switch Graphics Preset"
           >
             <Layers className="w-3 h-3 text-sky-400" />
-            <span>{graphicsPreset === 'high' ? 'GFX:High' : 'GFX:Balanced'}</span>
+            <span className="hidden sm:inline">{graphicsPreset === 'high' ? 'GFX:High' : 'GFX:Balanced'}</span>
           </button>
           <button
             type="button"
             onClick={() => setReducedMotion(!reducedMotion)}
-            className={`flex items-center gap-1 px-2 py-1 font-mono text-[10px] font-medium rounded transition-colors cursor-pointer whitespace-nowrap ${
+            className={`flex items-center gap-1 px-1 sm:px-2 py-1 font-mono text-[10px] font-medium rounded transition-colors cursor-pointer whitespace-nowrap ${
               reducedMotion
                 ? 'bg-violet-500/25 text-violet-200 border border-violet-500/40'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
@@ -234,7 +235,7 @@ export function OfficeApp() {
             aria-label="Toggle Reduced Motion"
           >
             <FastForward className="w-3 h-3" />
-            <span>{reducedMotion ? 'Motion:Reduced' : 'Motion:Full'}</span>
+            <span className="hidden sm:inline">{reducedMotion ? 'Motion:Reduced' : 'Motion:Full'}</span>
           </button>
         </div>
 
