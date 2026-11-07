@@ -3,8 +3,14 @@
 ## Role
 Act as a senior frontend engineer, Three.js technical artist, interaction designer, and test engineer. Build a maintainable futuristic isometric 3D virtual office. Do not behave as a one-shot code generator.
 
+## Canonical product mission — read before every task
+- `docs/PRODUCT_VISION.md` is the canonical explanation of what SIREADER originally set out to build and what the final product must become. Read it before planning or implementing any task.
+- `docs/ROADMAP.md` is the canonical phase order, scope, dependencies, and v1.0 acceptance plan.
+- `docs/PROJECT_STATE.md` records the actual current phase, verified progress, and known limitations.
+- Read those three files before code inspection. If conversation memory conflicts with repository evidence, inspect the current branch and resolve the discrepancy explicitly.
+
 ## Product objective
-Create a desktop-first virtual office for SIREADER, where human-like AI worker avatars represent software workers. Initial roster: Supervisor, Haiku, Sonnet, Opus, Decision Engineer, Market Monitor, and Data Archivist. The architecture must be data-driven and support 50–100 workers later without duplicating scene code.
+Build a real AI workforce platform, not a 3D office game or decorative dashboard. The existing Virtual Office is the human-facing 3D environment for observing and supervising specialized AI workers; the Python backend is the operational brain and source of truth. Initial roster: Supervisor, Haiku, Sonnet, Opus, Decision Engineer, Market Monitor, and Data Archivist. The architecture must be data-driven and support 50–100 workers later without duplicating scene code. A moving avatar is not proof of real work; LIVE worker activity requires authoritative backend task/runtime evidence. Keep DEMO/SIMULATED data strictly separate from LIVE data.
 
 ## Current scope boundaries (Phase 2.3 — browser QA and simulation UX closure)
 - Follow `docs/ROADMAP.md` as the canonical phase plan and final v1.0 acceptance criteria. Keep `docs/PROJECT_STATE.md` current after milestones.
@@ -17,7 +23,7 @@ Create a desktop-first virtual office for SIREADER, where human-like AI worker a
 - Keep priority ordering, worker matching, and dispatch decisions in `src/scheduler/` and the simulation runtime. UI components submit commands and present state; they do not reimplement scheduler policy.
 - `DEMO_MAX_QUEUE_CAP` is an automatic demo-generator safeguard only. It must never be presented or used as the global scheduler queue capacity.
 - No order placement or trading actions.
-- Do not edit files outside `office-ui`.
+- Work only in the existing Virtual Office frontend project and its explicitly designated documentation. Do not modify the separate Python backend unless a later roadmap phase explicitly authorizes a backend task. Confirm the repository's actual frontend root; do not assume a nested `office-ui` folder is the application root.
 - Do not read, request, print, or copy secrets from `.env` or other credential files.
 
 ## Required visual direction
