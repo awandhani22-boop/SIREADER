@@ -220,6 +220,7 @@ export function OfficeApp() {
             }
             className="flex items-center gap-1 px-1 sm:px-2 py-1 font-mono text-[10px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer whitespace-nowrap"
             aria-label="Switch Graphics Preset"
+            aria-pressed={graphicsPreset === 'high'}
           >
             <Layers className="w-3 h-3 text-sky-400" />
             <span className="hidden sm:inline">{graphicsPreset === 'high' ? 'GFX:High' : 'GFX:Balanced'}</span>
@@ -233,6 +234,7 @@ export function OfficeApp() {
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
             aria-label="Toggle Reduced Motion"
+            aria-pressed={reducedMotion}
           >
             <FastForward className="w-3 h-3" />
             <span className="hidden sm:inline">{reducedMotion ? 'Motion:Reduced' : 'Motion:Full'}</span>
