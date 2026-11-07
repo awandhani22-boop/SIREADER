@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import React from 'react';
-import { flushSync } from 'react-dom';
+import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GlobalQueuePanel } from '../ui/GlobalQueuePanel';
 import { TopBar } from '../ui/TopBar';
@@ -62,7 +61,7 @@ function invokeReactProp(node: MockDomNode | null, propName: string, ...args: un
   const props = (node as unknown as Record<string, unknown>)[reactPropsKey] as Record<string, unknown>;
   const handler = props[propName];
   assert.equal(typeof handler, 'function', 'Expected React event handler');
-  flushSync(() => {
+  act(() => {
     (handler as (...handlerArgs: unknown[]) => void)(...args);
   });
 }
@@ -842,18 +841,29 @@ test('31. TopBar displays queue counter and toggle button', () => {
   const container = document.createElement('div') as unknown as MockDomNode;
   const root = createRoot(container as unknown as HTMLElement);
 
-  flushSync(() => {
+  act(() => {
     root.render(React.createElement(TopBar));
   });
 
   const toggleBtn = findNodeByTestId(container, 'toggle-global-queue-btn');
   assert.ok(toggleBtn);
-  const text = collectDomText(container);
-  assert.ok(text.includes('SIREADER Virtual Office'));
-  assert.ok(text.includes('SIMULATION MODE'));
-  assert.ok(!text.includes('SIMULATED PHASE 1'));
-  assert.ok(text.includes('Queued Total (SIMULATED):'));
-  assert.ok(text.includes('Pool Queue (0)'));
+  try {
+    const text = collectDomText(container);
+    assert.ok(text.includes('SIREADER Virtual Office'));
+    assert.ok(text.includes('SIMULATION MODE'));
+    assert.ok(!text.includes('SIMULATED PHASE 1'));
+    assert.ok(text.includes('Queued Total (SIMULATED):'));
+
+    const poolQueueCounter = findNodeByTestId(container, 'topbar-pool-queue-count');
+    assert.ok(poolQueueCounter, 'TopBar must render the pool-only queue counter');
+    assert.match(
+      collectDomText(poolQueueCounter),
+      /^Pool Queue\s*\(\s*0\s*\)$/,
+      'Pool Queue must show the scheduler queue count only',
+    );
+  } finally {
+    act(() => root.unmount());
+  }
 });
 
 test('32. Queue drawer toggle action updates isGlobalQueueOpen in store', () => {
@@ -863,10 +873,10 @@ test('32. Queue drawer toggle action updates isGlobalQueueOpen in store', () => 
   ensureMinimalDomEnvironment();
   const container = document.createElement('div') as unknown as MockDomNode;
   const root = createRoot(container as unknown as HTMLElement);
-  flushSync(() => root.render(React.createElement(TopBar)));
+  act(() => root.render(React.createElement(TopBar)));
   invokeReactProp(findNodeByTestId(container, 'toggle-global-queue-btn'), 'onClick');
   assert.equal(useOfficeStore.getState().isGlobalQueueOpen, true);
-  flushSync(() => root.unmount());
+  act(() => root.unmount());
 });
 
 test('33. GlobalQueuePanel renders WAITING status for queued task', () => {
@@ -883,14 +893,18 @@ test('33. GlobalQueuePanel renders WAITING status for queued task', () => {
   const container = document.createElement('div') as unknown as MockDomNode;
   const root = createRoot(container as unknown as HTMLElement);
 
-  flushSync(() => {
+  act(() => {
     root.render(React.createElement(GlobalQueuePanel));
   });
 
-  const text = collectDomText(container);
-  assert.ok(text.includes('Global Task Queue'));
-  assert.ok(text.includes('Waiting Verification Task'));
-  assert.ok(text.includes('WAITING'));
+  try {
+    const text = collectDomText(container);
+    assert.ok(text.includes('Global Task Queue'));
+    assert.ok(text.includes('Waiting Verification Task'));
+    assert.ok(text.includes('WAITING'));
+  } finally {
+    act(() => root.unmount());
+  }
 });
 
 test('34. GlobalQueuePanel renders BLOCKED status with diagnostic reason', () => {
@@ -922,14 +936,18 @@ test('34. GlobalQueuePanel renders BLOCKED status with diagnostic reason', () =>
   const container = document.createElement('div') as unknown as MockDomNode;
   const root = createRoot(container as unknown as HTMLElement);
 
-  flushSync(() => {
+  act(() => {
     root.render(React.createElement(GlobalQueuePanel));
   });
 
-  const text = collectDomText(container);
-  assert.ok(text.includes('BLOCKED'));
-  assert.ok(text.includes('ALL_CAPABLE_WORKERS_AT_CAPACITY'));
-  assert.ok(text.includes('Worker busy with other priority'));
+  try {
+    const text = collectDomText(container);
+    assert.ok(text.includes('BLOCKED'));
+    assert.ok(text.includes('ALL_CAPABLE_WORKERS_AT_CAPACITY'));
+    assert.ok(text.includes('Worker busy with other priority'));
+  } finally {
+    act(() => root.unmount());
+  }
 });
 
 test('35. GlobalQueuePanel renders RUNNING activity item', () => {
@@ -964,14 +982,17 @@ test('35. GlobalQueuePanel renders RUNNING activity item', () => {
   const container = document.createElement('div') as unknown as MockDomNode;
   const root = createRoot(container as unknown as HTMLElement);
 
-  flushSync(() => {
+  act(() => {
     root.render(React.createElement(GlobalQueuePanel));
   });
 
-  invokeReactProp(findNodeByTestId(container, 'tab-activity'), 'onClick');
-  assert.ok(findNodeByTestId(container, 'activity-item-tsk_pool_active_99'));
-  assert.ok(collectDomText(container).includes('Active Running Demo Task'));
-  flushSync(() => root.unmount());
+  try {
+    invokeReactProp(findNodeByTestId(container, 'tab-activity'), 'onClick');
+    assert.ok(findNodeByTestId(container, 'activity-item-tsk_pool_active_99'));
+    assert.ok(collectDomText(container).includes('Active Running Demo Task'));
+  } finally {
+    act(() => root.unmount());
+  }
 });
 
 test('36. GlobalQueuePanel renders COMPLETED and FAILED activity', () => {
@@ -1035,12 +1056,15 @@ test('37. Add Global Task control calls enqueueGlobalMockTask successfully', () 
   ensureMinimalDomEnvironment();
   const container = document.createElement('div') as unknown as MockDomNode;
   const root = createRoot(container as unknown as HTMLElement);
-  flushSync(() => root.render(React.createElement(GlobalQueuePanel)));
+  act(() => root.render(React.createElement(GlobalQueuePanel)));
   const form = findNodeByTestId(container, 'add-task-form');
-  invokeReactProp(form, 'onSubmit', { preventDefault() {} });
-  assert.equal(useOfficeStore.getState().scheduler?.entries.length, 1);
-  assert.ok(collectDomText(container).includes('Enqueued'));
-  flushSync(() => root.unmount());
+  try {
+    invokeReactProp(form, 'onSubmit', { preventDefault() {} });
+    assert.equal(useOfficeStore.getState().scheduler?.entries.length, 1);
+    assert.ok(collectDomText(container).includes('Enqueued'));
+  } finally {
+    act(() => root.unmount());
+  }
 });
 
 test('38. Drawer close button closes the global queue panel', () => {
@@ -1051,10 +1075,13 @@ test('38. Drawer close button closes the global queue panel', () => {
 
   const container = document.createElement('div') as unknown as MockDomNode;
   const root = createRoot(container as unknown as HTMLElement);
-  flushSync(() => root.render(React.createElement(GlobalQueuePanel)));
-  invokeReactProp(findNodeByTestId(container, 'close-global-queue-btn'), 'onClick');
-  assert.equal(useOfficeStore.getState().isGlobalQueueOpen, false);
-  flushSync(() => root.unmount());
+  act(() => root.render(React.createElement(GlobalQueuePanel)));
+  try {
+    invokeReactProp(findNodeByTestId(container, 'close-global-queue-btn'), 'onClick');
+    assert.equal(useOfficeStore.getState().isGlobalQueueOpen, false);
+  } finally {
+    act(() => root.unmount());
+  }
 });
 
 test('39. Activity timestamps follow lifecycle-specific sources and FAILED error time', () => {
@@ -1113,4 +1140,166 @@ test('42. Only RUNNING lifecycle tasks contribute to activeTasksCount', () => {
   ])) as unknown as Record<string, TaskEntity>;
   const totals = selectGlobalSimulatedTotals({} as Record<string, WorkerEntity>, tasks);
   assert.equal(totals.activeTasksCount, 1);
+});
+
+
+test('43. Running task count remains equal to worker active task IDs after deterministic ticks', () => {
+  resetStore();
+
+  for (let tick = 0; tick < 48; tick += 1) {
+    useOfficeStore.getState().tickSimulation();
+  }
+
+  const state = useOfficeStore.getState();
+  const runningTaskIds = Object.values(state.tasks)
+    .filter((task) => task.lifecycleStatus === 'RUNNING')
+    .map((task) => task.id)
+    .sort();
+
+  const workerActiveTaskIds = Object.values(state.workers)
+    .flatMap((worker) => worker.activeTaskIds ?? [])
+    .sort();
+
+  assert.equal(
+    new Set(workerActiveTaskIds).size,
+    workerActiveTaskIds.length,
+    'A task must not be active on more than one worker',
+  );
+  assert.deepEqual(
+    workerActiveTaskIds,
+    runningTaskIds,
+    'Every RUNNING task must have exactly one matching worker activeTaskId',
+  );
+});
+
+test('44. Dispatched pool task failure uses its real error occurrence timestamp', () => {
+  resetStore();
+
+  const enqueue = useOfficeStore.getState().enqueueGlobalMockTask({
+    category: 'CLASSIFICATION',
+    type: 'QUICK_RESEARCH',
+    priority: 'HIGH',
+    title: 'Engine Dispatched Failure Regression',
+    durationSimMs: 5000,
+  });
+  assert.ok(enqueue.ok && enqueue.taskId);
+
+  useOfficeStore.getState().tickSimulation();
+  const dispatchedSnapshot = useOfficeStore.getState();
+  const dispatchedTask = dispatchedSnapshot.tasks[enqueue.taskId];
+  assert.ok(dispatchedTask);
+  assert.ok(dispatchedTask.assignedWorkerId);
+
+  const assignedWorker = dispatchedSnapshot.workers[dispatchedTask.assignedWorkerId];
+  assert.ok(assignedWorker.activeTaskIds.includes(dispatchedTask.id));
+
+  const failedSnapshot = WorkerMockService.failTask(
+    dispatchedSnapshot,
+    assignedWorker.id,
+    dispatchedTask.id,
+  );
+  const failedTask = failedSnapshot.tasks[dispatchedTask.id];
+  assert.ok(failedTask);
+  assert.equal(failedTask.lifecycleStatus, 'FAILED');
+  assert.equal(failedTask.completedAtSimMs, null);
+  assert.ok(failedTask.error);
+
+  const earlierCompletedTask = {
+    ...failedTask,
+    id: 'tsk_pool_completed_before_failure',
+    title: 'Earlier Completed Task',
+    status: 'COMPLETED',
+    lifecycleStatus: 'COMPLETED',
+    completedAtSimMs: failedTask.error.occurredAtSimMs - 100,
+    updatedAt: failedTask.error.occurredAtSimMs - 100,
+    error: null,
+  } as unknown as TaskEntity;
+
+  const activity = selectGlobalTaskActivity(
+    {
+      [failedTask.id]: failedTask,
+      [earlierCompletedTask.id]: earlierCompletedTask,
+    },
+    failedSnapshot.scheduler,
+  );
+
+  assert.equal(activity[0]?.task.id, failedTask.id);
+  assert.equal(activity[0]?.lastActiveSimMs, failedTask.error.occurredAtSimMs);
+});
+
+test('45. TopBar distinguishes global queued total from pool-only queue count', () => {
+  ensureMinimalDomEnvironment();
+
+  const readCounters = () => {
+    const container = document.createElement('div') as unknown as MockDomNode;
+    const root = createRoot(container as unknown as HTMLElement);
+    act(() => {
+      root.render(React.createElement(TopBar));
+    });
+
+    try {
+      const queuedTotalNode = findNodeByTestId(container, 'global-queued-count');
+      const poolQueueNode = findNodeByTestId(container, 'topbar-pool-queue-count');
+      assert.ok(queuedTotalNode);
+      assert.ok(poolQueueNode);
+      return {
+        queuedTotal: collectDomText(queuedTotalNode).trim(),
+        poolQueue: collectDomText(poolQueueNode).replace(/\s+/g, ' ').trim(),
+      };
+    } finally {
+      act(() => root.unmount());
+    }
+  };
+
+  resetStore();
+  assert.ok(useOfficeStore.getState().enqueueGlobalMockTask({ title: 'Global Queue 1' }).ok);
+  assert.ok(useOfficeStore.getState().enqueueGlobalMockTask({ title: 'Global Queue 2' }).ok);
+  const globalOnly = readCounters();
+  assert.equal(globalOnly.queuedTotal, '2');
+  assert.match(globalOnly.poolQueue, /^Pool Queue\s*\(\s*2\s*\)$/);
+
+  resetStore();
+  useOfficeStore.setState((state) => ({
+    workers: {
+      ...state.workers,
+      haiku: {
+        ...state.workers.haiku,
+        taskQueueIds: ['legacy_1', 'legacy_2', 'legacy_3'],
+      },
+    },
+  }));
+  const legacyOnly = readCounters();
+  assert.equal(legacyOnly.queuedTotal, '3');
+  assert.match(legacyOnly.poolQueue, /^Pool Queue\s*\(\s*0\s*\)$/);
+
+  resetStore();
+  assert.ok(useOfficeStore.getState().enqueueGlobalMockTask({ title: 'Combined Queue 1' }).ok);
+  assert.ok(useOfficeStore.getState().enqueueGlobalMockTask({ title: 'Combined Queue 2' }).ok);
+  useOfficeStore.setState((state) => ({
+    workers: {
+      ...state.workers,
+      haiku: {
+        ...state.workers.haiku,
+        taskQueueIds: ['legacy_1', 'legacy_2', 'legacy_3'],
+      },
+    },
+  }));
+  const combined = readCounters();
+  assert.equal(combined.queuedTotal, '5');
+  assert.match(combined.poolQueue, /^Pool Queue\s*\(\s*2\s*\)$/);
+
+  resetStore();
+  const dispatch = useOfficeStore.getState().enqueueGlobalMockTask({
+    category: 'CLASSIFICATION',
+    type: 'QUICK_RESEARCH',
+    priority: 'HIGH',
+    title: 'Dispatch Counter Regression',
+    durationSimMs: 5000,
+  });
+  assert.ok(dispatch.ok);
+  useOfficeStore.getState().tickSimulation();
+  assert.equal(useOfficeStore.getState().scheduler?.entries.length, 0);
+  const afterDispatch = readCounters();
+  assert.equal(afterDispatch.queuedTotal, '0');
+  assert.match(afterDispatch.poolQueue, /^Pool Queue\s*\(\s*0\s*\)$/);
 });
