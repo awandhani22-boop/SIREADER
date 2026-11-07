@@ -98,10 +98,28 @@ export class WorkerMockService {
       accentColor: string;
     },
   ): ActivityEvent {
-    const eventIndex = snapshot.tickCount + snapshot.events.length + 1;
+    let previousSeq = 0;
+    const latestEvent = snapshot.events[0];
+    if (latestEvent) {
+      const lastUnderscoreIdx = latestEvent.id.lastIndexOf('_');
+      if (lastUnderscoreIdx !== -1) {
+        const parsed = Number.parseInt(
+          latestEvent.id.slice(lastUnderscoreIdx + 1),
+          10,
+        );
+        if (Number.isFinite(parsed) && parsed > 0) {
+          previousSeq = parsed;
+        }
+      }
+    }
+    const eventIndex = Math.max(
+      snapshot.tickCount + snapshot.events.length + 1,
+      previousSeq + 1,
+    );
+    const normalizedSimTime = Number(snapshot.simTimeMs.toFixed(3));
     return {
-      id: `evt_${snapshot.simTimeMs}_${eventIndex}`,
-      simTimestampMs: snapshot.simTimeMs,
+      id: `evt_${normalizedSimTime}_${eventIndex}`,
+      simTimestampMs: normalizedSimTime,
       workerId: params.workerId,
       workerName: params.workerName,
       department: params.department,

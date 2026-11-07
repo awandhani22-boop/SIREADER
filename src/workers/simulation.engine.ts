@@ -297,7 +297,7 @@ export class SimulationEngine {
     const boundedStepMs = Math.min(stepSimMs, MAX_DELTA_CLAMP_MS);
     let nextSnapshot: SimulationSnapshot = {
       ...snapshot,
-      simTimeMs: snapshot.simTimeMs + boundedStepMs,
+      simTimeMs: Number((snapshot.simTimeMs + boundedStepMs).toFixed(3)),
       tickCount: snapshot.tickCount + 1,
       workers: { ...snapshot.workers },
       tasks: { ...snapshot.tasks },

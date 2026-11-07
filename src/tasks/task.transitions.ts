@@ -399,13 +399,20 @@ export function updateTaskExecutionStage(
   nextStageStatus: TaskStatus,
   options: UpdateTaskExecutionStageOptions,
 ): TransitionTaskEntityResult {
-  const currentLifecycle = isValidTaskStatus(task.status)
+  const statusValid =
+    typeof task.status === 'string' && isValidTaskStatus(task.status);
+  const lifecycleValid =
+    typeof task.lifecycleStatus === 'string' &&
+    isTaskLifecycleStatus(task.lifecycleStatus);
+  const mappedLifecycle = statusValid
     ? toTaskLifecycleStatus(task.status)
-    : task.lifecycleStatus;
+    : null;
 
   if (
+    !statusValid ||
+    !lifecycleValid ||
+    task.lifecycleStatus !== mappedLifecycle ||
     task.lifecycleStatus !== 'RUNNING' ||
-    currentLifecycle !== 'RUNNING' ||
     !isTaskExecutionStageStatus(nextStageStatus)
   ) {
     return {
@@ -415,15 +422,13 @@ export function updateTaskExecutionStage(
         code: 'INVALID_EXECUTION_STAGE_UPDATE',
         taskId: task.id,
         fromStatus: task.status,
-        fromLifecycleStatus: isTaskLifecycleStatus(task.lifecycleStatus)
-          ? task.lifecycleStatus
-          : 'PENDING',
+        fromLifecycleStatus: lifecycleValid ? task.lifecycleStatus : 'PENDING',
         toStatus: nextStageStatus,
         toLifecycleStatus: isValidTaskStatus(nextStageStatus)
           ? toTaskLifecycleStatus(nextStageStatus)
           : 'PENDING',
         allowedTargets: Object.freeze(['RUNNING'] as const),
-        message: `Cannot update execution stage to "${String(nextStageStatus)}" when task "${task.id}" has status "${String(task.status)}" (lifecycleStatus "${String(task.lifecycleStatus)}"). Task must be RUNNING and target must be an execution stage.`,
+        message: `Cannot update execution stage to "${String(nextStageStatus)}" when task "${task.id}" has status "${String(task.status)}" and lifecycleStatus "${String(task.lifecycleStatus)}". Both status and lifecycleStatus must be valid, consistent, and RUNNING, and target must be a valid execution stage.`,
       }),
     };
   }

@@ -298,6 +298,37 @@ test('Audit Finding 2 (Part A): activateQueuedTaskForExecution and updateTaskExe
   );
   assert.equal(invalidNonStageTarget.ok, false);
   assert.equal(invalidNonStageTarget.error?.code, 'INVALID_EXECUTION_STAGE_UPDATE');
+
+  // 5. updateTaskExecutionStage rejects corrupted tasks where lifecycleStatus is 'RUNNING'
+  //    but task.status is unknown/invalid or mismatched (e.g., 'QUEUED')
+  const corruptedUnknownStatusTask = {
+    ...stageStep.task,
+    status: 'BOGUS_UNKNOWN_STAGE' as unknown as typeof stageStep.task.status,
+    lifecycleStatus: 'RUNNING' as const,
+  };
+  const corruptedUnknownJson = JSON.stringify(corruptedUnknownStatusTask);
+  const resUnknownStatus = updateTaskExecutionStage(
+    corruptedUnknownStatusTask,
+    'VALIDATING',
+    { simTimeMs: 3000 },
+  );
+  assert.equal(resUnknownStatus.ok, false);
+  assert.equal(resUnknownStatus.error?.code, 'INVALID_EXECUTION_STAGE_UPDATE');
+  assert.equal(resUnknownStatus.task, corruptedUnknownStatusTask);
+  assert.equal(JSON.stringify(corruptedUnknownStatusTask), corruptedUnknownJson);
+
+  const corruptedMismatchTask = {
+    ...stageStep.task,
+    status: 'QUEUED' as const,
+    lifecycleStatus: 'RUNNING' as const,
+  };
+  const resMismatchStatus = updateTaskExecutionStage(
+    corruptedMismatchTask,
+    'VALIDATING',
+    { simTimeMs: 3000 },
+  );
+  assert.equal(resMismatchStatus.ok, false);
+  assert.equal(resMismatchStatus.error?.code, 'INVALID_EXECUTION_STAGE_UPDATE');
 });
 
 test('Audit Finding 2 (Part B): Full SimulationEngine & WorkerMockService runtime integration (promotion timestamps, completion, failure, pause/resume, FIFO)', () => {

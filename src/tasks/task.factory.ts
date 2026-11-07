@@ -141,16 +141,6 @@ export interface CreateTaskParams {
   >;
 }
 
-function getExistingTaskIdsCount(
-  existingTaskIds?: ReadonlySet<string> | readonly string[],
-): number | null {
-  if (!existingTaskIds) return null;
-  if (Array.isArray(existingTaskIds)) {
-    return existingTaskIds.length;
-  }
-  return (existingTaskIds as ReadonlySet<string>).size;
-}
-
 function resolveTaskIdentity(
   params: CreateTaskParams,
   workerPrefix?: string,
@@ -169,17 +159,8 @@ function resolveTaskIdentity(
       workerPrefix,
     });
   }
-  const existingCount = getExistingTaskIdsCount(params.existingTaskIds);
-  if (existingCount !== null) {
-    return generateDeterministicTaskId({
-      seed: params.seed,
-      sequenceNumber: existingCount + 1,
-      simTimeMs: params.simTimeMs,
-      workerPrefix,
-    });
-  }
   throw new Error(
-    'Deterministic task creation requires an explicit id, sequenceNumber, DeterministicTaskSequence instance, or existingTaskIds collection to prevent silent ID collisions.',
+    'Deterministic task creation requires an explicit id, sequenceNumber, or DeterministicTaskSequence instance. existingTaskIds is reserved strictly for duplicate ID validation.',
   );
 }
 

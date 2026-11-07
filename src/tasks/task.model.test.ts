@@ -579,23 +579,38 @@ test('Audit Finding 5: Deterministic Task ID uniqueness prevents silent collisio
   });
   assert.notEqual(task1.id, task2.id);
 
-  // Two tasks created at the same simulation time using existingTaskIds context also receive distinct IDs
+  // Passing ONLY existingTaskIds without id, sequenceNumber, or sequence is rejected so repeated calls
+  // with an un-updated existingTaskIds collection can never silently generate duplicate IDs
   const existingIds = new Set<string>([task1.id]);
-  const taskFromExisting = createTaskEntity({
+  assert.throws(() => {
+    createTaskEntity({
+      seed: 20261106,
+      simTimeMs: 1000,
+      title: 'Task With Only Existing IDs Context (No Sequence)',
+      existingTaskIds: existingIds,
+    });
+  }, /Deterministic task creation requires an explicit id, sequenceNumber, or DeterministicTaskSequence instance\. existingTaskIds is reserved strictly for duplicate ID validation\./);
+
+  const safeOnlyExistingOutcome = createTaskEntitySafe({
     seed: 20261106,
     simTimeMs: 1000,
-    title: 'Task With Existing IDs Context',
+    title: 'Safe Call With Only Existing IDs Context',
     existingTaskIds: existingIds,
   });
-  assert.notEqual(taskFromExisting.id, task1.id);
+  assert.equal(safeOnlyExistingOutcome.valid, false);
+  assert.ok(
+    safeOnlyExistingOutcome.validation.issues.some(
+      (i) => i.code === 'INVALID_TASK_ID',
+    ),
+  );
 
-  // Calling createTaskEntity without id, sequenceNumber, sequence, or existingTaskIds throws a clear deterministic error
+  // Calling createTaskEntity without id, sequenceNumber, or sequence throws a clear deterministic error
   assert.throws(() => {
     createTaskEntity({
       simTimeMs: 1000,
       title: 'Missing Deterministic Identity Context',
     });
-  }, /Deterministic task creation requires an explicit id, sequenceNumber, DeterministicTaskSequence instance, or existingTaskIds/);
+  }, /Deterministic task creation requires an explicit id, sequenceNumber, or DeterministicTaskSequence instance/);
 
   // Duplicate ID against existingTaskIds is rejected with DUPLICATE_TASK_ID
   const duplicateAttempt = createTaskEntitySafe(

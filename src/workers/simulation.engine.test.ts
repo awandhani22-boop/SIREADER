@@ -1086,3 +1086,25 @@ test('16. GlbAvatarAnimationController with real THREE.AnimationMixer stops with
   sonnetController.dispose();
   opusController.dispose();
 });
+
+// 17. ActivityEvent ID uniqueness regression: no duplicate event keys when log exceeds MAX_EVENT_LOG_LENGTH (80)
+test('17. ActivityEvent IDs remain strictly unique across concurrent same-tick events after exceeding MAX_EVENT_LOG_LENGTH (80)', () => {
+  let snapshot = SimulationEngine.createInitialSnapshot(DEFAULT_SIMULATION_SEED);
+
+  // Run 250 ticks with fractional wall-clock deltas and multiple concurrent tasks so events cap at 80
+  for (let i = 0; i < 250; i++) {
+    snapshot = SimulationEngine.advanceByWallClockDelta(snapshot, 500.3);
+    if (i % 10 === 0) {
+      snapshot = WorkerMockService.assignTask(snapshot, { workerId: 'haiku' });
+      snapshot = WorkerMockService.assignTask(snapshot, { workerId: 'sonnet' });
+    }
+    const ids = snapshot.events.map((e) => e.id);
+    const uniqueIds = new Set(ids);
+    assert.equal(
+      uniqueIds.size,
+      ids.length,
+      `Duplicate ActivityEvent ID detected at step ${i}: ${ids.join(', ')}`,
+    );
+  }
+  assert.equal(snapshot.events.length, 80);
+});
