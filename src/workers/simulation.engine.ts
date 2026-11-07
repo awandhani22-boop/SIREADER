@@ -9,6 +9,10 @@ import {
   WorkerMockService,
 } from './worker.mock-service';
 import {
+  createInitialSchedulerState,
+  normalizeSimulationSnapshot,
+} from '../scheduler/scheduler.state';
+import {
   updateTaskExecutionStage,
 } from '../tasks/task.transitions';
 import {
@@ -203,6 +207,7 @@ export class SimulationEngine {
       workerOrder: [...INITIAL_WORKER_ORDER],
       tasks: {},
       events: [],
+      scheduler: createInitialSchedulerState(),
     };
   }
 
@@ -261,7 +266,7 @@ export class SimulationEngine {
     const clampedBaseMs = Math.max(0, Math.min(rawElapsedMs, MAX_DELTA_CLAMP_MS));
     const totalSimMsToAdvance = clampedBaseMs * snapshot.simSpeedMultiplier;
 
-    let current = snapshot;
+    let current = normalizeSimulationSnapshot(snapshot);
     let remainingMs = totalSimMsToAdvance;
 
     while (remainingMs >= FIXED_TICK_SIM_MS) {
@@ -293,14 +298,16 @@ export class SimulationEngine {
       return snapshot;
     }
 
+    const normalizedSnapshot = normalizeSimulationSnapshot(snapshot);
+
     // Bound any single step so stage transitions are never skipped
     const boundedStepMs = Math.min(stepSimMs, MAX_DELTA_CLAMP_MS);
     let nextSnapshot: SimulationSnapshot = {
-      ...snapshot,
-      simTimeMs: Number((snapshot.simTimeMs + boundedStepMs).toFixed(3)),
-      tickCount: snapshot.tickCount + 1,
-      workers: { ...snapshot.workers },
-      tasks: { ...snapshot.tasks },
+      ...normalizedSnapshot,
+      simTimeMs: Number((normalizedSnapshot.simTimeMs + boundedStepMs).toFixed(3)),
+      tickCount: normalizedSnapshot.tickCount + 1,
+      workers: { ...normalizedSnapshot.workers },
+      tasks: { ...normalizedSnapshot.tasks },
     };
 
     for (const workerId of nextSnapshot.workerOrder) {
@@ -434,6 +441,8 @@ export class SimulationEngine {
           ...worker,
           status: 'IDLE',
           animationState: 'seated',
+          activeTaskIds: [],
+          currentTaskId: null,
         };
         const updated = {
           ...snapshot,
@@ -566,8 +575,9 @@ export class SimulationEngine {
    * Preserves `statusBeforePause` and current task `elapsedSimMs` / `progress`.
    */
   static pauseWorker(snapshot: SimulationSnapshot, workerId: WorkerId): SimulationSnapshot {
-    const worker = snapshot.workers[workerId];
-    if (!worker || worker.status === 'PAUSED') return snapshot;
+    const normalizedSnapshot = normalizeSimulationSnapshot(snapshot);
+    const worker = normalizedSnapshot.workers[workerId];
+    if (!worker || worker.status === 'PAUSED') return normalizedSnapshot;
 
     const updatedWorker: WorkerEntity = {
       ...worker,
@@ -576,11 +586,11 @@ export class SimulationEngine {
       animationState: 'seated',
       metrics: {
         ...worker.metrics,
-        lastActivitySimMs: snapshot.simTimeMs,
+        lastActivitySimMs: normalizedSnapshot.simTimeMs,
       },
     };
 
-    const event = WorkerMockService.createEvent(snapshot, {
+    const event = WorkerMockService.createEvent(normalizedSnapshot, {
       workerId: worker.id,
       workerName: worker.name,
       department: worker.department,
@@ -591,12 +601,12 @@ export class SimulationEngine {
     });
 
     return {
-      ...snapshot,
+      ...normalizedSnapshot,
       workers: {
-        ...snapshot.workers,
+        ...normalizedSnapshot.workers,
         [workerId]: updatedWorker,
       },
-      events: WorkerMockService.appendEvent(snapshot, event),
+      events: WorkerMockService.appendEvent(normalizedSnapshot, event),
     };
   }
 
@@ -605,10 +615,11 @@ export class SimulationEngine {
    * Never restarts or resets `elapsedSimMs` or `progress`.
    */
   static resumeWorker(snapshot: SimulationSnapshot, workerId: WorkerId): SimulationSnapshot {
-    const worker = snapshot.workers[workerId];
-    if (!worker || worker.status !== 'PAUSED') return snapshot;
+    const normalizedSnapshot = normalizeSimulationSnapshot(snapshot);
+    const worker = normalizedSnapshot.workers[workerId];
+    if (!worker || worker.status !== 'PAUSED') return normalizedSnapshot;
 
-    const currentTask = worker.currentTaskId ? snapshot.tasks[worker.currentTaskId] : null;
+    const currentTask = worker.currentTaskId ? normalizedSnapshot.tasks[worker.currentTaskId] : null;
     const restoredStatus: WorkerStatus =
       worker.statusBeforePause && worker.statusBeforePause !== 'PAUSED'
         ? worker.statusBeforePause
@@ -623,11 +634,11 @@ export class SimulationEngine {
       animationState: deriveAnimationForWorker(restoredStatus, currentTask?.status ?? null),
       metrics: {
         ...worker.metrics,
-        lastActivitySimMs: snapshot.simTimeMs,
+        lastActivitySimMs: normalizedSnapshot.simTimeMs,
       },
     };
 
-    const event = WorkerMockService.createEvent(snapshot, {
+    const event = WorkerMockService.createEvent(normalizedSnapshot, {
       workerId: worker.id,
       workerName: worker.name,
       department: worker.department,
@@ -640,12 +651,12 @@ export class SimulationEngine {
     });
 
     const resumedSnapshot: SimulationSnapshot = {
-      ...snapshot,
+      ...normalizedSnapshot,
       workers: {
-        ...snapshot.workers,
+        ...normalizedSnapshot.workers,
         [workerId]: updatedWorker,
       },
-      events: WorkerMockService.appendEvent(snapshot, event),
+      events: WorkerMockService.appendEvent(normalizedSnapshot, event),
     };
 
     if (restoredStatus === 'IDLE' && !updatedWorker.currentTaskId && updatedWorker.taskQueueIds.length > 0) {
@@ -662,13 +673,14 @@ export class SimulationEngine {
    *   `PAUSED` before Global Pause remains `PAUSED` (`worker.status` is untouched).
    */
   static setGlobalPaused(snapshot: SimulationSnapshot, isPaused: boolean): SimulationSnapshot {
-    if (snapshot.isGlobalPaused === isPaused) return snapshot;
+    const normalizedSnapshot = normalizeSimulationSnapshot(snapshot);
+    if (normalizedSnapshot.isGlobalPaused === isPaused) return normalizedSnapshot;
 
     if (isPaused) {
       clockAnchor.isRealtimeLoopActive = false;
     }
 
-    const event = WorkerMockService.createEvent(snapshot, {
+    const event = WorkerMockService.createEvent(normalizedSnapshot, {
       workerId: null,
       workerName: 'Simulation Clock',
       department: 'System Control',
@@ -680,9 +692,9 @@ export class SimulationEngine {
     });
 
     return {
-      ...snapshot,
+      ...normalizedSnapshot,
       isGlobalPaused: isPaused,
-      events: WorkerMockService.appendEvent(snapshot, event),
+      events: WorkerMockService.appendEvent(normalizedSnapshot, event),
     };
   }
 }

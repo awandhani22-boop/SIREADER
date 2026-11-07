@@ -274,6 +274,7 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
       transitionSimMs: 0,
       animationState: 'seated',
       currentTaskId: null,
+      activeTaskIds: [],
       taskQueueIds: [],
       completedTaskIds: [],
       avatarConfig: {
@@ -314,6 +315,7 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
       transitionSimMs: 0,
       animationState: 'seated',
       currentTaskId: null,
+      activeTaskIds: [],
       taskQueueIds: [],
       completedTaskIds: [],
       avatarConfig: {
@@ -354,6 +356,7 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
       transitionSimMs: 0,
       animationState: 'seated',
       currentTaskId: null,
+      activeTaskIds: [],
       taskQueueIds: [],
       completedTaskIds: [],
       avatarConfig: {
@@ -394,6 +397,7 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
       transitionSimMs: 0,
       animationState: 'seated',
       currentTaskId: null,
+      activeTaskIds: [],
       taskQueueIds: [],
       completedTaskIds: [],
       avatarConfig: {
@@ -434,6 +438,7 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
       transitionSimMs: 0,
       animationState: 'seated',
       currentTaskId: null,
+      activeTaskIds: [],
       taskQueueIds: [],
       completedTaskIds: [],
       avatarConfig: {
@@ -474,6 +479,7 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
       transitionSimMs: 0,
       animationState: 'seated',
       currentTaskId: null,
+      activeTaskIds: [],
       taskQueueIds: [],
       completedTaskIds: [],
       avatarConfig: {
@@ -514,6 +520,7 @@ export function createInitialWorkersRegistry(): Record<WorkerId, WorkerEntity> {
       transitionSimMs: 0,
       animationState: 'seated',
       currentTaskId: null,
+      activeTaskIds: [],
       taskQueueIds: [],
       completedTaskIds: [],
       avatarConfig: {

@@ -34,6 +34,13 @@ import {
   WorkerCapabilityProfile,
   WorkerId,
 } from '../tasks/task.types';
+import type {
+  BlockedTaskRecord,
+  DispatchBlockReason,
+  DispatchedTaskRecord,
+  QueuedTaskEntry,
+  SchedulerSnapshotState,
+} from '../scheduler/scheduler.types';
 
 export {
   PERMANENT_WORKER_IDS,
@@ -46,10 +53,15 @@ export {
 };
 
 export type {
+  BlockedTaskRecord,
   CapabilityComplexityLevel,
   CapabilityDefinition,
   CapabilitySchemaDescriptor,
+  DispatchBlockReason,
+  DispatchedTaskRecord,
   PermanentWorkerId,
+  QueuedTaskEntry,
+  SchedulerSnapshotState,
   TaskCategory,
   TaskErrorDetail,
   TaskExecutionStageStatus,
@@ -204,7 +216,10 @@ export interface WorkerEntity {
   /** Elapsed simulation ms in transitional states (TASK_RECEIVED, WALKING, COMPLETED) */
   transitionSimMs: number;
   animationState: AnimationClipKey;
+  /** Primary active task ID (`activeTaskIds[0] ?? null`) preserved for Phase 1.1/2.1 backward compatibility */
   currentTaskId: string | null;
+  /** Canonical ordered list of active concurrent task IDs (`currentTaskId === activeTaskIds[0] ?? null`) */
+  activeTaskIds: string[];
   taskQueueIds: string[];
   completedTaskIds: string[];
   avatarConfig: AvatarConfig;
@@ -292,4 +307,6 @@ export interface SimulationSnapshot {
   workerOrder: WorkerId[];
   tasks: Record<string, TaskEntity>;
   events: ActivityEvent[];
+  /** Phase 2.2 global task dispatcher & priority scheduler state (optional for legacy snapshot compatibility) */
+  scheduler?: SchedulerSnapshotState;
 }

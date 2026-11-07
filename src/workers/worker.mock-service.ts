@@ -7,6 +7,10 @@ import {
   mapCategoryToDefaultTaskType,
 } from './worker.capabilities';
 import {
+  withTaskActivated,
+  withTaskDeactivated,
+} from './worker.concurrency';
+import {
   createTaskEntity as buildValidatedTaskEntity,
 } from '../tasks/task.factory';
 import {
@@ -240,11 +244,11 @@ export class WorkerMockService {
       const startedTask = activation.runningTask;
       updatedTasks[newTask.id] = startedTask;
 
+      const workerWithActivatedTask = withTaskActivated(worker, startedTask.id);
       updatedWorker = {
-        ...worker,
+        ...workerWithActivatedTask,
         status: 'TASK_RECEIVED',
         transitionSimMs: 0,
-        currentTaskId: startedTask.id,
         animationState: deriveAnimationForWorker('TASK_RECEIVED', startedTask.status),
         metrics: {
           ...worker.metrics,
@@ -332,12 +336,12 @@ export class WorkerMockService {
     }
 
     const activatedTask = activation.runningTask;
+    const workerWithActivatedTask = withTaskActivated(worker, activatedTask.id);
 
     const updatedWorker: WorkerEntity = {
-      ...worker,
+      ...workerWithActivatedTask,
       status: 'TASK_RECEIVED',
       transitionSimMs: 0,
-      currentTaskId: activatedTask.id,
       taskQueueIds: remainingQueue,
       animationState: deriveAnimationForWorker('TASK_RECEIVED', activatedTask.status),
       metrics: {
@@ -418,12 +422,12 @@ export class WorkerMockService {
     }
 
     const completedTask = transitionOutcome.task;
+    const workerWithDeactivatedTask = withTaskDeactivated(worker, completedTask.id);
 
     const updatedWorker: WorkerEntity = {
-      ...worker,
+      ...workerWithDeactivatedTask,
       status: 'COMPLETED',
       transitionSimMs: 0,
-      currentTaskId: null,
       completedTaskIds: [completedTask.id, ...worker.completedTaskIds].slice(0, 25),
       animationState: deriveAnimationForWorker('COMPLETED', 'COMPLETED'),
       metrics: {
@@ -496,12 +500,12 @@ export class WorkerMockService {
     }
 
     const failedTask = transitionOutcome.task;
+    const workerWithDeactivatedTask = withTaskDeactivated(worker, failedTask.id);
 
     const updatedWorker: WorkerEntity = {
-      ...worker,
+      ...workerWithDeactivatedTask,
       status: 'IDLE',
       transitionSimMs: 0,
-      currentTaskId: null,
       animationState: deriveAnimationForWorker('IDLE', null),
       metrics: {
         ...worker.metrics,

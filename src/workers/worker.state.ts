@@ -84,6 +84,7 @@ function applySnapshotPatch(
   | 'workerOrder'
   | 'tasks'
   | 'events'
+  | 'scheduler'
 > {
   return {
     seed: snapshot.seed,
@@ -96,6 +97,7 @@ function applySnapshotPatch(
     workerOrder: snapshot.workerOrder,
     tasks: snapshot.tasks,
     events: snapshot.events,
+    scheduler: snapshot.scheduler,
   };
 }
 
