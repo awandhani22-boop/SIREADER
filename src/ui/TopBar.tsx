@@ -46,7 +46,7 @@ export function TopBar() {
 
   return (
     <header className="relative z-30 flex items-center justify-between gap-4 px-4 h-12 bg-[#090F1D] border-b border-slate-800/90 text-slate-100 shrink-0">
-      {/* Zone 1: Brand Identity & Explicit Phase 1 Simulation Mode Notice */}
+      {/* Zone 1: Brand Identity & Simulation Mode Notice */}
       <div className="flex items-center gap-2.5 shrink-0">
         <span className="w-2.5 h-2.5 rounded-sm bg-cyan-400 shrink-0" />
         <span className="text-sm font-bold tracking-tight text-white whitespace-nowrap">
@@ -59,7 +59,7 @@ export function TopBar() {
           className="font-mono text-[10px] font-semibold tracking-wider text-cyan-300 whitespace-nowrap"
           data-testid="simulated-mode-indicator"
         >
-          SIMULATED PHASE 1
+          SIMULATION MODE
         </span>
       </div>
 
@@ -95,7 +95,7 @@ export function TopBar() {
           ·
         </span>
         <div className="flex items-center gap-1">
-          <span className="text-slate-400">Queue (SIMULATED):</span>
+          <span className="text-slate-400">Queued Total (SIMULATED):</span>
           <span
             className="font-mono font-semibold text-sky-300"
             data-testid="global-queued-count"
@@ -145,7 +145,7 @@ export function TopBar() {
             aria-label="Toggle Global Task Queue Panel"
           >
             <ListOrdered className="w-3 h-3" />
-            <span data-testid="topbar-pool-queue-count">Queue ({scheduler?.entries.length ?? 0})</span>
+            <span data-testid="topbar-pool-queue-count">Pool Queue ({scheduler?.entries.length ?? 0})</span>
           </button>
           <button
             type="button"

@@ -524,8 +524,23 @@ export function selectGlobalTaskActivity(
       continue;
     }
 
+    const timestampCandidates =
+      ls === 'RUNNING'
+        ? [task.startedAtSimMs, task.createdAtSimMs]
+        : ls === 'COMPLETED'
+          ? [task.completedAtSimMs, task.updatedAt, task.startedAtSimMs, task.createdAtSimMs]
+          : [
+              task.error?.occurredAtSimMs,
+              task.updatedAt,
+              task.completedAtSimMs,
+              task.startedAtSimMs,
+              task.createdAtSimMs,
+            ];
     const lastActiveSimMs =
-      task.completedAtSimMs ?? task.startedAtSimMs ?? task.createdAtSimMs ?? 0;
+      timestampCandidates.find(
+        (value): value is number =>
+          typeof value === 'number' && Number.isFinite(value) && value >= 0,
+      ) ?? 0;
 
     poolTasks.push({
       task,
@@ -536,8 +551,14 @@ export function selectGlobalTaskActivity(
     });
   }
 
-  // Sort newest activity first
-  poolTasks.sort((a, b) => b.lastActiveSimMs - a.lastActiveSimMs);
+  // Sort newest activity first; use code-unit task ID order for deterministic ties.
+  poolTasks.sort((a, b) => {
+    const timestampOrder = b.lastActiveSimMs - a.lastActiveSimMs;
+    if (timestampOrder !== 0) return timestampOrder;
+    if (a.task.id < b.task.id) return -1;
+    if (a.task.id > b.task.id) return 1;
+    return 0;
+  });
 
   return poolTasks.slice(0, Math.max(1, limit));
 }
@@ -580,7 +601,7 @@ export function selectGlobalSimulatedTotals(
     );
 
   const activeTasksCount = Object.values(tasks).filter(
-    (t) => t.status !== 'QUEUED' && t.status !== 'COMPLETED' && t.status !== 'FAILED',
+    (task) => task.lifecycleStatus === 'RUNNING',
   ).length;
 
   return {
