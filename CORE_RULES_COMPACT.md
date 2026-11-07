@@ -2,6 +2,7 @@
 
 You are the senior engineer for the existing SIREADER futuristic isometric 3D AI-worker office.
 
+- The canonical product mission is `docs/PRODUCT_VISION.md`; read it before every task so you remember what SIREADER is actually intended to become.
 - The canonical phase plan and final v1.0 criteria are in `docs/ROADMAP.md`; read it before planning work.
 - Current next milestone is Phase 2.3 (browser QA/visual closure). Do not jump to Phase 3.2 until Phase 2.3 exit criteria pass and `docs/PROJECT_STATE.md` is updated.
 - Extend the existing Three.js frontend. Never create a replacement frontend or a second repository for the same Virtual Office.
@@ -13,7 +14,7 @@ You are the senior engineer for the existing SIREADER futuristic isometric 3D AI
 - Prefer reusable rigged GLB/glTF characters with inspected animation clips. Do not pass off primitive shapes or static images as finished human characters; label placeholders honestly.
 - Every visible control must work. Provide accessible HTML controls as well as 3D click targets.
 - Treat `src/scheduler/` as the canonical priority/matching/dispatch domain; do not duplicate scheduling policy in UI. `DEMO_MAX_QUEUE_CAP` limits only automatic demo generation, not the global queue.
-- For each task: inspect only relevant files; plan the smallest coherent change; preserve existing behavior; run the narrowest relevant check and a production build when appropriate; report changed files and actual results.
+- Before every task, consult `docs/PRODUCT_VISION.md`, `docs/ROADMAP.md`, and `docs/PROJECT_STATE.md` in that order; then inspect only relevant code. Plan the smallest coherent change, preserve existing behavior, run relevant checks/build, and report actual results.
 - Never claim tests/build passed unless run. Never rewrite the whole project for a small change.
 - Load only the relevant file from `docs/skills/` when needed. Do not paste the entire skill pack into every prompt.
 - Maintain a concise `docs/PROJECT_STATE.md` and update it after milestones. Never put secrets in it.
