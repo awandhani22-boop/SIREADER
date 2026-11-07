@@ -43,9 +43,10 @@ HEAD Baseline: `cf1083d`
 - **Build Warnings (Nonfatal)**:
   1. Vite config `__dirname` warning (`vite.config.ts:11:27` uses `__dirname` unsupported by native configLoader; planned deprecation in Vite in favor of `import.meta.dirname`).
   2. Rolldown chunk size warning (`dist/assets/index-CapXtjpT.js` is ~1.4 MB minified, exceeding default 500 kB chunk warning threshold).
-- **Browser-level Manual QA**:
-  - *Verified in Browser*: Blocked task state $\rightarrow$ dispatch to RUNNING upon worker availability $\rightarrow$ completion $\rightarrow$ reset to baseline.
-  - *Unverified in Browser (Covered by Automated Tests)*: Pause/resume UI button interaction, speed controls (1x, 2x, 4x) visual inspection, 3D avatar scene inspection, FAILED activity lifecycle display, and manual enqueue form UI interaction.
+- **Browser-level Manual QA Status**:
+  - *Verified in Browser (Confirmed)*: Blocked task state $\rightarrow$ dispatch to RUNNING upon worker availability $\rightarrow$ completion $\rightarrow$ reset to baseline.
+  - *Automated Component Assertions*: Queue panel tabs, RUNNING-only active counts, simulation labels, and deterministic timestamp ordering verified via `worker.state.test.ts` (45 tests).
+  - *Unverified Visual Behavior & Browser Interactions*: 3D isometric scene visual rendering, live pause/resume button clicking, speed controls (1x, 2x, 4x) tempo dynamics in browser, FAILED activity card rendering, and manual enqueue form UI submission.
 
 ## Next
 Phase 2.2 is complete. Proceed to milestone sign-off and planning for subsequent phases. Python/backend and real AI-worker integration remain deferred to future milestones.

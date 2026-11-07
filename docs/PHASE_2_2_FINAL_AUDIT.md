@@ -10,7 +10,7 @@ This document records the formal acceptance checks, verification evidence, and a
 
 ## 1. Acceptance Checklist (20 of 20 PASS)
 
-All 20 audit checklist criteria across Scope, Domain & Scheduler, and Simulation & UI have verified proof across source code, unit/integration tests, and browser execution.
+All 20 audit checklist criteria across Scope, Domain & Scheduler, and Simulation & UI have verified proof across source code, unit/integration tests, and confirmed browser execution.
 
 | # | Item | Status | Verification Evidence & Test Reference |
 |---|---|---|---|
@@ -30,7 +30,7 @@ All 20 audit checklist criteria across Scope, Domain & Scheduler, and Simulation
 | **D10** | Dispatch and normalization preserve unaffected object references where specified. | **PASS** | Tested in `task.dispatcher.test.ts` (DP-28, DP-29, DP-31) and `simulation.engine.test.ts` (Test 14). Structural sharing preserved for idle workers and unmutated tasks. |
 | **U1** | Simulation tick order advances simulated time and worker execution before/around dispatch according to the documented engine contract. | **PASS** | Tested in `simulation.engine.scheduler.test.ts` (RT-5). Source order in `stepSimulationTick`: (1) clock advance, (2) worker execution step, (3) demo generator, (4) global dispatch pass, (5) clock anchor. |
 | **U2** | Diagnostics reflect the actual dispatch pass and are preserved when no pass occurs. | **PASS** | Tested in `worker.state.test.ts` (Test 10–17) and `stepSimulationTickWithDiagnostics` returning `dispatchResult`. Diagnostics propagate explicitly to store state. |
-| **U3** | Global queue panel distinguishes WAITING/BLOCKED queue entries from RUNNING/COMPLETED/FAILED pool activity. | **PASS** | Tested in `worker.state.test.ts` (Test 33–36), UI tab interactions, and browser verification (blocked task correctly transitioned to running). |
+| **U3** | Global queue panel distinguishes WAITING/BLOCKED queue entries from RUNNING/COMPLETED/FAILED pool activity. | **PASS** | Tested in `worker.state.test.ts` (Test 33–36), component tab assertions, and confirmed browser QA (blocked task transitioning to running). |
 | **U4** | Activity timestamps use lifecycle-appropriate fields and deterministic tie-breaking. | **PASS** | Tested in `worker.state.test.ts` (Test 39–41, 44). Uses `startedAtSimMs` / `completedAtSimMs` / `enqueuedAtSimMs` with deterministic sequence tie-breaking. |
 | **U5** | Active task metrics count only RUNNING lifecycle tasks. | **PASS** | Tested in `worker.state.test.ts` (Test 42, 43). Explicitly checks `task.lifecycleStatus === 'RUNNING'`. |
 | **U6** | UI labels clearly identify simulated mode and simulated token/cost metrics. | **PASS** | Verified in `TopBar.tsx` ("SIMULATION MODE", "(SIMULATED)") and assertively tested in `worker.state.test.ts` (L853–854). |
@@ -45,19 +45,19 @@ All 20 audit checklist criteria across Scope, Domain & Scheduler, and Simulation
 - **Breakdown**:
   1. `src/scheduler/priority.scheduler.test.ts`: **15 tests**
   2. `src/scheduler/scheduler.state.test.ts`: **9 tests**
-  3. `src/scheduler/task.dispatcher.test.ts`: **32 tests**
+  3. `src/scheduler/task.dispatcher.test.ts`: **60 tests**
   4. `src/scheduler/worker.matching.test.ts`: **20 tests**
   5. `src/scheduler/worker.selector.test.ts`: **18 tests**
   6. `src/tasks/task.model.test.ts`: **17 tests**
-  7. `src/tasks/task.transitions.test.ts`: **18 tests**
-  8. `src/workers/simulation.engine.scheduler.test.ts`: **21 tests**
+  7. `src/tasks/task.transitions.test.ts`: **7 tests**
+  8. `src/workers/simulation.engine.scheduler.test.ts`: **19 tests**
   9. `src/workers/simulation.engine.test.ts`: **17 tests**
   10. `src/workers/worker.capabilities.test.ts`: **10 tests**
   11. `src/workers/worker.concurrency.test.ts`: **5 tests**
   12. `src/workers/worker.execution.test.ts`: **14 tests**
   13. `src/workers/worker.state.test.ts`: **45 tests**
 
-*Note*: Test count consistency verified statically (256 `test(` declarations across 13 test files) and executed cleanly on baseline `a9aa327` through `cf1083d`.
+*Note*: Test count consistency verified statically (256 `test(` declarations across 13 test files: 15 + 9 + 60 + 20 + 18 + 17 + 7 + 19 + 17 + 10 + 5 + 14 + 45 = 256) and executed cleanly on baseline `a9aa327` through `cf1083d`.
 
 ### 2.2 TypeScript Typecheck
 - **Command**: `npm run lint` (`tsc --noEmit`)
@@ -86,20 +86,30 @@ All 20 audit checklist criteria across Scope, Domain & Scheduler, and Simulation
 
 ---
 
-## 3. Browser-Level Manual QA Status
+## 3. UI Verification & Browser QA Distinction
 
-### Verified in Browser (Pass)
-- **Blocked State Transition**: Tasks blocked due to lack of available capable worker capacity appear with appropriate blocked diagnostics.
-- **Dispatch to RUNNING**: When a capable worker completes existing work and capacity frees up, the blocked task dispatches to `RUNNING`.
-- **Completion & Reset**: Task runs through stages to `COMPLETED`, updates metrics, and simulation reset cleanly restores initial baseline.
+To maintain strict audit accuracy, verification of the Virtual Office user interface is categorized into four distinct layers:
 
-### Unverified in Browser (Covered by Automated Tests)
-The following browser UI interactions have not yet been manually QA'd in browser, but possess 100% passing coverage in automated unit/integration tests:
-- Pause / Resume UI toggle button.
-- Simulation speed controls (1×, 2×, 4×).
-- 3D isometric avatar scene visual rendering.
-- `FAILED` activity lifecycle rendering.
-- Manual task enqueue modal form submission.
+### 3.1 Automated Engine & Domain Tests (211 tests across 12 files)
+Core simulation, priority scheduling, candidate worker selector, concurrency slots, lifecycle state transitions, deterministic replay, and dispatch pass mechanics operate independently of the DOM and are fully verified through automated domain tests.
+
+### 3.2 Automated Component & Store Assertions (45 tests in `worker.state.test.ts`)
+Zustand store actions, diagnostics propagation, queue panel tab state derivations (WAITING/BLOCKED vs. RUNNING/COMPLETED/FAILED), RUNNING-only active task count derivations, simulation mode indicator text, and deterministic activity timestamp ordering are verified through automated assertions in `src/workers/worker.state.test.ts`.
+
+### 3.3 Confirmed Manual Browser QA
+The following end-to-end interactive lifecycle flow was directly observed and confirmed in the running application in the browser:
+- **Blocked State Appearance**: A task blocked due to worker capacity/capability constraints appears in the queue drawer with proper blocked diagnostics.
+- **Dispatch to RUNNING**: When a capable worker finishes its active task and frees capacity, the blocked task dispatches automatically to `RUNNING`.
+- **Completion Progression**: The task advances through stages to `COMPLETED` and updates simulated metrics.
+- **Simulation Reset**: Invoking simulation reset restores the initial baseline cleanly.
+
+### 3.4 Unverified Visual Behavior & Browser Interactions
+The following browser UI interactions and visual rendering aspects have **not** been directly checked or verified in browser manual QA (and are explicitly not claimed as browser-QA verified):
+- **3D Canvas & Avatar Rendering**: Visual appearance, positioning, and animation of Three.js isometric avatars and workstations.
+- **Pause / Resume Button**: Live interactive browser clicking and dynamic freeze/unfreeze responsiveness of the Pause toggle button.
+- **Speed Controls**: Visual tempo changes and live button clicking for 1×, 2×, and 4× speed toggles in the browser.
+- **FAILED Activity Card Styling**: Visual rendering and styling of task cards in the `FAILED` lifecycle state within the activity drawer.
+- **Manual Enqueue Modal Submission**: Interactive browser submission of custom task parameters through the manual enqueue modal dialog.
 
 ---
 
