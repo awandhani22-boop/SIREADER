@@ -5,20 +5,24 @@ import {
 import {
   mapCategoryToDefaultTaskType,
   mapTaskTypeToCategory,
+  resolveDefaultCategoryForWorker,
 } from '../workers/worker.capabilities';
 import {
+  PermanentWorkerId,
   TaskCategory,
   TaskEntity,
   TaskErrorDetail,
   TaskInputPayload,
+  TaskLifecycleStatus,
   TaskPriority,
   TaskResultPayload,
   TaskStatus,
   TaskType,
   TaskValidationResult,
+  WorkerCapabilityProfile,
   WorkerId,
 } from '../workers/worker.types';
-import { toTaskLifecycleStatus } from './task.transitions';
+import { isValidTaskStatus, toTaskLifecycleStatus } from './task.transitions';
 import {
   assertValidTaskEntity,
   validateTaskEntity,
@@ -26,10 +30,10 @@ import {
 } from './task.validation';
 
 /**
- * Deterministic Task Factory (Phase 2.1)
+ * Deterministic Task Factory (Phase 2.1 + Audit Remediation)
  * Creates validated, structured TaskEntity objects using simulation time (`simTimeMs`)
- * and deterministic sequence/seed counters.
- * Never uses `Date.now()`, `Math.random()`, or non-deterministic UUIDs.
+ * and explicit deterministic identity contexts (`id`, `sequenceNumber`, `sequence`, or `existingTaskIds`).
+ * Never uses `Date.now()`, `Math.random()`, `crypto.randomUUID()`, or hidden global mutable counters.
  */
 
 export interface DeterministicTaskIdParams {
@@ -47,8 +51,17 @@ export interface DeterministicTaskIdParams {
 export function generateDeterministicTaskId(
   params: DeterministicTaskIdParams,
 ): string {
+  if (
+    typeof params.sequenceNumber !== 'number' ||
+    !Number.isInteger(params.sequenceNumber) ||
+    params.sequenceNumber <= 0
+  ) {
+    throw new Error(
+      `generateDeterministicTaskId requires a positive integer sequenceNumber (received ${String(params.sequenceNumber)}).`,
+    );
+  }
   const normalizedSimTime = Math.max(0, Math.floor(params.simTimeMs));
-  const normalizedSeq = Math.max(1, Math.floor(params.sequenceNumber));
+  const normalizedSeq = params.sequenceNumber;
   if (params.workerPrefix) {
     return `tsk_${params.workerPrefix}_${normalizedSeq}_${normalizedSimTime}`;
   }
@@ -97,6 +110,7 @@ export class DeterministicTaskSequence {
 export interface CreateTaskParams {
   readonly id?: string;
   readonly sequenceNumber?: number;
+  readonly sequence?: DeterministicTaskSequence;
   readonly seed?: number;
   readonly simTimeMs: number;
   readonly type?: TaskType;
@@ -105,6 +119,7 @@ export interface CreateTaskParams {
   readonly description?: string;
   readonly priority?: TaskPriority;
   readonly status?: TaskStatus;
+  readonly lifecycleStatus?: TaskLifecycleStatus;
   readonly assignedWorkerId?: WorkerId | null;
   readonly fallbackWorkerId?: WorkerId;
   readonly parentTaskId?: string | null;
@@ -121,55 +136,100 @@ export interface CreateTaskParams {
   readonly totalDurationSimMs?: number;
   readonly targetTokens?: number;
   readonly existingTaskIds?: ReadonlySet<string> | readonly string[];
+  readonly capabilityRegistry?: Readonly<
+    Record<PermanentWorkerId, WorkerCapabilityProfile>
+  >;
 }
 
-export function createTaskEntity(params: CreateTaskParams): TaskEntity {
-  const simTimeMs = params.simTimeMs;
-  const resolvedCategory: TaskCategory =
-    params.category ??
-    (params.type ? mapTaskTypeToCategory(params.type) : 'ROUTING');
-  const resolvedType: TaskType =
-    params.type ?? mapCategoryToDefaultTaskType(resolvedCategory);
+function getExistingTaskIdsCount(
+  existingTaskIds?: ReadonlySet<string> | readonly string[],
+): number | null {
+  if (!existingTaskIds) return null;
+  if (Array.isArray(existingTaskIds)) {
+    return existingTaskIds.length;
+  }
+  return (existingTaskIds as ReadonlySet<string>).size;
+}
 
+function resolveTaskIdentity(
+  params: CreateTaskParams,
+  workerPrefix?: string,
+): string {
+  if (params.id !== undefined) {
+    return params.id;
+  }
+  if (params.sequence) {
+    return params.sequence.nextId(params.simTimeMs, workerPrefix);
+  }
+  if (params.sequenceNumber !== undefined) {
+    return generateDeterministicTaskId({
+      seed: params.seed,
+      sequenceNumber: params.sequenceNumber,
+      simTimeMs: params.simTimeMs,
+      workerPrefix,
+    });
+  }
+  const existingCount = getExistingTaskIdsCount(params.existingTaskIds);
+  if (existingCount !== null) {
+    return generateDeterministicTaskId({
+      seed: params.seed,
+      sequenceNumber: existingCount + 1,
+      simTimeMs: params.simTimeMs,
+      workerPrefix,
+    });
+  }
+  throw new Error(
+    'Deterministic task creation requires an explicit id, sequenceNumber, DeterministicTaskSequence instance, or existingTaskIds collection to prevent silent ID collisions.',
+  );
+}
+
+function buildUnvalidatedTaskCandidate(
+  params: CreateTaskParams,
+  resolvedId: string,
+): TaskEntity {
+  const simTimeMs = params.simTimeMs;
   const assignedWorkerId: WorkerId | null =
     params.assignedWorkerId !== undefined ? params.assignedWorkerId : null;
   const workerId: WorkerId =
     assignedWorkerId ?? params.fallbackWorkerId ?? 'supervisor';
 
-  const id =
-    params.id !== undefined
-      ? params.id
-      : generateDeterministicTaskId({
-          seed: params.seed,
-          sequenceNumber: params.sequenceNumber ?? 1,
-          simTimeMs,
-          workerPrefix:
-            params.assignedWorkerId || params.fallbackWorkerId
-              ? String(workerId)
-              : undefined,
-        });
+  const resolvedCategory: TaskCategory =
+    params.category ??
+    (params.type
+      ? mapTaskTypeToCategory(params.type)
+      : resolveDefaultCategoryForWorker(
+          assignedWorkerId ?? params.fallbackWorkerId,
+        ));
+  const resolvedType: TaskType =
+    params.type ?? mapCategoryToDefaultTaskType(resolvedCategory);
 
   const status: TaskStatus = params.status ?? 'PENDING';
-  const lifecycleStatus = toTaskLifecycleStatus(status);
+  const derivedLifecycle: TaskLifecycleStatus = isValidTaskStatus(status)
+    ? toTaskLifecycleStatus(status)
+    : 'PENDING';
+  const lifecycleStatus: TaskLifecycleStatus =
+    params.lifecycleStatus !== undefined
+      ? params.lifecycleStatus
+      : derivedLifecycle;
 
   const queuedAt: number | null =
     params.queuedAt !== undefined
       ? params.queuedAt
-      : lifecycleStatus === 'PENDING'
+      : derivedLifecycle === 'PENDING'
         ? null
         : simTimeMs;
 
   const startedAt: number | null =
     params.startedAt !== undefined
       ? params.startedAt
-      : lifecycleStatus === 'RUNNING' || lifecycleStatus === 'COMPLETED'
+      : derivedLifecycle === 'RUNNING' || derivedLifecycle === 'COMPLETED'
         ? simTimeMs
         : null;
 
   const completedAt: number | null =
     params.completedAt !== undefined
       ? params.completedAt
-      : lifecycleStatus === 'COMPLETED'
+      : derivedLifecycle === 'COMPLETED'
         ? Math.max(startedAt ?? simTimeMs, simTimeMs)
         : null;
 
@@ -179,7 +239,7 @@ export function createTaskEntity(params: CreateTaskParams): TaskEntity {
   const attemptCount =
     params.attemptCount !== undefined
       ? params.attemptCount
-      : lifecycleStatus === 'RUNNING' || lifecycleStatus === 'COMPLETED'
+      : derivedLifecycle === 'RUNNING' || derivedLifecycle === 'COMPLETED'
         ? 1
         : 0;
 
@@ -205,8 +265,8 @@ export function createTaskEntity(params: CreateTaskParams): TaskEntity {
   const totalDurationSimMs = params.totalDurationSimMs ?? 6000;
   const targetTokens = params.targetTokens ?? 320;
 
-  const task: TaskEntity = {
-    id,
+  return {
+    id: resolvedId,
     workerId,
     type: resolvedType,
     title: trimmedTitle,
@@ -225,7 +285,7 @@ export function createTaskEntity(params: CreateTaskParams): TaskEntity {
           outputData: { ...params.result.outputData },
           artifacts: [...params.result.artifacts],
         }
-      : lifecycleStatus === 'COMPLETED'
+      : derivedLifecycle === 'COMPLETED'
         ? {
             summary: `Completed "${trimmedTitle}"`,
             outputData: { completedAtSimMs: completedAt ?? simTimeMs },
@@ -242,14 +302,14 @@ export function createTaskEntity(params: CreateTaskParams): TaskEntity {
     startedAt,
     completedAt,
     updatedAt,
-    progress: lifecycleStatus === 'COMPLETED' ? 100 : 0,
-    elapsedSimMs: lifecycleStatus === 'COMPLETED' ? totalDurationSimMs : 0,
+    progress: derivedLifecycle === 'COMPLETED' ? 100 : 0,
+    elapsedSimMs: derivedLifecycle === 'COMPLETED' ? totalDurationSimMs : 0,
     totalDurationSimMs,
     stagePipeline: stagePipeline.map((s) => ({ ...s })),
-    simulatedTokens: lifecycleStatus === 'COMPLETED' ? targetTokens : 0,
+    simulatedTokens: derivedLifecycle === 'COMPLETED' ? targetTokens : 0,
     targetTokens,
     simulatedCostUsd:
-      lifecycleStatus === 'COMPLETED'
+      derivedLifecycle === 'COMPLETED'
         ? Number(((targetTokens / 1000) * costRate).toFixed(6))
         : 0,
     costPerThousandTokensUsd: costRate,
@@ -258,8 +318,23 @@ export function createTaskEntity(params: CreateTaskParams): TaskEntity {
     completedAtSimMs: completedAt,
     isSimulated: true,
   };
+}
 
-  assertValidTaskEntity(task, { existingTaskIds: params.existingTaskIds });
+export function createTaskEntity(params: CreateTaskParams): TaskEntity {
+  const assignedWorkerId =
+    params.assignedWorkerId !== undefined ? params.assignedWorkerId : null;
+  const workerPrefix =
+    assignedWorkerId || params.fallbackWorkerId
+      ? String(assignedWorkerId ?? params.fallbackWorkerId)
+      : undefined;
+
+  const resolvedId = resolveTaskIdentity(params, workerPrefix);
+  const task = buildUnvalidatedTaskCandidate(params, resolvedId);
+
+  assertValidTaskEntity(task, {
+    existingTaskIds: params.existingTaskIds,
+    capabilityRegistry: params.capabilityRegistry,
+  });
   return task;
 }
 
@@ -273,97 +348,45 @@ export function createTaskEntitySafe(
   params: CreateTaskParams,
   validationOptions?: ValidateTaskOptions,
 ): SafeCreateTaskOutcome {
-  try {
-    const task = createTaskEntity({
-      ...params,
-      existingTaskIds:
-        validationOptions?.existingTaskIds ?? params.existingTaskIds,
-    });
-    return {
-      valid: true,
-      task,
-      validation: { valid: true, issues: [] },
-    };
-  } catch {
-    // Construct raw candidate to surface exact structured validation issues
-    const simTimeMs = params.simTimeMs;
-    const resolvedCategory: TaskCategory =
-      params.category ??
-      (params.type ? mapTaskTypeToCategory(params.type) : 'ROUTING');
-    const resolvedType: TaskType =
-      params.type ?? mapCategoryToDefaultTaskType(resolvedCategory);
-    const assignedWorkerId =
-      params.assignedWorkerId !== undefined ? params.assignedWorkerId : null;
-    const workerId: WorkerId =
-      assignedWorkerId ?? params.fallbackWorkerId ?? 'supervisor';
-    const status: TaskStatus = params.status ?? 'PENDING';
-    const lifecycleStatus = toTaskLifecycleStatus(status);
-    const rawCandidate: TaskEntity = {
-      id:
-        params.id ??
-        generateDeterministicTaskId({
-          seed: params.seed,
-          sequenceNumber: params.sequenceNumber ?? 1,
-          simTimeMs,
-        }),
-      workerId,
-      type: resolvedType,
-      title: params.title,
-      description: params.description ?? params.title,
-      category: resolvedCategory,
-      priority: params.priority ?? 'NORMAL',
-      status,
-      lifecycleStatus,
-      assignedWorkerId,
-      parentTaskId: params.parentTaskId ?? null,
-      dependencyIds: params.dependencyIds ? [...params.dependencyIds] : [],
-      input: {
-        instruction: params.input?.instruction ?? params.title,
-        parameters: params.input?.parameters ?? {},
-        sourceChannel: params.input?.sourceChannel ?? 'manual_ui',
-        contextTags: params.input?.contextTags
-          ? [...params.input.contextTags]
-          : [],
-      },
-      result: params.result ?? null,
-      error: params.error ?? null,
-      attemptCount: params.attemptCount ?? 0,
-      maxAttempts: params.maxAttempts ?? 3,
-      createdAt: simTimeMs,
-      queuedAt:
-        params.queuedAt !== undefined
-          ? params.queuedAt
-          : lifecycleStatus === 'PENDING'
-            ? null
-            : simTimeMs,
-      startedAt: params.startedAt ?? null,
-      completedAt: params.completedAt ?? null,
-      updatedAt: params.updatedAt ?? simTimeMs,
-      progress: 0,
-      elapsedSimMs: 0,
-      totalDurationSimMs: params.totalDurationSimMs ?? 6000,
-      stagePipeline:
-        DEFAULT_STAGE_PIPELINES[resolvedCategory] ??
-        DEFAULT_STAGE_PIPELINES.REASONING,
-      simulatedTokens: 0,
-      targetTokens: params.targetTokens ?? 320,
-      simulatedCostUsd: 0,
-      costPerThousandTokensUsd:
-        COST_PER_1K_TOKENS_SIMULATED[workerId] ?? 0.002,
-      createdAtSimMs: simTimeMs,
-      startedAtSimMs: params.startedAt ?? null,
-      completedAtSimMs: params.completedAt ?? null,
-      isSimulated: true,
-    };
+  const mergedExistingIds =
+    validationOptions?.existingTaskIds ?? params.existingTaskIds;
+  const mergedRegistry =
+    validationOptions?.capabilityRegistry ?? params.capabilityRegistry;
 
-    const validation = validateTaskEntity(rawCandidate, {
-      existingTaskIds:
-        validationOptions?.existingTaskIds ?? params.existingTaskIds,
-    });
+  const assignedWorkerId =
+    params.assignedWorkerId !== undefined ? params.assignedWorkerId : null;
+  const workerPrefix =
+    assignedWorkerId || params.fallbackWorkerId
+      ? String(assignedWorkerId ?? params.fallbackWorkerId)
+      : undefined;
+
+  let resolvedId = '';
+  try {
+    resolvedId = resolveTaskIdentity(
+      { ...params, existingTaskIds: mergedExistingIds },
+      workerPrefix,
+    );
+  } catch {
+    resolvedId = '';
+  }
+
+  const candidate = buildUnvalidatedTaskCandidate(params, resolvedId);
+  const validation = validateTaskEntity(candidate, {
+    existingTaskIds: mergedExistingIds,
+    capabilityRegistry: mergedRegistry,
+  });
+
+  if (!validation.valid) {
     return {
       valid: false,
       task: null,
       validation,
     };
   }
+
+  return {
+    valid: true,
+    task: candidate,
+    validation,
+  };
 }

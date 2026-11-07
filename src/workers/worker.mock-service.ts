@@ -10,7 +10,8 @@ import {
   createTaskEntity as buildValidatedTaskEntity,
 } from '../tasks/task.factory';
 import {
-  toTaskLifecycleStatus,
+  activateQueuedTaskForExecution,
+  transitionTaskStatus,
 } from '../tasks/task.transitions';
 import {
   ActivityEvent,
@@ -20,6 +21,7 @@ import {
   SimulationSnapshot,
   TaskCategory,
   TaskEntity,
+  TaskErrorDetail,
   TaskPriority,
   TaskStatus,
   TaskType,
@@ -29,13 +31,13 @@ import {
 } from './worker.types';
 
 /**
- * WorkerMockService (Phase 1.1 & Phase 2.1 — Local Simulation Only)
+ * WorkerMockService (Phase 1.1 & Phase 2.1 + Audit Remediation — Local Simulation Only)
  * Responsible for domain operations on Workers and Tasks:
  * - Creating validated, deterministic TaskEntities with Phase 2.1 structured metadata
- * - Assigning tasks and managing per-worker task queues
- * - Promoting queued tasks when a worker becomes available
- * - Completing simulated tasks and updating SIMULATED token/cost counters
- * - Emitting structured ActivityEvents
+ * - Enforcing canonical Task State Machine transitions (`QUEUED -> ASSIGNED -> RUNNING`,
+ *   `RUNNING -> COMPLETED`, `RUNNING -> FAILED`) via centralized transition helpers
+ * - Managing per-worker FIFO task queues
+ * - Updating SIMULATED token/cost counters and emitting structured ActivityEvents
  */
 
 const MAX_EVENT_LOG_LENGTH = 80;
@@ -128,7 +130,8 @@ export class WorkerMockService {
     const taskType = input.type ?? mapCategoryToDefaultTaskType(category);
     const stagePipeline = DEFAULT_STAGE_PIPELINES[category] ?? DEFAULT_STAGE_PIPELINES.REASONING;
     const costRate = COST_PER_1K_TOKENS_SIMULATED[input.workerId] ?? 0.002;
-    const taskNumber = Object.keys(snapshot.tasks).length + 101;
+    const existingTaskIds = Object.keys(snapshot.tasks);
+    const taskNumber = existingTaskIds.length + 101;
     const id = `tsk_${input.workerId}_${taskNumber}_${snapshot.simTimeMs}`;
     const title = input.title?.trim() ? input.title.trim() : template.title;
     const description = input.description?.trim()
@@ -137,6 +140,8 @@ export class WorkerMockService {
 
     const created = buildValidatedTaskEntity({
       id,
+      sequenceNumber: taskNumber,
+      seed: snapshot.seed,
       simTimeMs: snapshot.simTimeMs,
       type: taskType,
       category,
@@ -151,6 +156,7 @@ export class WorkerMockService {
       maxAttempts: input.maxAttempts ?? 3,
       totalDurationSimMs: input.durationSimMs ?? template.durationSimMs,
       targetTokens: input.targetTokens ?? template.targetTokens,
+      existingTaskIds,
       input: {
         instruction: description,
         parameters: {
@@ -172,8 +178,10 @@ export class WorkerMockService {
 
   /**
    * Assigns a task to a worker.
-   * - If the worker is IDLE (and has no active task), promotes the task immediately
-   *   and transitions the worker IDLE -> TASK_RECEIVED.
+   * - Creates the task in `QUEUED` status.
+   * - If the worker is IDLE (and has no active task), activates the task through the
+   *   canonical state machine (`QUEUED -> ASSIGNED -> RUNNING` via initial execution stage)
+   *   and transitions the worker `IDLE -> TASK_RECEIVED`.
    * - If the worker is BUSY, WALKING, TASK_RECEIVED, COMPLETED, or PAUSED,
    *   places the task into the worker's `taskQueueIds` with status `QUEUED`.
    */
@@ -199,15 +207,19 @@ export class WorkerMockService {
 
     if (canStartImmediately) {
       const initialStageStatus = resolveTaskStageStatus(newTask, 0);
-      const startedTask: TaskEntity = {
-        ...newTask,
-        status: initialStageStatus,
-        lifecycleStatus: toTaskLifecycleStatus(initialStageStatus),
-        attemptCount: Math.min(newTask.maxAttempts, newTask.attemptCount + 1),
-        startedAt: snapshot.simTimeMs,
-        updatedAt: snapshot.simTimeMs,
-        startedAtSimMs: snapshot.simTimeMs,
-      };
+      const activation = activateQueuedTaskForExecution(
+        newTask,
+        initialStageStatus,
+        {
+          simTimeMs: snapshot.simTimeMs,
+          assignedWorkerId: worker.id,
+        },
+      );
+      if (!activation.ok) {
+        return snapshot;
+      }
+
+      const startedTask = activation.runningTask;
       updatedTasks[newTask.id] = startedTask;
 
       updatedWorker = {
@@ -261,6 +273,8 @@ export class WorkerMockService {
 
   /**
    * Promotes the next queued task for a worker if they have no active task.
+   * Transitions the queued task through `QUEUED -> ASSIGNED -> RUNNING` (initial stage)
+   * while preserving `createdAt` and `queuedAt`.
    */
   static promoteNextQueuedTask(
     snapshot: SimulationSnapshot,
@@ -287,15 +301,19 @@ export class WorkerMockService {
     }
 
     const initialStageStatus = resolveTaskStageStatus(nextTask, 0);
-    const activatedTask: TaskEntity = {
-      ...nextTask,
-      status: initialStageStatus,
-      lifecycleStatus: toTaskLifecycleStatus(initialStageStatus),
-      attemptCount: Math.min(nextTask.maxAttempts, nextTask.attemptCount + 1),
-      startedAt: snapshot.simTimeMs,
-      updatedAt: snapshot.simTimeMs,
-      startedAtSimMs: snapshot.simTimeMs,
-    };
+    const activation = activateQueuedTaskForExecution(
+      nextTask,
+      initialStageStatus,
+      {
+        simTimeMs: snapshot.simTimeMs,
+        assignedWorkerId: worker.id,
+      },
+    );
+    if (!activation.ok) {
+      return snapshot;
+    }
+
+    const activatedTask = activation.runningTask;
 
     const updatedWorker: WorkerEntity = {
       ...worker,
@@ -335,7 +353,8 @@ export class WorkerMockService {
   }
 
   /**
-   * Marks the current active task of a worker as COMPLETED and updates
+   * Marks the current active task of a worker as COMPLETED via the canonical
+   * `transitionTaskStatus(task, 'COMPLETED', ...)` state machine helper and updates
    * simulated metrics.
    */
   static completeCurrentTask(
@@ -356,17 +375,13 @@ export class WorkerMockService {
     const tokenDelta = Math.max(0, finalTokens - currentTask.simulatedTokens);
     const costDelta = Math.max(0, finalCost - currentTask.simulatedCostUsd);
 
-    const completedTask: TaskEntity = {
-      ...currentTask,
-      status: 'COMPLETED',
-      lifecycleStatus: 'COMPLETED',
+    const transitionOutcome = transitionTaskStatus(currentTask, 'COMPLETED', {
+      simTimeMs: snapshot.simTimeMs,
+      assignedWorkerId: worker.id,
       progress: 100,
       elapsedSimMs: currentTask.totalDurationSimMs,
       simulatedTokens: finalTokens,
       simulatedCostUsd: finalCost,
-      completedAt: snapshot.simTimeMs,
-      updatedAt: snapshot.simTimeMs,
-      completedAtSimMs: snapshot.simTimeMs,
       result: {
         summary: `[SIMULATED] Completed "${currentTask.title}" by ${worker.name}`,
         outputData: {
@@ -378,7 +393,13 @@ export class WorkerMockService {
         confidenceScore: 0.98,
         isSimulated: true,
       },
-    };
+    });
+
+    if (!transitionOutcome.ok) {
+      return snapshot;
+    }
+
+    const completedTask = transitionOutcome.task;
 
     const updatedWorker: WorkerEntity = {
       ...worker,
@@ -411,6 +432,81 @@ export class WorkerMockService {
       tasks: {
         ...snapshot.tasks,
         [completedTask.id]: completedTask,
+      },
+      workers: {
+        ...snapshot.workers,
+        [workerId]: updatedWorker,
+      },
+      events: this.appendEvent(snapshot, event),
+    };
+  }
+
+  /**
+   * Marks the current active task of a worker as FAILED via the canonical
+   * `transitionTaskStatus(task, 'FAILED', ...)` state machine helper and updates
+   * simulated error metrics.
+   */
+  static failCurrentTask(
+    snapshot: SimulationSnapshot,
+    workerId: WorkerId,
+    errorOverride?: Partial<TaskErrorDetail>,
+  ): SimulationSnapshot {
+    const worker = snapshot.workers[workerId];
+    if (!worker || !worker.currentTaskId) return snapshot;
+
+    const currentTask = snapshot.tasks[worker.currentTaskId];
+    if (!currentTask) return snapshot;
+
+    const transitionOutcome = transitionTaskStatus(currentTask, 'FAILED', {
+      simTimeMs: snapshot.simTimeMs,
+      assignedWorkerId: worker.id,
+      error: {
+        code: errorOverride?.code ?? 'EXECUTION_FAILURE_SIMULATED',
+        message:
+          errorOverride?.message ??
+          `[SIMULATED] Task "${currentTask.title}" encountered a simulated execution failure.`,
+        occurredAtSimMs: snapshot.simTimeMs,
+        attemptNumber: Math.max(1, currentTask.attemptCount),
+        recoverable:
+          errorOverride?.recoverable ??
+          currentTask.attemptCount < currentTask.maxAttempts,
+      },
+    });
+
+    if (!transitionOutcome.ok) {
+      return snapshot;
+    }
+
+    const failedTask = transitionOutcome.task;
+
+    const updatedWorker: WorkerEntity = {
+      ...worker,
+      status: 'IDLE',
+      transitionSimMs: 0,
+      currentTaskId: null,
+      animationState: deriveAnimationForWorker('IDLE', null),
+      metrics: {
+        ...worker.metrics,
+        errorCount: worker.metrics.errorCount + 1,
+        lastActivitySimMs: snapshot.simTimeMs,
+      },
+    };
+
+    const event = this.createEvent(snapshot, {
+      workerId: worker.id,
+      workerName: worker.name,
+      department: worker.department,
+      taskId: failedTask.id,
+      type: 'TASK_STAGE_CHANGED',
+      message: `[SIMULATED] Failed "${failedTask.title}" (${failedTask.error?.code ?? 'ERROR'})`,
+      accentColor: '#EF4444',
+    });
+
+    return {
+      ...snapshot,
+      tasks: {
+        ...snapshot.tasks,
+        [failedTask.id]: failedTask,
       },
       workers: {
         ...snapshot.workers,

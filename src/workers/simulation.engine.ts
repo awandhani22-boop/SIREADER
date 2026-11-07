@@ -9,8 +9,10 @@ import {
   WorkerMockService,
 } from './worker.mock-service';
 import {
+  updateTaskExecutionStage,
+} from '../tasks/task.transitions';
+import {
   SimulationSnapshot,
-  TaskEntity,
   WorkerEntity,
   WorkerId,
   WorkerStatus,
@@ -468,16 +470,17 @@ export class SimulationEngine {
       );
       const costDelta = Math.max(0, nextSimCost - task.simulatedCostUsd);
 
-      const updatedTask: TaskEntity = {
-        ...task,
+      const stageUpdateOutcome = updateTaskExecutionStage(task, nextStageStatus, {
+        simTimeMs: snapshot.simTimeMs,
         elapsedSimMs: nextElapsedMs,
         progress: nextProgress,
-        status: nextStageStatus,
-        lifecycleStatus: 'RUNNING',
-        updatedAt: snapshot.simTimeMs,
         simulatedTokens: nextSimTokens,
         simulatedCostUsd: nextSimCost,
-      };
+      });
+      if (!stageUpdateOutcome.ok) {
+        return snapshot;
+      }
+      const updatedTask = stageUpdateOutcome.task;
 
       const updatedWorker: WorkerEntity = {
         ...worker,

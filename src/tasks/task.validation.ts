@@ -1,21 +1,33 @@
 import {
+  PermanentWorkerId,
   TASK_PRIORITIES,
   TASK_TYPES,
   TaskValidationIssue,
   TaskValidationResult,
+  WorkerCapabilityProfile,
 } from './task.types';
-import { isValidTaskStatus, toTaskLifecycleStatus } from './task.transitions';
-import { isPermanentWorkerId } from '../workers/worker.capabilities';
+import {
+  isTaskLifecycleStatus,
+  isValidTaskStatus,
+  toTaskLifecycleStatus,
+} from './task.transitions';
+import {
+  isPermanentWorkerId,
+  supportsTaskType,
+} from '../workers/worker.capabilities';
 import { TaskEntity } from '../workers/worker.types';
 
 /**
- * Task Validation Module (Phase 2.1)
- * Validates all 17 structural, relational, and simulation-timestamp invariants
- * for a TaskEntity before creation or state persistence.
+ * Task Validation Module (Phase 2.1 + Audit Remediation)
+ * Validates all structural, lifecycle-consistency, capability-matching,
+ * worker-assignment, and simulation-timestamp invariants for a TaskEntity.
  */
 
 export interface ValidateTaskOptions {
   readonly existingTaskIds?: ReadonlySet<string> | readonly string[];
+  readonly capabilityRegistry?: Readonly<
+    Record<PermanentWorkerId, WorkerCapabilityProfile>
+  >;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -53,10 +65,10 @@ export function validateTaskEntity(
   }
 
   // 2. `type` must be a known TaskType
-  if (
-    typeof task.type !== 'string' ||
-    !(TASK_TYPES as readonly string[]).includes(task.type)
-  ) {
+  const typeValid =
+    typeof task.type === 'string' &&
+    (TASK_TYPES as readonly string[]).includes(task.type);
+  if (!typeValid) {
     issues.push({
       code: 'UNKNOWN_TASK_TYPE',
       field: 'type',
@@ -76,7 +88,7 @@ export function validateTaskEntity(
     });
   }
 
-  // 4. `status` must be valid
+  // 4. `status` and `lifecycleStatus` must be valid AND consistent with each other
   const statusValid =
     typeof task.status === 'string' && isValidTaskStatus(task.status);
   if (!statusValid) {
@@ -85,6 +97,28 @@ export function validateTaskEntity(
       field: 'status',
       message: `Invalid task status "${String(task.status)}".`,
     });
+  }
+
+  const lifecycleStatusValid =
+    typeof task.lifecycleStatus === 'string' &&
+    isTaskLifecycleStatus(task.lifecycleStatus);
+  if (!lifecycleStatusValid) {
+    issues.push({
+      code: 'INVALID_LIFECYCLE_STATUS',
+      field: 'lifecycleStatus',
+      message: `Invalid canonical task lifecycleStatus "${String(task.lifecycleStatus)}".`,
+    });
+  }
+
+  if (statusValid && lifecycleStatusValid) {
+    const expectedLifecycleStatus = toTaskLifecycleStatus(task.status);
+    if (task.lifecycleStatus !== expectedLifecycleStatus) {
+      issues.push({
+        code: 'STATUS_LIFECYCLE_MISMATCH',
+        field: 'lifecycleStatus',
+        message: `Task status "${task.status}" maps to lifecycleStatus "${expectedLifecycleStatus}", but found "${task.lifecycleStatus}".`,
+      });
+    }
   }
 
   // 5. `maxAttempts` must be > 0
@@ -162,7 +196,7 @@ export function validateTaskEntity(
     }
   }
 
-  // 10. `assignedWorkerId` must reference a valid registered worker when not null
+  // 10. `assignedWorkerId`, capability matching, and `workerId` consistency
   if (task.assignedWorkerId !== null) {
     if (
       typeof task.assignedWorkerId !== 'string' ||
@@ -172,6 +206,43 @@ export function validateTaskEntity(
         code: 'INVALID_ASSIGNED_WORKER_ID',
         field: 'assignedWorkerId',
         message: `assignedWorkerId "${String(task.assignedWorkerId)}" does not reference a valid registered worker.`,
+      });
+    } else {
+      // Consistency between legacy workerId and assignedWorkerId when assigned
+      if (task.workerId !== task.assignedWorkerId) {
+        issues.push({
+          code: 'WORKER_ASSIGNMENT_MISMATCH',
+          field: 'workerId',
+          message: `Task workerId ("${String(task.workerId)}") must match assignedWorkerId ("${task.assignedWorkerId}") when assignedWorkerId is non-null.`,
+        });
+      }
+
+      // Capability validation against active worker capabilities
+      if (
+        typeValid &&
+        !supportsTaskType(
+          task.assignedWorkerId,
+          task.type,
+          options?.capabilityRegistry,
+        )
+      ) {
+        issues.push({
+          code: 'UNSUPPORTED_WORKER_CAPABILITY',
+          field: 'assignedWorkerId',
+          message: `Worker "${task.assignedWorkerId}" does not have an active capability supporting task type "${task.type}".`,
+        });
+      }
+    }
+  } else {
+    // Unassigned legacy workerId fallback must still reference a valid registered worker
+    if (
+      typeof task.workerId !== 'string' ||
+      !isPermanentWorkerId(task.workerId)
+    ) {
+      issues.push({
+        code: 'INVALID_ASSIGNED_WORKER_ID',
+        field: 'workerId',
+        message: `Fallback workerId "${String(task.workerId)}" does not reference a valid registered worker.`,
       });
     }
   }
@@ -220,10 +291,14 @@ export function validateTaskEntity(
     });
   }
 
-  const lifecycle = statusValid ? toTaskLifecycleStatus(task.status) : null;
+  const effectiveLifecycle = statusValid
+    ? toTaskLifecycleStatus(task.status)
+    : lifecycleStatusValid
+      ? task.lifecycleStatus
+      : null;
 
   // 13. Task with status COMPLETED must have completedAt
-  if (lifecycle === 'COMPLETED' && !isValidSimTimestamp(task.completedAt)) {
+  if (effectiveLifecycle === 'COMPLETED' && !isValidSimTimestamp(task.completedAt)) {
     issues.push({
       code: 'MISSING_COMPLETED_AT_TIMESTAMP',
       field: 'completedAt',
@@ -232,7 +307,7 @@ export function validateTaskEntity(
   }
 
   // 14. Task with status RUNNING must have startedAt
-  if (lifecycle === 'RUNNING' && !isValidSimTimestamp(task.startedAt)) {
+  if (effectiveLifecycle === 'RUNNING' && !isValidSimTimestamp(task.startedAt)) {
     issues.push({
       code: 'MISSING_STARTED_AT_TIMESTAMP',
       field: 'startedAt',
@@ -241,7 +316,7 @@ export function validateTaskEntity(
   }
 
   // 15. Task with status PENDING must NOT have queuedAt
-  if (lifecycle === 'PENDING' && task.queuedAt !== null) {
+  if (effectiveLifecycle === 'PENDING' && task.queuedAt !== null) {
     issues.push({
       code: 'PENDING_TASK_HAS_QUEUED_AT',
       field: 'queuedAt',

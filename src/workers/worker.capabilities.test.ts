@@ -17,18 +17,8 @@ import {
 } from './worker.capabilities';
 
 /**
- * Automated Unit Tests for SIREADER Phase 2.1 — Worker Capability Registry
- * Covers all 10 mandatory requirements in Section 15.A:
- * 1. All seven workers are registered.
- * 2. Every worker has at least one capability.
- * 3. Capability IDs are unique.
- * 4. Worker lookup works accurately.
- * 5. Capability lookup works accurately.
- * 6. `supportsTaskType` returns true for supported task types.
- * 7. `supportsTaskType` returns false for unsupported task types.
- * 8. Query workers by task type returns the exact expected worker list.
- * 9. Disabled capabilities are never treated as active.
- * 10. Registry state cannot be mutated from outside.
+ * Automated Unit Tests for SIREADER Phase 2.1 + Audit Remediation — Worker Capability Registry
+ * Covers all 10 mandatory requirements in Section 15.A plus Audit Finding 4 deep immutability tests.
  */
 
 test('1. All seven permanent workers are registered in the Capability Registry', () => {
@@ -242,28 +232,71 @@ test('9. Disabled capability or disabled worker is never treated as active', () 
   assert.equal(supportsTaskType('market_monitor', 'MARKET_MONITORING_SIMULATION'), true);
 });
 
-test('10. Registry state is deeply frozen and cannot be mutated from outside', () => {
+test('10. Registry state and all public query outer/inner structures are deeply frozen and cannot be mutated from outside (Audit Finding 4)', () => {
+  const allProfiles = getAllWorkerCapabilityProfiles();
+  const allCaps = getAllCapabilities();
+  const workerCaps = getWorkerCapabilities('supervisor');
+  const emptyWorkerCaps = getWorkerCapabilities('unknown_worker');
+  const workersByType = getWorkersByTaskType('DECISION_EVALUATION');
+
+  // Verify outer arrays of all public query functions are frozen
+  assert.equal(Object.isFrozen(allProfiles), true);
+  assert.equal(Object.isFrozen(allCaps), true);
+  assert.equal(Object.isFrozen(workerCaps), true);
+  assert.equal(Object.isFrozen(emptyWorkerCaps), true);
+  assert.equal(Object.isFrozen(workersByType), true);
+
+  // Attempt mutating outer arrays -> must throw TypeError
+  assert.throws(() => {
+    (allProfiles as unknown as unknown[]).push({});
+  }, TypeError);
+  assert.throws(() => {
+    (allCaps as unknown as unknown[]).pop();
+  }, TypeError);
+  assert.throws(() => {
+    (workerCaps as unknown as unknown[]).splice(0, 1);
+  }, TypeError);
+  assert.throws(() => {
+    (workersByType as unknown as unknown[]).push({});
+  }, TypeError);
+
+  // Verify every nested structure on profiles and capability definitions is frozen
+  for (const profile of allProfiles) {
+    assert.equal(Object.isFrozen(profile), true);
+    assert.equal(Object.isFrozen(profile.capabilities), true);
+    assert.equal(Object.isFrozen(profile.supportedTaskTypes), true);
+
+    for (const cap of profile.capabilities) {
+      assert.equal(Object.isFrozen(cap), true);
+      assert.equal(Object.isFrozen(cap.supportedTaskTypes), true);
+      assert.equal(Object.isFrozen(cap.inputSchema), true);
+      assert.equal(Object.isFrozen(cap.inputSchema.requiredFields), true);
+      assert.equal(Object.isFrozen(cap.inputSchema.optionalFields), true);
+      assert.equal(Object.isFrozen(cap.outputSchema), true);
+      assert.equal(Object.isFrozen(cap.outputSchema.requiredFields), true);
+      assert.equal(Object.isFrozen(cap.outputSchema.optionalFields), true);
+    }
+  }
+
   const profile = getWorkerCapabilityProfile('supervisor');
   assert.ok(profile);
-  assert.equal(Object.isFrozen(profile), true);
-  assert.equal(Object.isFrozen(profile.capabilities), true);
-  assert.equal(Object.isFrozen(profile.supportedTaskTypes), true);
-
   assert.throws(() => {
     (profile as { enabled: boolean }).enabled = false;
   }, TypeError);
-
   assert.throws(() => {
-    (profile.capabilities as unknown as unknown[]).push({});
+    (profile.capabilities[0].inputSchema.requiredFields as unknown as string[]).push('hack');
   }, TypeError);
 
-  assert.throws(() => {
-    (profile.capabilities[0].supportedTaskTypes as unknown as string[]).push(
-      'DATA_ARCHIVING',
-    );
-  }, TypeError);
+  // Custom registry isolation check
+  const customReg = createCustomCapabilityRegistry({
+    disabledWorkerIds: ['supervisor'],
+  });
+  assert.equal(Object.isFrozen(customReg), true);
+  const customProfiles = getAllWorkerCapabilityProfiles(customReg);
+  assert.equal(Object.isFrozen(customProfiles), true);
+  assert.equal(customProfiles[0].enabled, false);
 
-  // Re-query to verify canonical state is untouched
+  // Canonical registry remains untouched
   const freshProfile = getWorkerCapabilityProfile('supervisor');
   assert.ok(freshProfile);
   assert.equal(freshProfile.enabled, true);

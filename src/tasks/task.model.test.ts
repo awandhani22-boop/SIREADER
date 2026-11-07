@@ -7,31 +7,31 @@ import {
   generateDeterministicTaskId,
 } from './task.factory';
 import { validateTaskEntity } from './task.validation';
+import {
+  createCustomCapabilityRegistry,
+} from '../workers/worker.capabilities';
+import { WorkerMockService } from '../workers/worker.mock-service';
+import { WORKER_TASK_TEMPLATES } from '../workers/worker.registry';
 import { SimulationEngine } from '../workers/simulation.engine';
-import { TaskEntity } from '../workers/worker.types';
+import {
+  PERMANENT_WORKER_IDS,
+  TASK_EXECUTION_STAGE_STATUSES,
+  TASK_LIFECYCLE_STATUSES,
+  TaskEntity,
+} from '../workers/worker.types';
 
 /**
- * Automated Unit Tests for SIREADER Phase 2.1 — Task Model, Validation & Deterministic Factory
- * Covers all 12 requirements in Section 15.B and all 4 requirements in Section 15.D:
- * B.1  Valid task passes validation.
- * B.2  Invalid priority is rejected.
- * B.3  Unknown task type is rejected.
- * B.4  maxAttempts <= 0 is rejected.
- * B.5  attemptCount < 0 is rejected.
- * B.6  attemptCount > maxAttempts is rejected.
- * B.7  Duplicate dependencyIds are rejected.
- * B.8  Self-dependency is rejected.
- * B.9  Invalid assignedWorkerId is rejected.
- * B.10 Invalid timestamp ordering / missing timestamps are rejected.
- * B.11 PENDING task with queuedAt !== null is rejected.
- * B.12 COMPLETED task without completedAt is rejected.
- * D.1  Same seed & sequence produce identical task IDs.
- * D.2  Resetting sequence generator restores identical ID sequence.
- * D.3  Default task fields are populated accurately.
- * D.4  Timestamps use simulation time (not wall-clock Date.now()).
+ * Automated Unit Tests for SIREADER Phase 2.1 + Audit Remediation
+ * Covers:
+ * - Section 15.B (12 task validation rules)
+ * - Section 15.D (4 deterministic factory rules)
+ * - Audit Finding 1 (status & lifecycleStatus consistency validation)
+ * - Audit Finding 3 (capability validation & legacy template compatibility)
+ * - Audit Finding 5 (deterministic task ID uniqueness & collision prevention)
+ * - Section 8 (workerId & assignedWorkerId consistency)
  */
 
-test('B.1 Valid TaskEntity created via factory passes all 17 validation rules', () => {
+test('B.1 Valid TaskEntity created via factory passes all validation rules', () => {
   const task = createTaskEntity({
     seed: 20261106,
     sequenceNumber: 1,
@@ -51,6 +51,7 @@ test('B.1 Valid TaskEntity created via factory passes all 17 validation rules', 
 
 test('B.2 Invalid priority is rejected with INVALID_PRIORITY', () => {
   const baseTask = createTaskEntity({
+    sequenceNumber: 1,
     simTimeMs: 1000,
     title: 'Priority Validation Check',
   });
@@ -67,6 +68,7 @@ test('B.2 Invalid priority is rejected with INVALID_PRIORITY', () => {
 
 test('B.3 Unknown task type is rejected with UNKNOWN_TASK_TYPE', () => {
   const baseTask = createTaskEntity({
+    sequenceNumber: 1,
     simTimeMs: 1000,
     title: 'Type Validation Check',
   });
@@ -83,6 +85,7 @@ test('B.3 Unknown task type is rejected with UNKNOWN_TASK_TYPE', () => {
 
 test('B.4 maxAttempts <= 0 is rejected with INVALID_MAX_ATTEMPTS', () => {
   const outcomeZero = createTaskEntitySafe({
+    sequenceNumber: 1,
     simTimeMs: 1000,
     title: 'Zero Max Attempts',
     maxAttempts: 0,
@@ -93,6 +96,7 @@ test('B.4 maxAttempts <= 0 is rejected with INVALID_MAX_ATTEMPTS', () => {
   );
 
   const outcomeNegative = createTaskEntitySafe({
+    sequenceNumber: 2,
     simTimeMs: 1000,
     title: 'Negative Max Attempts',
     maxAttempts: -2,
@@ -107,6 +111,7 @@ test('B.4 maxAttempts <= 0 is rejected with INVALID_MAX_ATTEMPTS', () => {
 
 test('B.5 attemptCount < 0 is rejected with NEGATIVE_ATTEMPT_COUNT', () => {
   const outcome = createTaskEntitySafe({
+    sequenceNumber: 1,
     simTimeMs: 1000,
     title: 'Negative Attempt Count',
     attemptCount: -1,
@@ -120,6 +125,7 @@ test('B.5 attemptCount < 0 is rejected with NEGATIVE_ATTEMPT_COUNT', () => {
 
 test('B.6 attemptCount > maxAttempts is rejected with ATTEMPT_COUNT_EXCEEDS_MAX', () => {
   const outcome = createTaskEntitySafe({
+    sequenceNumber: 1,
     simTimeMs: 1000,
     title: 'Exceeded Attempt Count',
     attemptCount: 4,
@@ -135,6 +141,7 @@ test('B.6 attemptCount > maxAttempts is rejected with ATTEMPT_COUNT_EXCEEDS_MAX'
 
 test('B.7 Duplicate dependencyIds are rejected with DUPLICATE_DEPENDENCY_IDS', () => {
   const outcome = createTaskEntitySafe({
+    sequenceNumber: 1,
     simTimeMs: 2000,
     title: 'Duplicate Dependencies Task',
     dependencyIds: ['tsk_upstream_1', 'tsk_upstream_2', 'tsk_upstream_1'],
@@ -160,6 +167,7 @@ test('B.8 Self-dependency is rejected with SELF_DEPENDENCY_DETECTED', () => {
 
 test('B.9 Invalid assignedWorkerId is rejected with INVALID_ASSIGNED_WORKER_ID', () => {
   const outcome = createTaskEntitySafe({
+    sequenceNumber: 1,
     simTimeMs: 2000,
     title: 'Invalid Worker Reference Task',
     assignedWorkerId: 'non_existent_worker',
@@ -173,8 +181,8 @@ test('B.9 Invalid assignedWorkerId is rejected with INVALID_ASSIGNED_WORKER_ID',
 });
 
 test('B.10 Invalid timestamp ordering (completedAt < startedAt, updatedAt < createdAt, RUNNING without startedAt) is rejected', () => {
-  // Case 1: completedAt < startedAt
   const baseCompleted = createTaskEntity({
+    sequenceNumber: 1,
     simTimeMs: 5000,
     title: 'Completed Task',
     status: 'COMPLETED',
@@ -194,7 +202,6 @@ test('B.10 Invalid timestamp ordering (completedAt < startedAt, updatedAt < crea
     ),
   );
 
-  // Case 2: updatedAt < createdAt
   const invalidUpdatedBeforeCreated: TaskEntity = {
     ...baseCompleted,
     createdAt: 5000,
@@ -208,8 +215,8 @@ test('B.10 Invalid timestamp ordering (completedAt < startedAt, updatedAt < crea
     ),
   );
 
-  // Case 3: RUNNING without startedAt
   const invalidRunningWithoutStartedAt = createTaskEntitySafe({
+    sequenceNumber: 2,
     simTimeMs: 3000,
     title: 'Running Without StartedAt',
     status: 'RUNNING',
@@ -225,6 +232,7 @@ test('B.10 Invalid timestamp ordering (completedAt < startedAt, updatedAt < crea
 
 test('B.11 PENDING task with non-null queuedAt is rejected with PENDING_TASK_HAS_QUEUED_AT', () => {
   const outcome = createTaskEntitySafe({
+    sequenceNumber: 1,
     simTimeMs: 1000,
     title: 'Pending Task With QueuedAt',
     status: 'PENDING',
@@ -240,6 +248,7 @@ test('B.11 PENDING task with non-null queuedAt is rejected with PENDING_TASK_HAS
 
 test('B.12 COMPLETED task without completedAt is rejected with MISSING_COMPLETED_AT_TIMESTAMP', () => {
   const outcome = createTaskEntitySafe({
+    sequenceNumber: 1,
     simTimeMs: 4000,
     title: 'Completed Without Timestamp',
     status: 'COMPLETED',
@@ -271,7 +280,6 @@ test('D.1 & D.2 Deterministic Task Factory produces identical IDs for same seed/
 
   assert.deepEqual(runA, runB);
 
-  // Reset seqA and verify it produces the exact same sequence again
   seqA.reset();
   const runAfterReset = [
     seqA.nextId(0),
@@ -280,7 +288,6 @@ test('D.1 & D.2 Deterministic Task Factory produces identical IDs for same seed/
   ];
   assert.deepEqual(runAfterReset, runA);
 
-  // Pure function check
   assert.equal(
     generateDeterministicTaskId({ seed: 42, sequenceNumber: 7, simTimeMs: 2500 }),
     generateDeterministicTaskId({ seed: 42, sequenceNumber: 7, simTimeMs: 2500 }),
@@ -318,4 +325,291 @@ test('D.3 & D.4 Default fields and simulation timestamps are populated determini
   assert.equal(task.completedAt, null);
   assert.equal(task.createdAtSimMs, 1000);
   assert.equal(task.isSimulated, true);
+});
+
+test('Audit Finding 1: validateTaskEntity enforces strict consistency between status and lifecycleStatus', () => {
+  const base = createTaskEntity({
+    sequenceNumber: 1,
+    simTimeMs: 2000,
+    title: 'Status Consistency Base',
+    status: 'QUEUED',
+  });
+
+  // 1. Valid canonical status and lifecycleStatus
+  for (const canonicalStatus of TASK_LIFECYCLE_STATUSES) {
+    const candidate = createTaskEntity({
+      sequenceNumber: 10,
+      simTimeMs: 2000,
+      title: `Canonical ${canonicalStatus}`,
+      status: canonicalStatus,
+    });
+    assert.equal(candidate.lifecycleStatus, canonicalStatus);
+    assert.equal(validateTaskEntity(candidate).valid, true);
+  }
+
+  // 2. Valid Phase 1.1 execution stages with lifecycleStatus === 'RUNNING'
+  for (const stageStatus of TASK_EXECUTION_STAGE_STATUSES) {
+    const stageTask = createTaskEntity({
+      sequenceNumber: 20,
+      simTimeMs: 2000,
+      title: `Stage ${stageStatus}`,
+      status: stageStatus,
+    });
+    assert.equal(stageTask.lifecycleStatus, 'RUNNING');
+    assert.equal(validateTaskEntity(stageTask).valid, true);
+  }
+
+  // 3. QUEUED with lifecycleStatus RUNNING -> rejected
+  const queuedWithRunning: TaskEntity = {
+    ...base,
+    status: 'QUEUED',
+    lifecycleStatus: 'RUNNING',
+    startedAt: 2000,
+  };
+  const resQueuedMismatch = validateTaskEntity(queuedWithRunning);
+  assert.equal(resQueuedMismatch.valid, false);
+  assert.ok(
+    resQueuedMismatch.issues.some((i) => i.code === 'STATUS_LIFECYCLE_MISMATCH'),
+  );
+
+  // 4. RUNNING with lifecycleStatus QUEUED -> rejected
+  const runningWithQueued: TaskEntity = {
+    ...base,
+    status: 'RUNNING',
+    lifecycleStatus: 'QUEUED',
+    startedAt: 2000,
+  };
+  const resRunningMismatch = validateTaskEntity(runningWithQueued);
+  assert.equal(resRunningMismatch.valid, false);
+  assert.ok(
+    resRunningMismatch.issues.some((i) => i.code === 'STATUS_LIFECYCLE_MISMATCH'),
+  );
+
+  // 5. Invalid lifecycleStatus -> rejected with INVALID_LIFECYCLE_STATUS
+  const invalidLifecycle: TaskEntity = {
+    ...base,
+    status: 'QUEUED',
+    lifecycleStatus: 'ANALYZING' as unknown as TaskEntity['lifecycleStatus'],
+  };
+  const resInvalidLifecycle = validateTaskEntity(invalidLifecycle);
+  assert.equal(resInvalidLifecycle.valid, false);
+  assert.ok(
+    resInvalidLifecycle.issues.some(
+      (i) => i.code === 'INVALID_LIFECYCLE_STATUS',
+    ),
+  );
+
+  // 6. COMPLETED with mismatched lifecycleStatus -> rejected
+  const completedMismatch: TaskEntity = {
+    ...base,
+    status: 'COMPLETED',
+    lifecycleStatus: 'RUNNING',
+    startedAt: 1500,
+    completedAt: 2000,
+  };
+  const resCompletedMismatch = validateTaskEntity(completedMismatch);
+  assert.equal(resCompletedMismatch.valid, false);
+  assert.ok(
+    resCompletedMismatch.issues.some(
+      (i) => i.code === 'STATUS_LIFECYCLE_MISMATCH',
+    ),
+  );
+});
+
+test('Audit Finding 3 & Section 8: Capability matching validation, workerId/assignedWorkerId consistency, and legacy template compatibility', () => {
+  // 1. Haiku accepts QUICK_RESEARCH
+  const haikuValid = createTaskEntitySafe({
+    sequenceNumber: 1,
+    simTimeMs: 1000,
+    type: 'QUICK_RESEARCH',
+    assignedWorkerId: 'haiku',
+    title: 'Haiku Quick Research',
+  });
+  assert.equal(haikuValid.valid, true);
+
+  // 2. Haiku rejects COMPLEX_REASONING
+  const haikuInvalid = createTaskEntitySafe({
+    sequenceNumber: 2,
+    simTimeMs: 1000,
+    type: 'COMPLEX_REASONING',
+    assignedWorkerId: 'haiku',
+    title: 'Haiku Unsupported Complex Reasoning',
+  });
+  assert.equal(haikuInvalid.valid, false);
+  assert.ok(
+    haikuInvalid.validation.issues.some(
+      (i) => i.code === 'UNSUPPORTED_WORKER_CAPABILITY',
+    ),
+  );
+
+  // 3. Opus accepts COMPLEX_REASONING
+  const opusValid = createTaskEntitySafe({
+    sequenceNumber: 3,
+    simTimeMs: 1000,
+    type: 'COMPLEX_REASONING',
+    assignedWorkerId: 'opus',
+    title: 'Opus Complex Reasoning',
+  });
+  assert.equal(opusValid.valid, true);
+
+  // 4. Both Decision Engineer and Opus accept DECISION_EVALUATION
+  const decEngEval = createTaskEntitySafe({
+    sequenceNumber: 4,
+    simTimeMs: 1000,
+    type: 'DECISION_EVALUATION',
+    assignedWorkerId: 'decision_engineer',
+    title: 'Decision Engineer Eval',
+  });
+  const opusEval = createTaskEntitySafe({
+    sequenceNumber: 5,
+    simTimeMs: 1000,
+    type: 'DECISION_EVALUATION',
+    assignedWorkerId: 'opus',
+    title: 'Opus Decision Eval',
+  });
+  assert.equal(decEngEval.valid, true);
+  assert.equal(opusEval.valid, true);
+
+  // 5. Disabled capability is rejected
+  const customRegDisabledCap = createCustomCapabilityRegistry({
+    disabledCapabilityIds: ['quick_research'],
+  });
+  const disabledCapOutcome = createTaskEntitySafe(
+    {
+      sequenceNumber: 6,
+      simTimeMs: 1000,
+      type: 'QUICK_RESEARCH',
+      assignedWorkerId: 'haiku',
+      title: 'Disabled Capability Task',
+    },
+    { capabilityRegistry: customRegDisabledCap },
+  );
+  assert.equal(disabledCapOutcome.valid, false);
+  assert.ok(
+    disabledCapOutcome.validation.issues.some(
+      (i) => i.code === 'UNSUPPORTED_WORKER_CAPABILITY',
+    ),
+  );
+
+  // 6. Disabled worker is rejected
+  const customRegDisabledWorker = createCustomCapabilityRegistry({
+    disabledWorkerIds: ['opus'],
+  });
+  const disabledWorkerOutcome = createTaskEntitySafe(
+    {
+      sequenceNumber: 7,
+      simTimeMs: 1000,
+      type: 'COMPLEX_REASONING',
+      assignedWorkerId: 'opus',
+      title: 'Disabled Worker Task',
+    },
+    { capabilityRegistry: customRegDisabledWorker },
+  );
+  assert.equal(disabledWorkerOutcome.valid, false);
+  assert.ok(
+    disabledWorkerOutcome.validation.issues.some(
+      (i) => i.code === 'UNSUPPORTED_WORKER_CAPABILITY',
+    ),
+  );
+
+  // 7. Unassigned task (assignedWorkerId: null) with any valid TaskType remains valid
+  const unassignedComplex = createTaskEntitySafe({
+    sequenceNumber: 8,
+    simTimeMs: 1000,
+    type: 'COMPLEX_REASONING',
+    assignedWorkerId: null,
+    title: 'Unassigned Complex Task',
+  });
+  assert.equal(unassignedComplex.valid, true);
+
+  // 8. workerId vs assignedWorkerId mismatch is rejected with WORKER_ASSIGNMENT_MISMATCH
+  const mismatchedWorkerTask: TaskEntity = {
+    ...opusValid.task!,
+    workerId: 'haiku',
+    assignedWorkerId: 'opus',
+  };
+  const mismatchValidation = validateTaskEntity(mismatchedWorkerTask);
+  assert.equal(mismatchValidation.valid, false);
+  assert.ok(
+    mismatchValidation.issues.some(
+      (i) => i.code === 'WORKER_ASSIGNMENT_MISMATCH',
+    ),
+  );
+
+  // 9. All legacy WORKER_TASK_TEMPLATES across all 7 workers remain 100% valid
+  let snapshot = SimulationEngine.createBaselineSnapshot(20261106);
+  for (const workerId of PERMANENT_WORKER_IDS) {
+    const templates = WORKER_TASK_TEMPLATES[workerId];
+    assert.ok(templates && templates.length > 0);
+    for (let idx = 0; idx < templates.length; idx++) {
+      const entity = WorkerMockService.createTaskEntity(
+        snapshot,
+        { workerId },
+        idx,
+      );
+      snapshot = {
+        ...snapshot,
+        tasks: { ...snapshot.tasks, [entity.id]: entity },
+      };
+      const check = validateTaskEntity(entity);
+      assert.equal(
+        check.valid,
+        true,
+        `Legacy template #${idx} for ${workerId} failed validation: ${JSON.stringify(check.issues)}`,
+      );
+      assert.equal(entity.workerId, workerId);
+      assert.equal(entity.assignedWorkerId, workerId);
+    }
+  }
+});
+
+test('Audit Finding 5: Deterministic Task ID uniqueness prevents silent collisions at the same simulation timestamp', () => {
+  const sequence = new DeterministicTaskSequence(20261106, 1);
+
+  // Two tasks created at the exact same simulation time (simTimeMs = 1000) via sequence receive distinct IDs
+  const task1 = createTaskEntity({
+    sequence,
+    simTimeMs: 1000,
+    title: 'Concurrent Sim Time Task 1',
+  });
+  const task2 = createTaskEntity({
+    sequence,
+    simTimeMs: 1000,
+    title: 'Concurrent Sim Time Task 2',
+  });
+  assert.notEqual(task1.id, task2.id);
+
+  // Two tasks created at the same simulation time using existingTaskIds context also receive distinct IDs
+  const existingIds = new Set<string>([task1.id]);
+  const taskFromExisting = createTaskEntity({
+    seed: 20261106,
+    simTimeMs: 1000,
+    title: 'Task With Existing IDs Context',
+    existingTaskIds: existingIds,
+  });
+  assert.notEqual(taskFromExisting.id, task1.id);
+
+  // Calling createTaskEntity without id, sequenceNumber, sequence, or existingTaskIds throws a clear deterministic error
+  assert.throws(() => {
+    createTaskEntity({
+      simTimeMs: 1000,
+      title: 'Missing Deterministic Identity Context',
+    });
+  }, /Deterministic task creation requires an explicit id, sequenceNumber, DeterministicTaskSequence instance, or existingTaskIds/);
+
+  // Duplicate ID against existingTaskIds is rejected with DUPLICATE_TASK_ID
+  const duplicateAttempt = createTaskEntitySafe(
+    {
+      id: task1.id,
+      simTimeMs: 1000,
+      title: 'Duplicate Task ID Attempt',
+    },
+    { existingTaskIds: [task1.id] },
+  );
+  assert.equal(duplicateAttempt.valid, false);
+  assert.ok(
+    duplicateAttempt.validation.issues.some(
+      (i) => i.code === 'DUPLICATE_TASK_ID',
+    ),
+  );
 });

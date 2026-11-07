@@ -1,37 +1,44 @@
 # SIREADER Virtual Office — Project State
 
 ## Current phase
-Phase 2.1 (Worker Capability Registry & Task Model — Complete & Verified) — Builds on the Phase 1.1 unified 3D simulation & animation foundation by introducing a centralized, deeply immutable `WorkerCapabilityRegistry` across all 7 permanent workers (`28` unique capabilities) and a backward-compatible, deterministically validated `TaskEntity` domain model with a 9-state lifecycle state machine (`PENDING`, `QUEUED`, `ASSIGNED`, `RUNNING`, `COMPLETED`, `FAILED`, `RETRY_WAIT`, `BLOCKED`, `CANCELLED`).
+Phase 2.1 (Worker Capability Registry & Task Model + Audit Remediation — Complete & Verified) — Builds on the Phase 1.1 unified 3D simulation & animation foundation by introducing a centralized, deeply immutable `WorkerCapabilityRegistry` across all 7 permanent workers (`28` unique capabilities) and a backward-compatible, deterministically validated `TaskEntity` domain model with a 9-state lifecycle state machine (`PENDING`, `QUEUED`, `ASSIGNED`, `RUNNING`, `COMPLETED`, `FAILED`, `RETRY_WAIT`, `BLOCKED`, `CANCELLED`).
+
+## Phase 2.1 Audit Remediation Summary
+| Audit Finding | Root Cause | Files Modified | Remediation Implemented |
+| :--- | :--- | :--- | :--- |
+| **1. Task Status & Lifecycle Consistency** | `validateTaskEntity()` checked `isValidTaskStatus(task.status)` without validating `isTaskLifecycleStatus(task.lifecycleStatus)` or `task.lifecycleStatus === toTaskLifecycleStatus(task.status)`. | `src/tasks/task.types.ts`, `src/tasks/task.validation.ts`, `src/tasks/task.model.test.ts` | Added `INVALID_LIFECYCLE_STATUS` and `STATUS_LIFECYCLE_MISMATCH` validation rules enforcing exact equality between `task.lifecycleStatus` and `toTaskLifecycleStatus(task.status)` across both canonical statuses and Phase 1.1 execution stages (`ROUTING`, `EXTRACTING`, `ANALYZING`, `VALIDATING`, `ARCHIVING`). |
+| **2. Runtime Must Respect Task State Machine** | Runtime methods in `WorkerMockService` and `SimulationEngine` spread `TaskEntity` fields directly and jumped from `QUEUED` to an execution stage (`RUNNING`) without stepping through `ASSIGNED`. | `src/tasks/task.transitions.ts`, `src/workers/worker.mock-service.ts`, `src/workers/simulation.engine.ts`, `src/tasks/task.transitions.test.ts` | Added `activateQueuedTaskForExecution` (`QUEUED -> ASSIGNED -> RUNNING`), `updateTaskExecutionStage` (immutable intra-`RUNNING` stage progression), and routed `assignTask`, `promoteNextQueuedTask`, `completeCurrentTask`, `failCurrentTask`, and `stepSingleWorker` exclusively through centralized state machine helpers. |
+| **3. Capability Validation & Worker Assignment Consistency** | `validateTaskEntity()` checked whether `assignedWorkerId` was a registered worker, but did not verify `supportsTaskType(assignedWorkerId, task.type)` or `task.workerId === task.assignedWorkerId`. | `src/tasks/task.types.ts`, `src/tasks/task.validation.ts`, `src/workers/worker.capabilities.ts`, `src/tasks/task.factory.ts`, `src/tasks/task.model.test.ts` | Added `UNSUPPORTED_WORKER_CAPABILITY` and `WORKER_ASSIGNMENT_MISMATCH` validation rules using `supportsTaskType()`, plus `resolveDefaultCategoryForWorker()` to preserve 100% compatibility with all legacy `WORKER_TASK_TEMPLATES`. |
+| **4. Registry Query Outer Array Immutability** | Public query functions (`getAllWorkerCapabilityProfiles`, `getAllCapabilities`, `getWorkerCapabilities`, `getWorkersByTaskType`) froze inner objects/arrays but returned unfrozen outer arrays from `.map()`. | `src/workers/worker.capabilities.ts`, `src/workers/worker.capabilities.test.ts` | Wrapped all public query return arrays in `Object.freeze(...)` so outer arrays and all nested objects/arrays are deeply immutable. |
+| **5. Deterministic Task ID Uniqueness** | `createTaskEntity()` defaulted `sequenceNumber` to `1` when `id` was omitted, allowing repeated calls at the same `simTimeMs` without explicit sequence context to collide. | `src/tasks/task.factory.ts`, `src/workers/worker.mock-service.ts`, `src/tasks/task.model.test.ts` | Removed the silent `sequenceNumber ?? 1` fallback; `createTaskEntity()` now requires an explicit deterministic identity context (`id`, `sequenceNumber`, `DeterministicTaskSequence`, or `existingTaskIds`). |
 
 ## Working features
 - **Centralized Worker Capability Registry (`src/workers/worker.capabilities.ts`, `src/tasks/task.types.ts`)**:
   - Single source of truth for static capability metadata across the 7 permanent workers (`supervisor`, `haiku`, `sonnet`, `opus`, `decision_engineer`, `market_monitor`, `data_archivist`) and `28` unique `WorkerCapabilityId` definitions.
   - Strict separation between static capability profiles (`WorkerCapabilityProfile`) and runtime worker operational status (`IDLE`, `BUSY`, `PAUSED`).
-  - Supports worker profile lookup (`getWorkerCapabilityProfile`), full profile enumeration (`getAllWorkerCapabilityProfiles`), capability lookup (`getCapabilityById`), active task-type support check (`supportsTaskType`), worker discovery by task type (`getWorkersByTaskType`), and isolated custom registry snapshots (`createCustomCapabilityRegistry`) where disabled capabilities (`enabled: false`) or disabled workers are excluded from active queries.
-  - All returned profiles and capability definitions are deeply frozen (`Object.freeze`) defensive clones that cannot be mutated from outside.
+  - All returned outer arrays, profiles, capability definitions, and schema descriptors are deeply frozen (`Object.freeze`) defensive clones.
 - **Unified Structured Task Model & Deterministic Factory (`src/workers/worker.types.ts`, `src/tasks/task.factory.ts`, `src/workers/worker.mock-service.ts`)**:
-  - Extended the existing `TaskEntity` backward-compatibly (without creating a duplicate task entity) to include `type`, `lifecycleStatus`, `assignedWorkerId`, `parentTaskId`, `dependencyIds`, structured `input` (`TaskInputPayload`), structured `result` (`TaskResultPayload | null`), structured `error` (`TaskErrorDetail | null`), `attemptCount`, `maxAttempts`, and simulation-clock timestamps (`createdAt`, `queuedAt`, `startedAt`, `completedAt`, `updatedAt`).
-  - Deterministic task ID and entity creation (`generateDeterministicTaskId`, `DeterministicTaskSequence`, `createTaskEntity`) driven strictly by `simTimeMs`, seed, and sequence counters (zero `Date.now()` or `Math.random()`).
-- **Task Lifecycle State Machine & 17-Rule Validator (`src/tasks/task.transitions.ts`, `src/tasks/task.validation.ts`)**:
-  - Enforces all valid Phase 2.1 lifecycle transitions (`PENDING`, `QUEUED`, `ASSIGNED`, `RUNNING`, `COMPLETED`, `FAILED`, `RETRY_WAIT`, `BLOCKED`, `CANCELLED`), terminal state immutability (`COMPLETED`, `CANCELLED`), and backward-compatible mapping from Phase 1.1 stage statuses (`ROUTING`, `EXTRACTING`, `ANALYZING`, `VALIDATING`, `ARCHIVING` -> `RUNNING`).
-  - `transitionTaskStatus` is pure and immutable: failed transitions return structured `TaskTransitionError` objects without mutating the input `TaskEntity`.
-  - `validateTaskEntity` enforces all 17 structural, relational, and simulation-timestamp invariants.
+  - Extended `TaskEntity` backward-compatibly with `type`, `lifecycleStatus`, `assignedWorkerId`, `parentTaskId`, `dependencyIds`, structured `input`, structured `result`, structured `error`, `attemptCount`, `maxAttempts`, and simulation-clock timestamps (`createdAt`, `queuedAt`, `startedAt`, `completedAt`, `updatedAt`).
+  - Collision-free deterministic task ID creation (`generateDeterministicTaskId`, `DeterministicTaskSequence`, `createTaskEntity`) driven strictly by `simTimeMs` and explicit deterministic identity context.
+- **Task Lifecycle State Machine & Comprehensive Validator (`src/tasks/task.transitions.ts`, `src/tasks/task.validation.ts`)**:
+  - Enforces all valid Phase 2.1 lifecycle transitions (`PENDING`, `QUEUED`, `ASSIGNED`, `RUNNING`, `COMPLETED`, `FAILED`, `RETRY_WAIT`, `BLOCKED`, `CANCELLED`), runtime `QUEUED -> ASSIGNED -> RUNNING` activation (`activateQueuedTaskForExecution`), intra-`RUNNING` stage updates (`updateTaskExecutionStage`), and terminal state immutability (`COMPLETED`, `CANCELLED`).
+  - `validateTaskEntity` enforces all structural, `status`/`lifecycleStatus` consistency, active worker capability matching (`supportsTaskType`), `workerId`/`assignedWorkerId` synchronization, and simulation-timestamp invariants.
 - **Preserved Phase 1.1 Foundation**:
   - Unified `SimulationEngine` & avatar animation clock (`stepAvatarClockFromEngine`), direct `THREE.AnimationMixer` controller (`GlbAvatarAnimationController`), isolated GLB error boundaries, granular Zustand selectors, and read-only capability badges in `WorkerPanel`.
 
-## Files modified / added in Phase 2.1
-- `src/tasks/task.types.ts` (Added — Phase 2.1 task, capability, validation, and transition types)
-- `src/workers/worker.capabilities.ts` (Added — centralized immutable Worker Capability Registry & query operations)
-- `src/tasks/task.transitions.ts` (Added — 9-state Task State Machine, stage compatibility mapper, and immutable transition functions)
-- `src/tasks/task.validation.ts` (Added — 17-rule TaskEntity structural and timestamp validator)
-- `src/tasks/task.factory.ts` (Added — deterministic Task ID sequence & validated TaskEntity factory)
-- `src/workers/worker.types.ts` (Modified — backward-compatible extension of `TaskEntity` with Phase 2.1 fields)
-- `src/workers/worker.mock-service.ts` (Modified — populates and maintains Phase 2.1 `TaskEntity` metadata & timestamps)
-- `src/workers/simulation.engine.ts` (Modified — maintains `lifecycleStatus` and `updatedAt` during execution ticks)
-- `src/ui/WorkerPanel.tsx` (Modified — displays read-only worker capabilities from `getWorkerCapabilityProfile`)
-- `src/workers/worker.capabilities.test.ts` (Added — 10 automated unit tests for Capability Registry)
-- `src/tasks/task.model.test.ts` (Added — 14 automated unit tests for Task Model, Validation & Deterministic Factory)
-- `src/tasks/task.transitions.test.ts` (Added — 5 automated unit tests for Task State Machine & transitions)
+## Files modified / added in Phase 2.1 & Audit Remediation
+- `src/tasks/task.types.ts` (Added & Updated)
+- `src/workers/worker.capabilities.ts` (Added & Updated)
+- `src/tasks/task.transitions.ts` (Added & Updated)
+- `src/tasks/task.validation.ts` (Added & Updated)
+- `src/tasks/task.factory.ts` (Added & Updated)
+- `src/workers/worker.types.ts` (Modified)
+- `src/workers/worker.mock-service.ts` (Modified)
+- `src/workers/simulation.engine.ts` (Modified)
+- `src/ui/WorkerPanel.tsx` (Modified)
+- `src/workers/worker.capabilities.test.ts` (Added & Updated — 10 automated tests)
+- `src/tasks/task.model.test.ts` (Added & Updated — 17 automated tests)
+- `src/tasks/task.transitions.test.ts` (Added & Updated — 7 automated tests)
 - `docs/PROJECT_STATE.md` (Modified)
 
 ## Architecture constraints
@@ -43,9 +50,9 @@ Phase 2.1 (Worker Capability Registry & Task Model — Complete & Verified) — 
 - Task Dispatcher, Priority Queue Scheduler, and Task Decomposition will be introduced in Phase 2.2.
 
 ## Last verified checks (Exact commands & actual results)
-1. **Automated Unit & Integration Tests (Phase 1.1 + Phase 2.1)**:
+1. **Automated Unit & Integration Tests (Phase 1.1 + Phase 2.1 + Audit Remediation)**:
    - Command: `npx --yes tsx --test src/workers/simulation.engine.test.ts src/workers/worker.capabilities.test.ts src/tasks/task.model.test.ts src/tasks/task.transitions.test.ts`
-   - Result: **Passed (`1..45`, `pass 45`, `fail 0`, exit code `0`)** — 16 Phase 1.1 tests + 10 Capability Registry tests + 14 Task Model/Validation/Factory tests + 5 State Transition tests.
+   - Result: **Passed (`1..50`, `pass 50`, `fail 0`, exit code `0`)** — 16 Phase 1.1 tests + 10 Capability Registry tests + 17 Task Model/Validation/Factory/Audit tests + 7 State Transition/Runtime Integration tests.
 2. **TypeScript Typecheck**:
    - Command: `npm run lint` (`tsc --noEmit`)
    - Result: **Passed (`0` errors, exit code `0`)**.
@@ -54,4 +61,4 @@ Phase 2.1 (Worker Capability Registry & Task Model — Complete & Verified) — 
    - Result: **Passed (`Build succeeded - the applet is compiled`, exit code `0`)**.
 
 ## Next task
-Await owner review of Phase 2.1 before proceeding to Phase 2.2 (Supervisor Decomposition, Task Dispatcher & Priority Scheduler).
+Await owner review and approval of Phase 2.1 Audit Remediation before proceeding to Phase 2.2.

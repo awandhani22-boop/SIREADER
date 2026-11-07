@@ -824,9 +824,11 @@ export const getCapabilityProfileByWorkerId = getWorkerCapabilityProfile;
 export function getAllWorkerCapabilityProfiles(
   registry: Readonly<Record<PermanentWorkerId, WorkerCapabilityProfile>> =
     CANONICAL_WORKER_CAPABILITY_REGISTRY,
-): WorkerCapabilityProfile[] {
-  return PERMANENT_WORKER_IDS.map((workerId) =>
-    cloneWorkerCapabilityProfile(registry[workerId]),
+): readonly WorkerCapabilityProfile[] {
+  return Object.freeze(
+    PERMANENT_WORKER_IDS.map((workerId) =>
+      cloneWorkerCapabilityProfile(registry[workerId]),
+    ),
   );
 }
 
@@ -835,11 +837,13 @@ export function getAllWorkerCapabilityProfiles(
  */
 export function getAllCapabilities(options?: {
   readonly includeDisabled?: boolean;
-}): CapabilityDefinition[] {
+}): readonly CapabilityDefinition[] {
   const includeDisabled = options?.includeDisabled ?? true;
-  return WORKER_CAPABILITY_IDS.map((id) => CANONICAL_CAPABILITY_CATALOG[id])
-    .filter((cap) => (includeDisabled ? true : cap.enabled))
-    .map(cloneCapabilityDefinition);
+  return Object.freeze(
+    WORKER_CAPABILITY_IDS.map((id) => CANONICAL_CAPABILITY_CATALOG[id])
+      .filter((cap) => (includeDisabled ? true : cap.enabled))
+      .map(cloneCapabilityDefinition),
+  );
 }
 
 /**
@@ -851,13 +855,15 @@ export function getWorkerCapabilities(
     readonly includeDisabled?: boolean;
     readonly registry?: Readonly<Record<PermanentWorkerId, WorkerCapabilityProfile>>;
   },
-): CapabilityDefinition[] {
+): readonly CapabilityDefinition[] {
   const profile = getWorkerCapabilityProfile(workerId, options?.registry);
-  if (!profile) return [];
+  if (!profile) return Object.freeze([]);
   const includeDisabled = options?.includeDisabled ?? false;
-  return profile.capabilities
-    .filter((cap) => (includeDisabled ? true : cap.enabled))
-    .map(cloneCapabilityDefinition);
+  return Object.freeze(
+    profile.capabilities
+      .filter((cap) => (includeDisabled ? true : cap.enabled))
+      .map(cloneCapabilityDefinition),
+  );
 }
 
 /**
@@ -907,10 +913,12 @@ export function getWorkersByTaskType(
   taskType: TaskType | string,
   registry: Readonly<Record<PermanentWorkerId, WorkerCapabilityProfile>> =
     CANONICAL_WORKER_CAPABILITY_REGISTRY,
-): WorkerCapabilityProfile[] {
-  return PERMANENT_WORKER_IDS.filter((workerId) =>
-    supportsTaskType(workerId, taskType, registry),
-  ).map((workerId) => cloneWorkerCapabilityProfile(registry[workerId]));
+): readonly WorkerCapabilityProfile[] {
+  return Object.freeze(
+    PERMANENT_WORKER_IDS.filter((workerId) =>
+      supportsTaskType(workerId, taskType, registry),
+    ).map((workerId) => cloneWorkerCapabilityProfile(registry[workerId])),
+  );
 }
 
 export const getWorkersSupportingTaskType = getWorkersByTaskType;
@@ -930,8 +938,18 @@ export function createCustomCapabilityRegistry(overrides: {
 }
 
 /**
- * Deterministic mapping between Phase 1.1 TaskCategory and Phase 2.1 canonical TaskType.
+ * Deterministic mapping between PermanentWorkerId, Phase 1.1 TaskCategory, and Phase 2.1 TaskType.
  */
+const DEFAULT_WORKER_TO_CATEGORY: Readonly<Record<PermanentWorkerId, TaskCategory>> = deepFreeze({
+  supervisor: 'ROUTING',
+  haiku: 'CLASSIFICATION',
+  sonnet: 'REASONING',
+  opus: 'ESCALATION',
+  decision_engineer: 'DECISION_CHECK',
+  market_monitor: 'MARKET_WATCH',
+  data_archivist: 'ARCHIVAL',
+});
+
 const DEFAULT_CATEGORY_TO_TASK_TYPE: Readonly<Record<TaskCategory, TaskType>> = deepFreeze({
   ROUTING: 'INSTRUCTION_INTAKE',
   CLASSIFICATION: 'QUICK_RESEARCH',
@@ -979,6 +997,15 @@ const TASK_TYPE_TO_CATEGORY: Readonly<Record<TaskType, TaskCategory>> = deepFree
   HISTORICAL_RETRIEVAL_SIMULATION: 'ARCHIVAL',
   DATA_ORGANIZATION: 'ARCHIVAL',
 });
+
+export function resolveDefaultCategoryForWorker(
+  workerId?: WorkerId | null,
+): TaskCategory {
+  if (workerId && isPermanentWorkerId(workerId)) {
+    return DEFAULT_WORKER_TO_CATEGORY[workerId];
+  }
+  return 'ROUTING';
+}
 
 export function mapCategoryToDefaultTaskType(category: TaskCategory): TaskType {
   return DEFAULT_CATEGORY_TO_TASK_TYPE[category] ?? 'INSTRUCTION_INTAKE';
