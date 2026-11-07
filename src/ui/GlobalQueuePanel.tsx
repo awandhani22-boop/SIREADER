@@ -361,6 +361,32 @@ export function GlobalQueuePanel() {
                     </div>
                   )}
 
+                  {item.lifecycleStatus === 'FAILED' && (
+                    <div
+                      role="note"
+                      aria-label={`Failure details for ${item.task.title}`}
+                      data-testid={`activity-error-${item.task.id}`}
+                      className="rounded border border-rose-500/30 bg-rose-950/30 px-2 py-1.5 space-y-0.5"
+                    >
+                      {item.task.error ? (
+                        <>
+                          <p className="text-[10px] text-rose-200 break-words">
+                            {item.task.error.message}
+                          </p>
+                          <p className="font-mono text-[9px] text-rose-300/80 break-words">
+                            {item.task.error.code} · Attempt {item.task.error.attemptNumber}
+                            {' · '}
+                            {item.task.error.recoverable ? 'Recoverable' : 'Non-recoverable'}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-[10px] text-rose-200">
+                          Failure details unavailable.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono pt-0.5">
                     <span>{item.task.category}</span>
                     <span>Active: {formatSimDuration(item.lastActiveSimMs)}</span>
