@@ -1,11 +1,12 @@
 # SIREADER Virtual Office — Project State
 
 ## Current phase
-**Phase 2.2 — COMPLETE (with non-blocking notes).**
-The Phase 2.2 Global Task Dispatcher milestone has completed all architectural and runtime requirements, verified by 256 automated tests across 13 test files, clean TypeScript compilation, clean production build, and partial browser QA.
+**Phase 2.3 — NEXT: Browser QA, Visual Closure & Simulation UX Stabilization.**
+Phases 1, 2.1, and 2.2 remain complete as recorded below. Phase 2.2 passed 256 automated tests, TypeScript compilation, and production build; the listed manual browser checks remain open and are the next priority. Do not restart the scheduler or create a replacement frontend.
 
+Master roadmap: [`docs/ROADMAP.md`](ROADMAP.md) — authoritative phase order and v1.0 acceptance gates.
 Branch: `phase-2-2-task-dispatcher`<br>
-HEAD Baseline: `cf1083d`
+Phase 2.2 implementation baseline: `cf1083d`
 
 ## Implemented
 - **Phase 2.1 Foundation** (`8d2b9bb`): Capability registry for 7 permanent workers, multi-task worker concurrency invariants, and deterministic stage execution.
@@ -48,5 +49,8 @@ HEAD Baseline: `cf1083d`
   - *Automated Component Assertions*: Queue panel tabs, RUNNING-only active counts, simulation labels, and deterministic timestamp ordering verified via `worker.state.test.ts` (45 tests).
   - *Unverified Visual Behavior & Browser Interactions*: 3D isometric scene visual rendering, live pause/resume button clicking, speed controls (1x, 2x, 4x) tempo dynamics in browser, FAILED activity card rendering, and manual enqueue form UI submission.
 
+## External backend milestone
+- **Phase 3.1 — Read-Only Observability API Gateway: COMPLETE (2026-11-08)** in the separate `awandhani22-boop/SIREADER-Python-Backend` repository. Supabase lockdown and dedicated `sireader_api_ro` access were verified; all five local GET endpoints returned 200; missing token returned 401; POST/PUT/PATCH/DELETE returned 405; 74 API tests and 50 core backend regression tests passed locally; API compile passed; GitHub Actions run `42397323807` succeeded. Backend remains a separate project boundary.
+
 ## Next
-Phase 2.2 is complete. Proceed to milestone sign-off and planning for subsequent phases. Python/backend and real AI-worker integration remain deferred to future milestones.
+Execute **Phase 2.3 only**: complete the manual browser checks listed under Browser-level Manual QA Status, fix verified defects with focused regression tests, then update this file with evidence. Do not start Phase 3.2 until Phase 2.3 exit criteria pass. Follow `docs/ROADMAP.md` for all later phases through Virtual Office v1.0.
