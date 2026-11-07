@@ -1303,3 +1303,139 @@ test('45. TopBar distinguishes global queued total from pool-only queue count', 
   assert.equal(afterDispatch.queuedTotal, '0');
   assert.match(afterDispatch.poolQueue, /^Pool Queue\s*\(\s*0\s*\)$/);
 });
+
+
+test('46. GlobalQueuePanel renders structured FAILED activity diagnostics', () => {
+  ensureMinimalDomEnvironment();
+  resetStore();
+
+  const failedTask = {
+    id: 'tsk_pool_ui_failed',
+    workerId: 'opus',
+    type: 'INSTRUCTION_INTAKE',
+    title: 'Failed Provider Task',
+    description: 'A simulated task that failed during execution.',
+    category: 'ROUTING',
+    priority: 'HIGH',
+    status: 'FAILED',
+    lifecycleStatus: 'FAILED',
+    assignedWorkerId: 'opus',
+    parentTaskId: null,
+    dependencyIds: [],
+    input: {},
+    result: null,
+    error: {
+      code: 'SIMULATED_PROVIDER_TIMEOUT',
+      message: 'The simulated provider request timed out.',
+      occurredAtSimMs: 800,
+      attemptNumber: 2,
+      recoverable: true,
+    },
+    attemptCount: 2,
+    maxAttempts: 3,
+    createdAt: 0,
+    queuedAt: 50,
+    startedAt: 100,
+    completedAt: null,
+    updatedAt: 800,
+    progress: 35,
+    elapsedSimMs: 700,
+    totalDurationSimMs: 2000,
+    stagePipeline: [],
+    simulatedTokens: 240,
+    targetTokens: 700,
+    simulatedCostUsd: 0.001,
+    costPerThousandTokensUsd: 0.004,
+    createdAtSimMs: 0,
+    startedAtSimMs: 100,
+    completedAtSimMs: null,
+    isSimulated: true,
+  } as unknown as TaskEntity;
+
+  useOfficeStore.setState({
+    tasks: { [failedTask.id]: failedTask },
+    scheduler: undefined,
+  } as any);
+
+  const container = document.createElement('div') as unknown as MockDomNode;
+  const root = createRoot(container as unknown as HTMLElement);
+  act(() => root.render(React.createElement(GlobalQueuePanel)));
+
+  try {
+    invokeReactProp(findNodeByTestId(container, 'tab-activity'), 'onClick');
+
+    const activityCard = findNodeByTestId(container, 'activity-item-tsk_pool_ui_failed');
+    const errorDetails = findNodeByTestId(container, 'activity-error-tsk_pool_ui_failed');
+
+    assert.ok(activityCard, 'Failed task must appear in Pool Activity');
+    assert.ok(errorDetails, 'Failed task must expose its diagnostic details');
+    const rendered = collectDomText(errorDetails);
+    assert.ok(rendered.includes('The simulated provider request timed out.'));
+    assert.ok(rendered.includes('SIMULATED_PROVIDER_TIMEOUT'));
+    assert.ok(rendered.includes('Attempt 2'));
+    assert.ok(rendered.includes('Recoverable'));
+  } finally {
+    act(() => root.unmount());
+  }
+});
+
+test('47. GlobalQueuePanel states when FAILED diagnostics are unavailable', () => {
+  ensureMinimalDomEnvironment();
+  resetStore();
+
+  const failedTask = {
+    id: 'tsk_pool_ui_failed_without_error',
+    workerId: 'sonnet',
+    type: 'INSTRUCTION_INTAKE',
+    title: 'Legacy Failed Task',
+    description: 'A failed task with no structured error payload.',
+    category: 'ROUTING',
+    priority: 'NORMAL',
+    status: 'FAILED',
+    lifecycleStatus: 'FAILED',
+    assignedWorkerId: 'sonnet',
+    parentTaskId: null,
+    dependencyIds: [],
+    input: {},
+    result: null,
+    error: null,
+    attemptCount: 1,
+    maxAttempts: 1,
+    createdAt: 0,
+    queuedAt: 50,
+    startedAt: 100,
+    completedAt: null,
+    updatedAt: 500,
+    progress: 20,
+    elapsedSimMs: 400,
+    totalDurationSimMs: 2000,
+    stagePipeline: [],
+    simulatedTokens: 80,
+    targetTokens: 500,
+    simulatedCostUsd: 0,
+    costPerThousandTokensUsd: 0,
+    createdAtSimMs: 0,
+    startedAtSimMs: 100,
+    completedAtSimMs: null,
+    isSimulated: true,
+  } as unknown as TaskEntity;
+
+  useOfficeStore.setState({
+    tasks: { [failedTask.id]: failedTask },
+    scheduler: undefined,
+  } as any);
+
+  const container = document.createElement('div') as unknown as MockDomNode;
+  const root = createRoot(container as unknown as HTMLElement);
+  act(() => root.render(React.createElement(GlobalQueuePanel)));
+
+  try {
+    invokeReactProp(findNodeByTestId(container, 'tab-activity'), 'onClick');
+
+    const errorDetails = findNodeByTestId(container, 'activity-error-tsk_pool_ui_failed_without_error');
+    assert.ok(errorDetails);
+    assert.ok(collectDomText(errorDetails).includes('Failure details unavailable.'));
+  } finally {
+    act(() => root.unmount());
+  }
+});
