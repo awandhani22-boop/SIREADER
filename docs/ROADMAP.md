@@ -5,7 +5,7 @@
 **Current development branch:** `phase-2-2-task-dispatcher`  
 **Last roadmap review:** 2026-11-08
 
-This document governs the SIREADER Virtual Office project from the existing 3D frontend through the final v1.0 release. Keep this roadmap and `docs/PROJECT_STATE.md` aligned after every milestone. Do not create a replacement frontend or restart completed phases.
+This document governs the SIREADER Virtual Office project from the existing 3D frontend through the final v1.0 release. **The canonical product mission and meaning of the final product are in [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md); read that before every task.** Keep this roadmap and `docs/PROJECT_STATE.md` aligned after every milestone. Do not create a replacement frontend or restart completed phases.
 
 ---
 
