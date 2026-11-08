@@ -27,7 +27,7 @@ import {
 } from './guards.ts';
 import { sendBffError } from './errors.ts';
 import { SafeLogger } from './log.ts';
-import { createUpstreamHandlers, type UpstreamProxyOptions, type UpstreamApiPath } from './upstream.ts';
+import { createUpstreamHandlers, createUpstreamSseHandler, type UpstreamProxyOptions, type UpstreamApiPath } from './upstream.ts';
 import { OperatorAuthService, disableAuthCaching, type OperatorAuthOptions } from './auth.ts';
 
 export interface BffAppDependencies extends UpstreamProxyOptions {
@@ -100,6 +100,7 @@ export function createBffApp(
   const config = loadBffConfig(configOverrides);
   const app = express();
   const upstreamHandlers = createUpstreamHandlers(dependencies);
+  const upstreamSseHandler = createUpstreamSseHandler(dependencies);
   const operatorAuth = new OperatorAuthService(dependencies.authOptions);
   const requireOperatorSession = dependencies.requireOperatorSession ?? operatorAuth.requireSession;
 
@@ -255,6 +256,9 @@ export function createBffApp(
   for (const path of upstreamRoutes) {
     app.get(path, requireOperatorSession, upstreamHandlers[path]);
   }
+
+  // Long-lived stream: same operator session, fixed server-side upstream path.
+  app.get('/api/v1/events/stream', requireOperatorSession, upstreamSseHandler);
 
   // 8. Production static frontend (never handles the /api namespace).
   if (dependencies.staticRoot) {
