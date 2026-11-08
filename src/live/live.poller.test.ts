@@ -114,13 +114,14 @@ class FakeClock implements LivePollerClock {
 }
 
 function createApi(
-  get: <K extends LiveApiPath>(path: K) => Promise<LiveApiResponseMap[K]>,
+  get: (path: LiveApiPath) => Promise<LiveApiResponseMap[LiveApiPath]>,
 ): LiveApiClient {
   return {
     getSession: async () => session,
     login: async () => session,
     logout: async () => undefined,
-    get,
+    get: async <K extends LiveApiPath>(path: K) =>
+      await get(path) as LiveApiResponseMap[K],
     clearCsrfToken: () => undefined,
   };
 }

@@ -73,12 +73,12 @@ function displayAmount(value: number | string): string {
   return typeof value === 'string' ? value : displayNumber(value);
 }
 
-function ResourceHeading({
+function ResourceHeading<T>({
   title,
   resource,
 }: {
   title: string;
-  resource: LiveResourceSnapshot<unknown>;
+  resource: LiveResourceSnapshot<T>;
 }) {
   return (
     <div className="flex items-center justify-between gap-2">
@@ -90,7 +90,7 @@ function ResourceHeading({
   );
 }
 
-function ResourceError({ resource }: { resource: LiveResourceSnapshot<unknown> }) {
+function ResourceError<T>({ resource }: { resource: LiveResourceSnapshot<T> }) {
   if (!resource.error) return null;
   return (
     <p className="mt-1 text-[10px] leading-4 text-amber-300/90">
