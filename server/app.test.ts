@@ -812,11 +812,11 @@ test('SIREADER Phase 3.2 BFF Test Suite — Remediated', async (t) => {
       '/api/auth/logout',
       '/api/auth/session',
       '/api/v1/audit/decisions',
+      '/api/v1/events/stream',
       '/api/v1/market-watches/active',
       '/api/v1/pipeline/active',
       '/api/v1/system/status',
       '/api/v1/telemetry/usage',
-      '/api/v1/events/stream',
     ]);
   });
 
