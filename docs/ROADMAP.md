@@ -2,7 +2,7 @@
 
 **Document status:** ROADMAP LOCKED — source of truth for phase order, scope, and acceptance gates  
 **Repository:** `awandhani22-boop/SIREADER`  
-**Current documentation/continuation branch:** `phase-3-2-closeout-phase-3-3-sse-plan` (isolated from the Phase 3.2 implementation branch).  
+**Current implementation branches:** Virtual Office `phase-3-3-sse`; Python Backend `phase-3-3-sse-backend`. Both remain isolated from `main`.  
 **Last roadmap review:** 2026-11-09
 
 This document governs the SIREADER Virtual Office project from the existing 3D frontend through the final v1.0 release. **The canonical product mission and meaning of the final product are in [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md); read that before every task.** Keep this roadmap and `docs/PROJECT_STATE.md` aligned after every milestone. Do not create a replacement frontend or restart completed phases.
@@ -56,7 +56,7 @@ The existing React/Three.js project is the product. Preserve and extend it; do n
 | 2.3 | Browser QA, Visual Closure & Simulation UX Stabilization | COMPLETE WITH DEFERRED ITEM |
 | 3.1 | Read-Only Observability API Gateway | COMPLETE in Python backend repository |
 | 3.2 | Secure BFF & Frontend Observability Integration | COMPLETE — Batches 1–6 CI-passed; owner-reported local development, LIVE, auth/session, isolation, logout, and production-like acceptance confirmed 2026-11-09 |
-| 3.3 | Real-Time Observability (SSE) | PLANNED |
+| 3.3 | Real-Time Observability (SSE) | IN PROGRESS — implementation and CI pass on isolated frontend/BFF and Python Backend branches; owner Supabase/Chrome acceptance pending |
 | 4.1 | Real Worker Runtime Contract & Registry | PLANNED |
 | 4.2 | AI Provider Routing, Execution & Cost Guard | PLANNED |
 | 4.3 | Persistent Backend Task Orchestration | PLANNED |
@@ -221,7 +221,11 @@ Exit gate:
 - Frontend typecheck, tests, build, security checks, and manual browser acceptance pass.
 
 ## Phase 3.3 — Real-Time Observability (SSE)
-**Status: PLANNED — architecture baseline drafted; implementation not started.**
+**Status: IN PROGRESS — implementation batches A–D are present and CI-passed; owner acceptance remains.**
+
+Execution record: [\`docs/PHASE_3_3_EXECUTION_LOG.md\`](PHASE_3_3_EXECUTION_LOG.md). Design reference: [\`docs/PHASE_3_3_SSE_ARCHITECTURE.md\`](PHASE_3_3_SSE_ARCHITECTURE.md).
+
+Current evidence (2026-11-09): Virtual Office branch \`phase-3-3-sse\` has BFF proxy, browser EventSource, strict event contract, invalidation coordinator, polling reconciliation/fallback, and 371/371 CI tests plus TypeScript/build PASS (run \`42533498709\`). Python Backend branch \`phase-3-3-sse-backend\` has notification migration/rollback, async LISTEN/EventHub, authenticated SSE route, 100 API/PostgreSQL tests, compileall PASS, and 50 core regressions (run \`42533488378\`). No owner Supabase migration has been applied.
 
 Design reference: [`docs/PHASE_3_3_SSE_ARCHITECTURE.md`](PHASE_3_3_SSE_ARCHITECTURE.md). The proposed design uses PostgreSQL LISTEN/NOTIFY as a bounded invalidation signal, a Python API EventHub, an authenticated BFF stream, and browser EventSource. Existing snapshot GET endpoints remain authoritative. The design still requires review and empirical confirmation that the configured Supabase session-pooler supports a persistent LISTEN connection.
 
