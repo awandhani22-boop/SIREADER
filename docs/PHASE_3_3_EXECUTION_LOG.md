@@ -9,7 +9,7 @@
 | Repository | Branch | Latest verified HEAD |
 |---|---|---|
 | Virtual Office | `phase-3-3-sse` | latest SSE code commit `1f73a6990d3ec71d8d581fb4dc27af07ab52e04b` (later commits update documentation) |
-| Python Backend | `phase-3-3-sse-backend` | latest listener/migration code commit `6d928cc037666a14096c2b2d9f4020d0198b01b8` (later commits update runbook/tests/documentation) |
+| Python Backend | `phase-3-3-sse-backend` | latest backend event/trigger verification commit `923f7bca00c14ee6da5d89143c54e9ee6522a099` (listener/migration code `6d928cc037666a14096c2b2d9f4020d0198b01b8`) |
 
 Both branches are isolated from `main`. The Phase 3.2 implementation branch and the documentation closeout branch have not been overwritten or merged. No migration has been applied to the owner's Supabase project.
 
@@ -37,16 +37,16 @@ Both branches are isolated from `main`. The Phase 3.2 implementation branch and 
 
 ### Python Backend
 
-- Latest run: [GitHub Actions 42534566453](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42534566453)
-- Branch HEAD: `dbfffe5d5b3e4cc4f29200245d9f77a964656555`
+- Latest run: [GitHub Actions 42534842953](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42534842953)
+- Verified commit: `923f7bca00c14ee6da5d89143c54e9ee6522a099`
 - Latest listener code commit: `6d928cc037666a14096c2b2d9f4020d0198b01b8`
 - Result: **SUCCESS**
 - API/PostgreSQL tests: **100 passed**
 - Python API compileall: PASS
 - Existing core decision/service regression tests: **50 passed**
 - PostgreSQL integration used the disposable CI PostgreSQL service, not the owner's Supabase project.
-- A prior intermediate run (42534308384) exposed that the rollback script did not yet drop the newly added TRUNCATE triggers; the rollback was corrected, the catalog verification query was expanded to include both trigger names, and subsequent full CI runs passed.
-- Integration covers migration idempotency, six resource notifications, static payload allowlist, no-op update suppression, append-only audit behavior, statement-level TRUNCATE invalidation, no notification on rollback, async Psycopg LISTEN receipt, stream shutdown cleanup, replay, cursor reset, subscriber bounds and authentication. TCP keepalive is configured for the long-lived listener. A safe owner-side LISTEN probe is available at `app/api/event_listener_probe.py`.
+- A prior intermediate run (42534308384) exposed that the rollback script did not yet drop the newly added TRUNCATE triggers; the rollback was corrected, the catalog verification query was expanded to include both trigger names, and the latest expanded suite (42534842953) passed 100 tests plus compileall and 50 core regressions.
+- Integration covers migration idempotency; exact 12-trigger catalog; non-SECURITY-DEFINER and fixed search_path; approval INSERT-only; six resource notifications; static payload allowlist; no-op update suppression; append-only audit behavior; statement-level TRUNCATE invalidation; no notification on rollback; complete trigger/function rollback cleanup; async Psycopg LISTEN receipt; stream shutdown cleanup; replay; cursor reset; subscriber bounds and authentication. TCP keepalive is configured for the long-lived listener. A safe owner-side LISTEN probe is available at `app/api/event_listener_probe.py`.
 
 ## Important implementation semantics
 
