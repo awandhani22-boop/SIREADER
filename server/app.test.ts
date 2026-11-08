@@ -221,40 +221,158 @@ test('SIREADER Phase 3.2 BFF Test Suite — Remediated', async (t) => {
     }
   });
 
-  await t.test('P0-3. Port enforcement: accepts only approved topology ports 3000 and 3001', () => {
-    // Approved dev port (3001)
-    const configDev = loadBffConfig({ port: 3001 });
-    assert.equal(configDev.port, 3001);
+  await t.test('P0-3. Port topology enforcement: strict mode-to-port mapping', () => {
+    const origNodeEnv = process.env.NODE_ENV;
+    const origBffPort = process.env.BFF_PORT;
 
-    // Approved prod port (3000)
-    const configProd = loadBffConfig({ port: 3000 });
-    assert.equal(configProd.port, 3000);
+    try {
+      // 1. Production mode tests (NODE_ENV=production -> port 3000 required)
+      process.env.NODE_ENV = 'production';
+      delete process.env.BFF_PORT;
 
-    // Arbitrary ports must throw
-    assert.throws(
-      () => loadBffConfig({ port: 8080 as any }),
-      /CRITICAL SECURITY VIOLATION: Port 8080 rejected/,
-    );
-    assert.throws(
-      () => loadBffConfig({ port: 22 as any }),
-      /CRITICAL SECURITY VIOLATION: Port 22 rejected/,
-    );
-    assert.throws(
-      () => loadBffConfig({ port: 0 as any }),
-      /CRITICAL SECURITY VIOLATION: Port 0 rejected/,
-    );
-    assert.throws(
-      () => loadBffConfig({ port: -1 as any }),
-      /CRITICAL SECURITY VIOLATION: Port -1 rejected/,
-    );
-    assert.throws(
-      () => loadBffConfig({ port: NaN as any }),
-      /CRITICAL SECURITY VIOLATION: Invalid port/,
-    );
-    assert.throws(
-      () => loadBffConfig({ port: 3000.5 as any }),
-      /CRITICAL SECURITY VIOLATION: Invalid port/,
-    );
+      // Default production port is 3000
+      const prodConfig = loadBffConfig();
+      assert.equal(prodConfig.port, 3000);
+
+      // Explicit override with 3000 in production is accepted
+      const prodOverride3000 = loadBffConfig({ port: 3000 });
+      assert.equal(prodOverride3000.port, 3000);
+
+      // Overrides.port = 3001 in production must be rejected
+      assert.throws(
+        () => loadBffConfig({ port: 3001 as any }),
+        /CRITICAL SECURITY VIOLATION: Port override "3001" rejected for production mode\. Expected required port: 3000\./,
+      );
+
+      // BFF_PORT = 3000 in production is accepted
+      process.env.BFF_PORT = '3000';
+      const prodEnv3000 = loadBffConfig();
+      assert.equal(prodEnv3000.port, 3000);
+
+      // BFF_PORT = 3001 in production must be rejected
+      process.env.BFF_PORT = '3001';
+      assert.throws(
+        () => loadBffConfig(),
+        /CRITICAL SECURITY VIOLATION: BFF_PORT "3001" rejected for production mode\. Expected required port: 3000\./,
+      );
+
+      // Arbitrary port in production must be rejected via BFF_PORT and overrides
+      process.env.BFF_PORT = '8080';
+      assert.throws(
+        () => loadBffConfig(),
+        /CRITICAL SECURITY VIOLATION: BFF_PORT "8080" rejected for production mode\. Expected required port: 3000\./,
+      );
+      delete process.env.BFF_PORT;
+
+      assert.throws(
+        () => loadBffConfig({ port: 8080 as any }),
+        /CRITICAL SECURITY VIOLATION: Port override "8080" rejected for production mode\. Expected required port: 3000\./,
+      );
+
+      // 2. Development / non-production mode tests (NODE_ENV=development -> port 3001 required)
+      process.env.NODE_ENV = 'development';
+      delete process.env.BFF_PORT;
+
+      // Default development port is 3001
+      const devConfig = loadBffConfig();
+      assert.equal(devConfig.port, 3001);
+
+      // Explicit override with 3001 in development is accepted
+      const devOverride3001 = loadBffConfig({ port: 3001 });
+      assert.equal(devOverride3001.port, 3001);
+
+      // Overrides.port = 3000 in development must be rejected
+      assert.throws(
+        () => loadBffConfig({ port: 3000 as any }),
+        /CRITICAL SECURITY VIOLATION: Port override "3000" rejected for development mode\. Expected required port: 3001\./,
+      );
+
+      // BFF_PORT = 3001 in development is accepted
+      process.env.BFF_PORT = '3001';
+      const devEnv3001 = loadBffConfig();
+      assert.equal(devEnv3001.port, 3001);
+
+      // BFF_PORT = 3000 in development must be rejected
+      process.env.BFF_PORT = '3000';
+      assert.throws(
+        () => loadBffConfig(),
+        /CRITICAL SECURITY VIOLATION: BFF_PORT "3000" rejected for development mode\. Expected required port: 3001\./,
+      );
+
+      // Arbitrary port in development must be rejected via BFF_PORT and overrides
+      process.env.BFF_PORT = '8080';
+      assert.throws(
+        () => loadBffConfig(),
+        /CRITICAL SECURITY VIOLATION: BFF_PORT "8080" rejected for development mode\. Expected required port: 3001\./,
+      );
+      delete process.env.BFF_PORT;
+
+      assert.throws(
+        () => loadBffConfig({ port: 8080 as any }),
+        /CRITICAL SECURITY VIOLATION: Port override "8080" rejected for development mode\. Expected required port: 3001\./,
+      );
+      assert.throws(
+        () => loadBffConfig({ port: 0 as any }),
+        /CRITICAL SECURITY VIOLATION: Port override "0" rejected for development mode\. Expected required port: 3001\./,
+      );
+      assert.throws(
+        () => loadBffConfig({ port: -1 as any }),
+        /CRITICAL SECURITY VIOLATION: Port override "-1" rejected for development mode\. Expected required port: 3001\./,
+      );
+      assert.throws(
+        () => loadBffConfig({ port: NaN as any }),
+        /CRITICAL SECURITY VIOLATION: Port override "NaN" rejected for development mode\. Expected required port: 3001\./,
+      );
+      assert.throws(
+        () => loadBffConfig({ port: 3001.5 as any }),
+        /CRITICAL SECURITY VIOLATION: Port override "3001.5" rejected for development mode\. Expected required port: 3001\./,
+      );
+
+      // 3. Simultaneous BFF_PORT and overrides.port validation tests
+      // Case 1: Production with invalid BFF_PORT=3001 and valid overrides.port=3000 -> rejected due to BFF_PORT
+      process.env.NODE_ENV = 'production';
+      process.env.BFF_PORT = '3001';
+      assert.throws(
+        () => loadBffConfig({ port: 3000 as any }),
+        /CRITICAL SECURITY VIOLATION: BFF_PORT "3001" rejected for production mode\. Expected required port: 3000\./,
+      );
+
+      // Case 2: Production with valid BFF_PORT=3000 and invalid overrides.port=3001 -> rejected due to overrides.port
+      process.env.NODE_ENV = 'production';
+      process.env.BFF_PORT = '3000';
+      assert.throws(
+        () => loadBffConfig({ port: 3001 as any }),
+        /CRITICAL SECURITY VIOLATION: Port override "3001" rejected for production mode\. Expected required port: 3000\./,
+      );
+
+      // Case 3: Development with invalid BFF_PORT=3000 and valid overrides.port=3001 -> rejected due to BFF_PORT
+      process.env.NODE_ENV = 'development';
+      process.env.BFF_PORT = '3000';
+      assert.throws(
+        () => loadBffConfig({ port: 3001 as any }),
+        /CRITICAL SECURITY VIOLATION: BFF_PORT "3000" rejected for development mode\. Expected required port: 3001\./,
+      );
+
+      // Case 4: Development with valid BFF_PORT=3001 and invalid overrides.port=3000 -> rejected due to overrides.port
+      process.env.NODE_ENV = 'development';
+      process.env.BFF_PORT = '3001';
+      assert.throws(
+        () => loadBffConfig({ port: 3000 as any }),
+        /CRITICAL SECURITY VIOLATION: Port override "3000" rejected for development mode\. Expected required port: 3001\./,
+      );
+    } finally {
+      // Restore original environment variables
+      if (origNodeEnv !== undefined) {
+        process.env.NODE_ENV = origNodeEnv;
+      } else {
+        delete process.env.NODE_ENV;
+      }
+      if (origBffPort !== undefined) {
+        process.env.BFF_PORT = origBffPort;
+      } else {
+        delete process.env.BFF_PORT;
+      }
+    }
   });
 
   await t.test('P0-4. Real startBffServer binds strictly to 127.0.0.1 and approved port', async () => {

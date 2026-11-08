@@ -74,31 +74,37 @@ export function loadBffConfig(overrides?: Partial<BffConfig>): BffConfig {
     );
   }
 
-  // 4. Approved Port topology enforcement: 3001 (dev) or 3000 (prod)
+  // 4. Approved Port topology enforcement:
+  // - NODE_ENV === 'production' MUST use port 3000
+  // - All non-production environments MUST use port 3001
+  // - BFF_PORT and overrides.port MUST be rejected if they do not match the required port
   const isProduction = process.env.NODE_ENV === 'production';
-  const defaultPort: 3000 | 3001 = isProduction ? 3000 : 3001;
+  const requiredPort: 3000 | 3001 = isProduction ? 3000 : 3001;
+  const envMode = isProduction ? 'production' : (process.env.NODE_ENV || 'development');
 
-  let rawPort: unknown = overrides?.port;
-  if (rawPort === undefined && process.env.BFF_PORT !== undefined) {
-    rawPort = Number(process.env.BFF_PORT);
-  }
-  if (rawPort === undefined) {
-    rawPort = defaultPort;
-  }
-
-  if (typeof rawPort !== 'number' || !Number.isInteger(rawPort)) {
-    throw new Error(
-      `CRITICAL SECURITY VIOLATION: Invalid port "${String(rawPort)}". Port must be an integer.`,
-    );
+  if (process.env.BFF_PORT !== undefined) {
+    const envPort = Number(process.env.BFF_PORT);
+    if (!Number.isInteger(envPort) || envPort !== requiredPort) {
+      throw new Error(
+        `CRITICAL SECURITY VIOLATION: BFF_PORT "${process.env.BFF_PORT}" rejected for ${envMode} mode. Expected required port: ${requiredPort}.`,
+      );
+    }
   }
 
-  if (rawPort !== 3000 && rawPort !== 3001) {
-    throw new Error(
-      `CRITICAL SECURITY VIOLATION: Port ${rawPort} rejected. Must be an approved topology port: 3001 (development) or 3000 (production).`,
-    );
+  if (overrides?.port !== undefined) {
+    const overridePort = overrides.port;
+    if (
+      typeof overridePort !== 'number' ||
+      !Number.isInteger(overridePort) ||
+      overridePort !== requiredPort
+    ) {
+      throw new Error(
+        `CRITICAL SECURITY VIOLATION: Port override "${String(overridePort)}" rejected for ${envMode} mode. Expected required port: ${requiredPort}.`,
+      );
+    }
   }
 
-  const port = rawPort as 3000 | 3001;
+  const port: 3000 | 3001 = requiredPort;
 
   // 5. Max JSON body size limit
   const maxJsonBodyBytes = overrides?.maxJsonBodyBytes ?? 1024;
