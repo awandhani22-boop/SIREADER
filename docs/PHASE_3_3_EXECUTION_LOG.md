@@ -8,7 +8,7 @@
 
 | Repository | Branch | Latest verified HEAD |
 |---|---|---|
-| Virtual Office | `phase-3-3-sse` | branch HEAD `39df24187b6ff1b0a06cccee6f966942f5109fc4`; latest SSE code commit `1f73a6990d3ec71d8d581fb4dc27af07ab52e04b` |
+| Virtual Office | `phase-3-3-sse` | HEAD `5f556003c2840c874e6aa12ce14e963d75741936`; latest SSE code commit `1f73a6990d3ec71d8d581fb4dc27af07ab52e04b` |
 | Python Backend | `phase-3-3-sse-backend` | branch HEAD `dbfffe5d5b3e4cc4f29200245d9f77a964656555`; latest listener/migration code commit `6d928cc037666a14096c2b2d9f4020d0198b01b8` |
 
 Both branches are isolated from `main`. The Phase 3.2 implementation branch and the documentation closeout branch have not been overwritten or merged. No migration has been applied to the owner's Supabase project.
@@ -27,8 +27,8 @@ Both branches are isolated from `main`. The Phase 3.2 implementation branch and 
 
 ### Virtual Office / BFF / frontend
 
-- Latest run: [GitHub Actions 42533960028](https://github.com/awandhani22-boop/SIREADER/actions/runs/42533960028)
-- Code commit: `1f73a6990d3ec71d8d581fb4dc27af07ab52e04b`
+- Latest run: [GitHub Actions 42534665071](https://github.com/awandhani22-boop/SIREADER/actions/runs/42534665071)
+- Branch HEAD: `5f556003c2840c874e6aa12ce14e963d75741936`; SSE code commit: `1f73a6990d3ec71d8d581fb4dc27af07ab52e04b`
 - Result: **SUCCESS**
 - Automated tests: **371 passed, 0 failed**
 - TypeScript check: PASS
