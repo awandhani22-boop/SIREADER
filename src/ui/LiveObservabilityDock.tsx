@@ -323,16 +323,17 @@ export function LiveObservabilityDock() {
 
                 <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-2.5" data-testid="live-pipeline-card">
                   <ResourceHeading title="Pipeline" resource={pipeline} />
-                  <p className="mt-2 text-lg font-bold tabular-nums text-white">{pipeline.data?.total_in_flight ?? 0}</p>
+                  <p className="mt-2 text-lg font-bold tabular-nums text-white">{pipeline.data ? displayNumber(pipeline.data.total_in_flight) : '—'}</p>
                   <p className="text-[10px] text-slate-400">In-flight analyses</p>
-                  <p className="mt-1 text-[10px] text-slate-400">Queued: {pipeline.data?.total_queued ?? 0}</p>
+                  <p className="mt-1 text-[10px] text-slate-400">Queued: {pipeline.data ? displayNumber(pipeline.data.total_queued) : '—'}</p>
                   <p className="mt-1 text-[9px] text-slate-500">Not OS worker heartbeat</p>
+                  {!pipeline.data && <p className="mt-1 text-[9px] text-slate-500">Waiting for backend data.</p>}
                   <ResourceError resource={pipeline} />
                 </div>
 
                 <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-2.5" data-testid="live-market-card">
                   <ResourceHeading title="Market watches" resource={marketWatches} />
-                  <p className="mt-2 text-lg font-bold tabular-nums text-white">{marketWatches.data?.total_active_watches ?? 0}</p>
+                  <p className="mt-2 text-lg font-bold tabular-nums text-white">{marketWatches.data ? displayNumber(marketWatches.data.total_active_watches) : '—'}</p>
                   <p className="text-[10px] text-slate-400">Active backend watches</p>
                   <div className="mt-1 space-y-0.5">
                     {marketWatches.data?.watches.slice(0, 3).map((watch) => (
@@ -343,6 +344,7 @@ export function LiveObservabilityDock() {
                     {marketWatches.data?.watches.length === 0 && (
                       <p className="text-[10px] text-slate-500">No market watches returned.</p>
                     )}
+                    {!marketWatches.data && <p className="text-[10px] text-slate-500">Waiting for backend data.</p>}
                   </div>
                   <ResourceError resource={marketWatches} />
                 </div>
@@ -369,7 +371,7 @@ export function LiveObservabilityDock() {
 
               <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-2.5" data-testid="live-audit-card">
                 <ResourceHeading title="Decision audit" resource={audit} />
-                <p className="mt-2 text-xs font-semibold text-white">{audit.data?.total_returned ?? 0} records returned</p>
+                <p className="mt-2 text-xs font-semibold text-white">{audit.data ? displayNumber(audit.data.total_returned) : '—'} records returned</p>
                 <div className="mt-1 space-y-1">
                   {audit.data?.decisions.slice(0, 3).map((decision) => (
                     <div key={decision.audit_id} className="flex items-center justify-between gap-2 text-[10px]">

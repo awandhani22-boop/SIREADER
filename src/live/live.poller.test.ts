@@ -166,6 +166,30 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
     poller.stop();
   });
 
+  await t.test('global connection is LIVE only after all five endpoint snapshots are validated', async () => {
+    useLiveStore.getState().reset();
+    const clock = new FakeClock();
+    let resolveSystem: ((value: SystemStatusDto) => void) | undefined;
+    const api = createApi(async (path) => {
+      if (path === '/api/v1/system/status') {
+        return new Promise<SystemStatusDto>((resolve) => { resolveSystem = resolve; });
+      }
+      return responses[path];
+    });
+    const poller = createLivePoller(createLiveController(api), { clock });
+    const starting = poller.start();
+    await clock.flushMicrotasks();
+
+    assert.equal(useLiveStore.getState().resources['/api/v1/pipeline/active'].status, 'LIVE');
+    assert.equal(useLiveStore.getState().resources['/api/v1/system/status'].status, 'LOADING');
+    assert.equal(useLiveStore.getState().connection, 'CONNECTING');
+
+    resolveSystem?.(responses['/api/v1/system/status']);
+    assert.equal(await starting, true);
+    assert.equal(useLiveStore.getState().connection, 'LIVE');
+    poller.stop();
+  });
+
   await t.test('a slow endpoint is never requested twice concurrently', async () => {
     useLiveStore.getState().reset();
     const clock = new FakeClock();

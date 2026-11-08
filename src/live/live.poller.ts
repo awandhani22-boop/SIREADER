@@ -121,10 +121,10 @@ export function createLivePoller(
     const statuses = LIVE_API_PATHS.map((path) => state.resources[path].status);
     if (statuses.includes('ERROR')) {
       state.setConnection('ERROR');
-    } else if (statuses.includes('LIVE')) {
-      state.setConnection('LIVE');
     } else if (statuses.includes('STALE')) {
       state.setConnection('STALE');
+    } else if (statuses.every((status) => status === 'LIVE')) {
+      state.setConnection('LIVE');
     } else {
       state.setConnection('CONNECTING');
     }
