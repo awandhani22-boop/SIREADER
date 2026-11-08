@@ -1,8 +1,8 @@
 # SIREADER Phase 3.3 — Real-Time Observability (SSE) Architecture
 
-**Document status:** DESIGN BASELINE — implementation not started  
+**Document status:** IMPLEMENTATION BASELINE — code is present on isolated branches; owner acceptance is pending  
 **Repository:** `awandhani22-boop/SIREADER` (BFF/frontend) and `awandhani22-boop/SIREADER-Python-Backend` (authoritative event source)  
-**Continuation branch:** `phase-3-2-closeout-phase-3-3-sse-plan`  
+**Implementation branches:** `phase-3-3-sse-implementation` in both repositories  
 **Prerequisite:** Phase 3.2 owner acceptance recorded on 2026-11-09  
 **Purpose:** Define a bounded, authenticated, recoverable server-sent event stream without weakening the Phase 3.1 read-only database boundary or the Phase 3.2 BFF security model.
 
@@ -57,7 +57,7 @@ The deterministic 3D SIMULATED state remains independent.
 - Phase 3.2 BFF has a fixed route/method allowlist, operator-session middleware, a server-only upstream bearer token, strict Host/Origin/Fetch-Metadata guards, and a same-origin frontend API client.
 - Existing frontend polling already has timeout, no-overlap, retry/backoff, STALE/OFFLINE handling, session clearing, and late-response guards.
 
-These are constraints for the next implementation, not evidence that SSE has been implemented.
+These constraints have been used for the current implementation branch. Owner-controlled Supabase migration and end-to-end browser acceptance are still pending.
 
 ## 3. Event source and PostgreSQL boundary
 
@@ -85,7 +85,7 @@ Do not include primary keys, message text, symbol prices, costs, token counts, a
 Add a separate, reviewed migration in the Python Backend repository. It must:
 
 - Be applied by the database migration owner/DBA, never by the runtime API role.
-- Add narrowly scoped AFTER INSERT/UPDATE/DELETE triggers only to the six source tables listed above (use the operation scope actually needed by each table; audit decisions are append-only and should notify on INSERT).
+- Add narrowly scoped AFTER INSERT/UPDATE/DELETE row triggers to the six source tables listed above (audit decisions are append-only and notify on INSERT), plus AFTER TRUNCATE statement triggers so administrative truncation cannot silently leave snapshots stale.
 - Use a fixed channel and constant payloads. No dynamic SQL and no user-controlled channel or payload.
 - Use a non-SECURITY-DEFINER trigger function unless a later security review proves it necessary. Fix the function search path and ownership explicitly.
 - Avoid changing the grants of `sireader_api_ro`. It remains read-only and receives no INSERT/UPDATE/DELETE/TRIGGER rights.
@@ -93,7 +93,7 @@ Add a separate, reviewed migration in the Python Backend repository. It must:
 - Be idempotent and include safe rollback SQL.
 - Include migration tests and a live Supabase verification procedure.
 
-The runtime listener uses the already-configured read-only connection only to `LISTEN`; it must not query base tables or acquire write privileges.
+The runtime listener uses the already-configured read-only connection only to `LISTEN`; it must not query base tables or acquire write privileges. PostgreSQL permits LISTEN in a read-only session; the CI integration test sets default_transaction_read_only=on before LISTEN. Supabase Session pooler port 5432 preserves the required session semantics; do not use Transaction pooler mode for this dedicated listener.
 
 ### 3.3 Delivery semantics and database limitations
 
@@ -117,7 +117,7 @@ Initial bounded defaults (tune only with recorded measurements):
 - Per-subscriber queue: maximum 64 events.
 - Concurrent API subscribers: maximum 4.
 - Heartbeat interval: 15 seconds.
-- Listener reconnect: exponential backoff with jitter, capped at 30 seconds.
+- Listener reconnect: exponential backoff with jitter, capped at 30 seconds; libpq TCP keepalive is enabled to detect idle network drops.
 - Event debounce/coalescing window: 100 ms; combine pending resource keys into one invalidation event when multiple table notifications arrive together.
 
 On subscriber overflow, discard that subscriber's pending queue, enqueue a `stream.reset` signal if it can be written, and close the stream. The client must resync snapshots. Never grow memory to retain a slow consumer.
@@ -263,10 +263,10 @@ For a valid `resources.invalidated` event, queue a targeted refresh through the 
 
 | Batch | Scope | Exit evidence |
 |---|---|---|
-| 3.3-A | Event contract + migration + PostgreSQL trigger tests in Python Backend | Contract review, migration/rollback, mapping tests |
-| 3.3-B | Psycopg listener + bounded EventHub + FastAPI SSE route | Replay, reset, heartbeat, overflow, auth, shutdown tests |
-| 3.3-C | Authenticated bounded SSE proxy in Express BFF | BFF integration/security/backpressure/disconnect tests |
-| 3.3-D | EventSource client + invalidation coordinator + polling fallback | Frontend unit tests and simulation-isolation tests |
-| 3.3-E | End-to-end reliability and owner acceptance | Local Supabase/Chrome evidence and documented limitations |
+| 3.3-A | Event contract + migration + PostgreSQL trigger tests in Python Backend | IMPLEMENTED on backend branch; final hardening CI tracked in execution log |
+| 3.3-B | Psycopg listener + bounded EventHub + FastAPI SSE route | IMPLEMENTED on backend branch; final hardening CI tracked in execution log |
+| 3.3-C | Authenticated bounded SSE proxy in Express BFF | IMPLEMENTED; Virtual Office CI passed |
+| 3.3-D | EventSource client + invalidation coordinator + polling fallback | IMPLEMENTED; Virtual Office CI passed |
+| 3.3-E | End-to-end reliability and owner acceptance | PENDING: Supabase migration, local Windows/API/Chrome tests, performance evidence |
 
 **Phase 3.3 exit rule:** Do not mark COMPLETE until all automated tests, PostgreSQL integration tests, BFF/frontend tests, owner local acceptance, reconnect/fallback checks, and performance checks pass. If a Supabase migration or pooler limitation blocks the event source, stop and revise the design rather than shipping heartbeat-only pseudo-real-time behavior.

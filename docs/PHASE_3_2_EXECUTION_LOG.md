@@ -6,7 +6,8 @@
 
 - Virtual Office repository: `awandhani22-boop/SIREADER`
 - Phase 3.2 implementation branch: `phase-3-2-batch-1-bff-foundation`
-- Documentation/continuation branch: `phase-3-2-closeout-phase-3-3-sse-plan`.
+- Phase 3.2 closeout/documentation branch: `phase-3-2-closeout-phase-3-3-sse-plan`
+- Phase 3.3 implementation branch: `phase-3-3-sse-implementation` (separate, unmerged in both repositories).
 - Latest verified implementation commit: `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5` (`fix(serving): keep cross-platform launcher valid JavaScript`). Later commits only update current-state documentation.
 - Previous docs checkpoint before Batch 3: `94228186e22e548cc61f05909bc10f4cd9a79bae`
 - Python backend repository: `awandhani22-boop/SIREADER-Python-Backend`, branch `phase-3-1-api-gateway`, reviewed baseline `76b968fce399a5f591b1bd48e1501e9baa45c92a`
@@ -50,7 +51,7 @@ All binds literal `127.0.0.1`; no LAN/public listening, no port fallback. Browse
 | 3.2 Batch 4 | Frontend API contracts, independent LIVE Zustand state, same-origin client, session/CSRF controller | IMPLEMENTED, PUSHED, CI PASS | Commits `2e5778d` and `e504abf`; GitHub Actions run `42485169977`: 343/343 tests, TypeScript check and production build passed. First run `42485110003` caught two unsafe casts; correction is recorded in `e504abf`. |
 | 3.2 Batch 5 | Polling/backoff/staleness and LIVE observability dock presentation | IMPLEMENTED, PUSHED, CI PASS | Commits `c25cf29`, `482397c`, `95bbe461`, `f15f7430`; GitHub Actions run `42486162630`: 353/353 tests, TypeScript check and production build passed. Includes cadence, no-overlap, bounded jitter, OFFLINE/STALE, session clear/late-response guards and TopBar dock. |
 | 3.2 Batch 6 | Vite loopback proxy, dotenv-first BFF entrypoint, cross-platform dev launcher, production static/SPA serving, local runbook | IMPLEMENTED, CI PASS; OWNER LOCAL ACCEPTANCE CONFIRMED | Commits `f24a59a` and `9641d18`; GitHub Actions run `42486731963`: 358/358 tests, TypeScript check, production build passed. First run `42486677113` passed 358 tests but typecheck caught TS syntax in `.mjs`; fixed in `9641d18`. |
-| Phase 3.3 | Shared SSE through BFF | PLANNED | Must follow stable 3.2 |
+| Phase 3.3 | Python LISTEN/NOTIFY + EventHub, authenticated SSE API, BFF stream proxy, frontend EventSource invalidation/fallback | IMPLEMENTATION IN PROGRESS | See `docs/PHASE_3_3_SSE_EXECUTION_LOG.md`; migration and owner E2E acceptance pending |
 | Phase 4.1 | Worker runtime contract/registry/health | PLANNED | Backend-authoritative |
 | Phase 4.2 | AI provider execution/routing/cost guard | PLANNED | Server-only credentials; budget approval required |
 | Phase 4.3 | Persistent backend task orchestration | PLANNED | Idempotent claims, retry/cancel/recovery |
@@ -67,20 +68,19 @@ All binds literal `127.0.0.1`; no LAN/public listening, no port fallback. Browse
 - Transient Pipeline `LOADING` during a request is not a failure by itself. Empty result collections are valid when the authenticated snapshot endpoint validates successfully.
 - Phase 3.2 owner acceptance is recorded as PASSED. This does not complete any Phase 4 or later work.
 
-## Next action — Phase 3.3 architecture and event contract
+## Next action — Phase 3.3 owner-controlled migration and end-to-end acceptance
 
-Phase 3.2 is **COMPLETE — OWNER ACCEPTANCE PASSED (2026-11-09)** based on the owner-reported local acceptance above and the recorded CI evidence. Keep the implementation branch and this documentation/continuation branch distinct; the implementation SHA remains `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5`.
+Phase 3.2 is **COMPLETE — OWNER ACCEPTANCE PASSED (2026-11-09)**. Phase 3.3 implementation is isolated on `phase-3-3-sse-implementation` in both repositories; neither branch has been merged to `main`.
 
-A first design baseline has been prepared in [`docs/PHASE_3_3_SSE_ARCHITECTURE.md`](PHASE_3_3_SSE_ARCHITECTURE.md). It recommends PostgreSQL LISTEN/NOTIFY triggers on the six existing observability source tables, a dedicated Psycopg 3 async listener, a bounded in-memory replay/fan-out hub, an authenticated Python SSE route, an authenticated streaming BFF proxy, and browser EventSource invalidation handling with existing snapshot GET reconciliation. This is a proposal, not implementation or owner-approved design.
+The event design and code are recorded in [`docs/PHASE_3_3_SSE_ARCHITECTURE.md`](PHASE_3_3_SSE_ARCHITECTURE.md) and [`docs/PHASE_3_3_SSE_EXECUTION_LOG.md`](PHASE_3_3_SSE_EXECUTION_LOG.md). The Virtual Office CI run `42534082388` passed 367/367 tests, TypeScript check, and production build. The backend's latest migration/keepalive hardening run must be rechecked in its repository before status promotion.
 
-Before implementation:
-1. Define a versioned event envelope and an allowlisted event type set.
-2. Identify authoritative backend event sources. The Phase 3.1 API currently exposes read-only snapshots and has no event bus/outbox; do not fake real-time events with heartbeat-only messages.
-3. Choose a bounded delivery/replay mechanism compatible with the single-process local API and BFF topology; specify event IDs, cursor semantics, reconnect, duplicate/out-of-order handling, heartbeat, client backpressure, and retention limits.
-4. Specify how stream events invalidate or update resources and how periodic snapshot GET reconciliation remains authoritative.
-5. Define authentication, origin/host checks, token secrecy, session-expiry behavior, rate/resource caps, and cleanup of disconnected clients.
-6. Add failure, reconnect, replay-gap, stale, and fallback acceptance tests before coding.
-7. Keep Python API as the source of truth. SSE must pass through the BFF; never expose the bearer token. Do not drive the 3D render loop at event frequency. No WebSocket without a documented requirement.
+Remaining work:
+1. Confirm the latest Python Backend CI run passes, including PostgreSQL trigger migration/idempotency/rollback and read-only LISTEN tests.
+2. Have the owner/DBA review and apply `migrations/2026_11_09_observability_events.sql` to Supabase; do not run it as `sireader_api_ro`.
+3. Restart Python API and Virtual Office on the owner's local machine; verify the listener becomes ready without changing read-only grants.
+4. Verify Chrome same-origin EventSource, event payload contains only allowlisted invalidation metadata, and the snapshot GET endpoint refreshes the intended resource.
+5. Test disconnect, reconnect, replay gap, process restart, SSE unavailable fallback, logout/session expiry cleanup, and ensure the Simulation store is unchanged.
+6. Record owner acceptance and performance evidence before Phase 3.3 is marked COMPLETE.
 
-Phase 3.3 remains **PLANNED** until the design is reviewed and accepted. Phase 4.1–6.3 remain planned and must be completed in roadmap order. No trading, MT5 order, SL/TP, or manual-approval bypass capability is authorized.
+Phase 4.1–6.3 remain planned and must be completed in roadmap order. No trading, MT5 order, SL/TP, or manual-approval bypass capability is authorized.
 

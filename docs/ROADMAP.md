@@ -2,7 +2,7 @@
 
 **Document status:** ROADMAP LOCKED — source of truth for phase order, scope, and acceptance gates  
 **Repository:** `awandhani22-boop/SIREADER`  
-**Current documentation/continuation branch:** `phase-3-2-closeout-phase-3-3-sse-plan` (isolated from the Phase 3.2 implementation branch).  
+**Current implementation branch:** `phase-3-3-sse-implementation` (isolated from `main`; matching branch exists in both SIREADER repositories).  
 **Last roadmap review:** 2026-11-09
 
 This document governs the SIREADER Virtual Office project from the existing 3D frontend through the final v1.0 release. **The canonical product mission and meaning of the final product are in [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md); read that before every task.** Keep this roadmap and `docs/PROJECT_STATE.md` aligned after every milestone. Do not create a replacement frontend or restart completed phases.
@@ -56,7 +56,7 @@ The existing React/Three.js project is the product. Preserve and extend it; do n
 | 2.3 | Browser QA, Visual Closure & Simulation UX Stabilization | COMPLETE WITH DEFERRED ITEM |
 | 3.1 | Read-Only Observability API Gateway | COMPLETE in Python backend repository |
 | 3.2 | Secure BFF & Frontend Observability Integration | COMPLETE — Batches 1–6 CI-passed; owner-reported local development, LIVE, auth/session, isolation, logout, and production-like acceptance confirmed 2026-11-09 |
-| 3.3 | Real-Time Observability (SSE) | PLANNED |
+| 3.3 | Real-Time Observability (SSE) | IMPLEMENTATION IN PROGRESS — code branches created; Supabase migration and owner E2E acceptance pending |
 | 4.1 | Real Worker Runtime Contract & Registry | PLANNED |
 | 4.2 | AI Provider Routing, Execution & Cost Guard | PLANNED |
 | 4.3 | Persistent Backend Task Orchestration | PLANNED |
@@ -221,9 +221,13 @@ Exit gate:
 - Frontend typecheck, tests, build, security checks, and manual browser acceptance pass.
 
 ## Phase 3.3 — Real-Time Observability (SSE)
-**Status: PLANNED — architecture baseline drafted; implementation not started.**
+**Status: IMPLEMENTATION IN PROGRESS — code is present on isolated backend and Virtual Office branches; owner acceptance is pending.**
 
-Design reference: [`docs/PHASE_3_3_SSE_ARCHITECTURE.md`](PHASE_3_3_SSE_ARCHITECTURE.md). The proposed design uses PostgreSQL LISTEN/NOTIFY as a bounded invalidation signal, a Python API EventHub, an authenticated BFF stream, and browser EventSource. Existing snapshot GET endpoints remain authoritative. The design still requires review and empirical confirmation that the configured Supabase session-pooler supports a persistent LISTEN connection.
+Design reference: [`docs/PHASE_3_3_SSE_ARCHITECTURE.md`](PHASE_3_3_SSE_ARCHITECTURE.md). Durable implementation ledger: [`docs/PHASE_3_3_SSE_EXECUTION_LOG.md`](PHASE_3_3_SSE_EXECUTION_LOG.md). Owner setup: [`docs/PHASE_3_3_SSE_SETUP.md`](PHASE_3_3_SSE_SETUP.md).
+
+Current implementation includes a bounded Python EventHub and Psycopg LISTEN listener, six-table invalidation migration (including TRUNCATE notifications), authenticated Python SSE route, fixed authenticated BFF streaming proxy, and browser EventSource resource invalidation with the existing snapshot polling as fallback. Virtual Office CI run `42534082388` passed 367/367 tests, TypeScript, and production build. The final backend migration/keepalive CI run is tracked in the execution log; do not mark the phase complete until it passes.
+
+The owner-reported Supabase connection uses the Session pooler on port 5432. Supabase distinguishes Session mode from Transaction mode (commonly port 6543); the listener requires session semantics for LISTEN. The migration has not been applied to the live Supabase database by this work. The existing read-only role is not granted write or trigger privileges.
 
 Goal: replace frequent client polling with bounded, server-mediated event updates where they add meaningful value.
 
