@@ -67,11 +67,11 @@ All binds literal `127.0.0.1`; no LAN/public listening, no port fallback. Browse
 - Transient Pipeline `LOADING` during a request is not a failure by itself. Empty result collections are valid when the authenticated snapshot endpoint validates successfully.
 - Phase 3.2 owner acceptance is recorded as PASSED. This does not complete any Phase 4 or later work.
 
-## Next action — Phase 3.3 architecture and event contract
+## Next action — Phase 3.3 end-to-end owner acceptance
 
 Phase 3.2 is **COMPLETE — OWNER ACCEPTANCE PASSED (2026-11-09)** based on the owner-reported local acceptance above and the recorded CI evidence. Keep the implementation branch and this documentation/continuation branch distinct; the implementation SHA remains `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5`.
 
-A first design baseline has been prepared in [`docs/PHASE_3_3_SSE_ARCHITECTURE.md`](PHASE_3_3_SSE_ARCHITECTURE.md). It recommends PostgreSQL LISTEN/NOTIFY triggers on the six existing observability source tables, a dedicated Psycopg 3 async listener, a bounded in-memory replay/fan-out hub, an authenticated Python SSE route, an authenticated streaming BFF proxy, and browser EventSource invalidation handling with existing snapshot GET reconciliation. This is a proposal, not implementation or owner-approved design.
+The Phase 3.3 design baseline is now partly implemented on isolated frontend/BFF and Python Backend branches. The current state and CI evidence are tracked in [`docs/PHASE_3_3_EXECUTION_LOG.md`](PHASE_3_3_EXECUTION_LOG.md); architecture constraints remain in [`docs/PHASE_3_3_SSE_ARCHITECTURE.md`](PHASE_3_3_SSE_ARCHITECTURE.md).
 
 Before implementation:
 1. Define a versioned event envelope and an allowlisted event type set.
@@ -82,5 +82,5 @@ Before implementation:
 6. Add failure, reconnect, replay-gap, stale, and fallback acceptance tests before coding.
 7. Keep Python API as the source of truth. SSE must pass through the BFF; never expose the bearer token. Do not drive the 3D render loop at event frequency. No WebSocket without a documented requirement.
 
-Phase 3.3 remains **PLANNED** until the design is reviewed and accepted. Phase 4.1–6.3 remain planned and must be completed in roadmap order. No trading, MT5 order, SL/TP, or manual-approval bypass capability is authorized.
+Phase 3.3 is **IN PROGRESS**; code and automated CI are present, while owner Supabase/Chrome acceptance remains. Phase 4.1–6.3 remain planned and must be completed in roadmap order. No trading, MT5 order, SL/TP, or manual-approval bypass capability is authorized.
 
