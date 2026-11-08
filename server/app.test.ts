@@ -805,7 +805,7 @@ test('SIREADER Phase 3.2 BFF Test Suite — Remediated', async (t) => {
   });
 
   await t.test('Canonical route completeness check: exactly 8 routes declared', () => {
-    assert.equal(CANONICAL_ROUTES.length, 8);
+    assert.equal(CANONICAL_ROUTES.length, 9);
     const paths = CANONICAL_ROUTES.map((r) => r.path);
     assert.deepEqual(paths.sort(), [
       '/api/auth/login',
@@ -816,6 +816,7 @@ test('SIREADER Phase 3.2 BFF Test Suite — Remediated', async (t) => {
       '/api/v1/pipeline/active',
       '/api/v1/system/status',
       '/api/v1/telemetry/usage',
+      '/api/v1/events/stream',
     ]);
   });
 
