@@ -71,7 +71,9 @@ All binds literal `127.0.0.1`; no LAN/public listening, no port fallback. Browse
 
 Phase 3.2 is **COMPLETE — OWNER ACCEPTANCE PASSED (2026-11-09)** based on the owner-reported local acceptance above and the recorded CI evidence. Keep the implementation branch and this documentation/continuation branch distinct; the implementation SHA remains `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5`.
 
-Proceed to Phase 3.3 design only. Before implementation:
+A first design baseline has been prepared in [`docs/PHASE_3_3_SSE_ARCHITECTURE.md`](PHASE_3_3_SSE_ARCHITECTURE.md). It recommends PostgreSQL LISTEN/NOTIFY triggers on the six existing observability source tables, a dedicated Psycopg 3 async listener, a bounded in-memory replay/fan-out hub, an authenticated Python SSE route, an authenticated streaming BFF proxy, and browser EventSource invalidation handling with existing snapshot GET reconciliation. This is a proposal, not implementation or owner-approved design.
+
+Before implementation:
 1. Define a versioned event envelope and an allowlisted event type set.
 2. Identify authoritative backend event sources. The Phase 3.1 API currently exposes read-only snapshots and has no event bus/outbox; do not fake real-time events with heartbeat-only messages.
 3. Choose a bounded delivery/replay mechanism compatible with the single-process local API and BFF topology; specify event IDs, cursor semantics, reconnect, duplicate/out-of-order handling, heartbeat, client backpressure, and retention limits.
