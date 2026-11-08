@@ -6,7 +6,7 @@
 - Phase 3.2 — Secure BFF & Frontend Observability Integration: **COMPLETE — owner acceptance confirmed 2026-11-09**.
 
 - Active Virtual Office implementation branch: `phase-3-3-sse`; latest SSE code commit `1f73a6990d3ec71d8d581fb4dc27af07ab52e04b` (subsequent commits update documentation).
-- Active Python Backend implementation branch: `phase-3-3-sse-backend`; latest listener/migration code commit `6d928cc037666a14096c2b2d9f4020d0198b01b8` (subsequent commits update tests/runbook/documentation).
+- Active Python Backend implementation branch: `phase-3-3-sse-backend`; latest backend event/trigger verification commit `923f7bca00c14ee6da5d89143c54e9ee6522a099`.
 - Phase 3.2 closeout documentation branch: `phase-3-2-closeout-phase-3-3-sse-plan`; kept separate from implementation work.
 - Latest verified implementation commit: `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5` (`fix(serving): keep cross-platform launcher valid JavaScript`). Later commits only update the current-state documentation.
 - Batch 1 — BFF Foundation & Security Guards: implementation pushed; port and security changes source-audited.
@@ -144,7 +144,7 @@ Before every substantial task, re-read the three canonical docs in order, verify
 - Python Backend branch `phase-3-3-sse-backend`: static resource-key trigger migration + rollback; Psycopg 3 async LISTEN listener; bounded EventHub/replay; authenticated FastAPI SSE route; PostgreSQL integration tests.
 - Virtual Office branch `phase-3-3-sse`: fixed authenticated BFF SSE proxy; strict `Last-Event-ID` validation; bounded connection count; backpressure/disconnect cleanup; strict browser event contract; same-origin EventSource; snapshot invalidation and polling fallback; 60-second reconciliation while connected.
 - Latest Virtual Office CI run `42533960028` at `1f73a6990d3ec71d8d581fb4dc27af07ab52e04b`: 371/371 tests passed; TypeScript check and production build passed.
-- Latest Python Backend CI run `42534343574` at branch HEAD `e7ba6655c91b0beaad3a95276a0fbfc58ce8cca1`: 100 API/PostgreSQL tests passed; `compileall` passed; 50 core regression tests passed.
+- Latest Python Backend CI run `42534343574` at branch HEAD `e7ba6655c91b0beaad3a95276a0fbfc58ce8cca1`: 100 API/PostgreSQL tests passed; `compileall` passed; 50 core regression tests passed. The expanded trigger catalog/security/rollback assertions also passed.
 - The latest backend run includes 100 API/PostgreSQL tests, Python API compileall and 50 core regressions. It exercises the migration's row and TRUNCATE triggers and the real Psycopg listener against disposable CI PostgreSQL.
 - Both CI runs use GitHub disposable test infrastructure, not the owner's Supabase project or local Chrome.
 - Owner acceptance remains open: confirm session-pooler supports persistent `LISTEN`; review/apply the trigger migration through approved DB-owner process; verify actual notification delivery; test same-origin EventSource/reconnect/replay/reset/fallback during API/BFF restart in Chrome; verify no bearer token reaches browser; measure resource/performance behavior.
