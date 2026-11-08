@@ -4,29 +4,32 @@
 **Phase 3.2 — IN PROGRESS: Secure BFF & Frontend Observability Integration.**
 
 - Active branch: `phase-3-2-batch-1-bff-foundation`
-- Latest verified remote HEAD: `428a051fe18d48a64267b1dbe41b4cc42d8d76de` (`fix(bff): inject configured bearer token into upstream request`)
+- Latest verified remote HEAD: `8dfa50421f30bc888d22c880dcb5bd496f201d0e` (`fix(auth): enforce concurrent login attempt limits and correct expiry test`)
 - Batch 1 — BFF Foundation & Security Guards: implementation pushed; port and security changes source-audited.
-- Batch 2 — Fixed Upstream Proxy: implementation pushed; GitHub Actions run `42482847460` passed.
-- Next work unit: Batch 3 — Operator Authentication & Session Lifecycle.
-- Phases 1, 2.1, 2.2 and 2.3 remain complete with their historical evidence and documented deferrals.
-- Phase 3.1 work exists in the separate Python Backend repo. Its runbook still lists owner-side local API credentials and five-endpoint HTTP smoke checks; these have not been confirmed in this ledger.
+- Batch 2 — Fixed Upstream Proxy: implementation pushed; GitHub Actions run `42482847460` passed (323/323).
+- Batch 3 — Operator Authentication & Session Lifecycle: implementation pushed; GitHub Actions run `42483616073` passed (331/331), typecheck and production build passed.
+- Next work unit: Batch 4 — Frontend API Contracts & Runtime State.
+- Phases 1, 2.1, 2.2 and 2.3 remain complete with historical evidence and documented deferrals.
+- Phase 3.1 is implemented in the separate Python Backend repo; owner-side local credential setup and authenticated five-endpoint smoke test remain unconfirmed in its runbook.
 
-Product mission: [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md) — canonical product purpose.
-Master roadmap: [`docs/ROADMAP.md`](ROADMAP.md) — authoritative phase order and acceptance gates.
+Product mission: [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md).
+Master roadmap: [`docs/ROADMAP.md`](ROADMAP.md).
 Durable execution hand-off: [`docs/PHASE_3_2_EXECUTION_LOG.md`](PHASE_3_2_EXECUTION_LOG.md).
-Before every substantial task, read the canonical three documents in order, verify current branch HEAD, then inspect the relevant files.
+Before every substantial task, re-read the three canonical docs in order, verify current branch HEAD, then inspect only relevant code.
 
 ### Current Phase 3.2 checkpoint
-- Virtual Office repo: `awandhani22-boop/SIREADER`
-- Branch: `phase-3-2-batch-1-bff-foundation`
-- Latest remote HEAD: `428a051fe18d48a64267b1dbe41b4cc42d8d76de`
-- Batch 2 implementation files: `server/upstream.ts`, `server/upstream.test.ts`, `server/app.ts`, `server/app.test.ts`, `server/log.ts`, `package.json`, and `.github/workflows/ci.yml`.
-- Upstream transport is fixed to `http://127.0.0.1:8000` and exactly five static GET paths. It creates only server-side Bearer Authorization and Accept application headers; redirects are rejected; timeout is capped at 5 seconds; streamed response is capped at 1 MiB; response DTOs are exact-key validated against the Python Pydantic schema; errors and logs are sanitized.
-- Observability endpoints remain fail-closed with HTTP 401 until Batch 3 installs actual operator session validation. Test-only middleware injection is used exclusively by mock tests.
-- GitHub Actions run `42482847460` on commit `428a051`: 323 tests passed, 0 failed; TypeScript check passed; production Vite build passed (747 ms in run log). Dependency install with frozen Bun lock passed.
-- The first CI run on `137c341` failed at the outbound Authorization assertion because the code sent the literal string `Bearer ${token}`. The implementation was corrected to concatenate the server token, committed as `428a051`, and the subsequent full CI run passed. This failure and correction are recorded to preserve the actual audit trail.
-- CI used local mock HTTP servers only; it did not contact the real Python API or Supabase.
-- Not yet verified: Windows owner-side test/build rerun; Chrome/local browser HttpOnly cookie checks; local live Python API credential and five-endpoint smoke checks; production serving on local Windows. Do not claim these passed.
+- Branch: `phase-3-2-batch-1-bff-foundation`; latest verified remote HEAD: `8dfa50421f30bc888d22c880dcb5bd496f201d0e`.
+- Batch 1 and Batch 2 details are recorded in the execution log below.
+- Batch 3 added `server/auth.ts`, `server/auth.test.ts`, the login/session/logout routes, error/log event updates, a masked local password-hash helper at `scripts/create-operator-password-hash.ts`, and `docs/OPERATOR_AUTH_SETUP.md`.
+- Password hash uses fixed scrypt N=16384, r=8, p=1, 16-byte salt and 64-byte derived key. No default password. Missing/malformed hash returns `503 AUTH_NOT_CONFIGURED`.
+- Session IDs and CSRF tokens are generated from 32 CSPRNG bytes. Session IDs are stored hashed in process memory; sessions rotate on successful login, expire after 1-hour idle or 8-hour absolute life, and are revoked on logout or process restart.
+- Login is limited to five attempts per loopback client IP per 15-minute window. Attempts are reserved synchronously before scrypt work so concurrent requests cannot race past the limit.
+- Cookie is `__Host-sireader_sid`, HttpOnly, Secure, SameSite=Strict, Path=/, no Domain, Max-Age=28800. Logout requires active session + constant-time CSRF check.
+- All five upstream observability routes now use the real operator session middleware in production. The upstream auth bypass dependency is documented as test-only and is used only by mock test harnesses.
+- GitHub Actions run `42483616073` on `8dfa50421f30bc888d22c880dcb5bd496f201d0e`: 331 tests passed, 0 failed; TypeScript check passed; production build passed (828 ms in run log). Frozen Bun dependency install passed.
+- The first Batch 3 CI run on `6c10ddf` failed one time-expiry assertion (401 instead of 200). The test was corrected to refresh idle time while advancing toward the absolute deadline. The login-attempt limiter was additionally hardened to reserve attempts before asynchronous scrypt. The rerun on `8dfa504` passed fully.
+- CI tests used in-process loopback servers and deterministic test hashes only; no live Python API, Supabase, paid provider, or real credentials were used.
+- Not yet verified: Windows owner-side test/build; local generated operator hash setup; browser HttpOnly cookie/login/CSRF behavior in Chrome; local Python API authenticated smoke tests; dev Vite proxy and production static serving; frontend LIVE state/presentation.
 - No merge to `main` has been performed.
 
 ## Implemented

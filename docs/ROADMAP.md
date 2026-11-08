@@ -55,7 +55,7 @@ The existing React/Three.js project is the product. Preserve and extend it; do n
 | 2.2 | Global Task Dispatcher & Deterministic Simulation | COMPLETE |
 | 2.3 | Browser QA, Visual Closure & Simulation UX Stabilization | COMPLETE WITH DEFERRED ITEM |
 | 3.1 | Read-Only Observability API Gateway | COMPLETE in Python backend repository |
-| 3.2 | Secure BFF & Frontend Observability Integration | IN PROGRESS — Batch 1 pushed; local acceptance and remaining batches pending |
+| 3.2 | Secure BFF & Frontend Observability Integration | IN PROGRESS — Batches 1–3 implemented and CI-passed; Batches 4–6 and owner-side local acceptance pending |
 | 3.3 | Real-Time Observability (SSE) | PLANNED |
 | 4.1 | Real Worker Runtime Contract & Registry | PLANNED |
 | 4.2 | AI Provider Routing, Execution & Cost Guard | PLANNED |
@@ -178,19 +178,19 @@ Boundary:
 - It does not enable AI inference or trading execution.
 
 ## Phase 3.2 — Secure BFF & Frontend Observability Integration
-**Status: IN PROGRESS.** Batch 1 foundation and Batch 2 fixed upstream proxy are pushed to `phase-3-2-batch-1-bff-foundation` through `428a051`. Batch 2 GitHub Actions passed (323/323 tests, typecheck, production build); later Phase 3.2 batches and owner-side browser/live-service checks remain.
+**Status: IN PROGRESS.** Batches 1–3 are pushed to `phase-3-2-batch-1-bff-foundation` through `8dfa504`. Batch 2 CI passed (323/323 tests). Batch 3 CI passed (331/331 tests), TypeScript check, and production build. Batches 4–6 and owner-side browser/live-service checks remain.
 
 ### Execution batches and gates
 1. **Batch 1 — BFF Foundation & Security Guards:** COMPLETE IN CODE; pushed and source-audited. Includes canonical route allowlist, fixed loopback config, strict Host/Fetch-Metadata/Origin/raw-path/method guards, scoped auth parser, safe errors/logger, and mode-specific dev/prod ports. Batch 1 was included in the later full CI run.
 2. **Batch 2 — Fixed Upstream Proxy:** COMPLETE IN CODE AND CI. Server-only bearer injection; five fixed GET mappings; no arbitrary URL/path forwarding; outbound headers constructed from scratch; 5-second timeout; redirect rejection; streamed 1 MiB cap; safe error mapping; exact DTO validation against Python API Pydantic schemas. Mock HTTP tests only; no live Supabase/API calls. Latest fix: `428a051fe18d48a64267b1dbe41b4cc42d8d76de`. GitHub Actions run `42482847460`: 323/323 tests, typecheck, and production build all passed.
-3. **Batch 3 — Operator Authentication & Session Lifecycle:** scrypt password verification; single-user operator login; server-memory sessions; random session identifiers and CSRF tokens; rotation; idle 1-hour and absolute 8-hour expiry; rate limiting; constant-time CSRF validation; HttpOnly Secure SameSite=Strict host cookie; logout revocation. Auth configuration is presence-checked without printing secret values. Session-store restart invalidation must be documented.
+3. **Batch 3 — Operator Authentication & Session Lifecycle:** COMPLETE IN CODE AND CI. scrypt password verification; single-operator login; server-memory sessions; cryptographically random session and CSRF tokens; session rotation; idle 1-hour and absolute 8-hour expiry; pre-scrypt bounded login-attempt reservation; constant-time CSRF validation; HttpOnly Secure SameSite=Strict host cookie; logout revocation; startup/restart invalidation. Password hash helper uses a masked interactive terminal prompt. GitHub Actions run `42483616073` on `8dfa504`: 331/331 tests, typecheck, and production build passed. Owner-local password-hash setup and Chrome cookie checks remain pending.
 4. **Batch 4 — Frontend API Contracts & Runtime State:** typed validated DTOs and separate LIVE state/store/repository; no simulation fallback or state mixing; login/session state and safe CSRF handling; clear transport/auth/schema states.
 5. **Batch 5 — Polling & Observability Presentation:** system/pipeline/market polling every 10 seconds; usage/audit every 30 seconds; 5-second request timeout; STALE after 3 intervals; OFFLINE after 2 transport failures; bounded jittered backoff capped at 60 seconds; retain last-known LIVE values while marking stale/offline; clear private data on SESSION_REQUIRED.
 6. **Batch 6 — Vite/Production Serving & End-to-End Acceptance:** development Vite loopback `127.0.0.1:3000` proxies only `/api/*` to Express `127.0.0.1:3001` with Host preserved; production Express `127.0.0.1:3000` serves `dist/` and API routes; strict port/no fallback; manual Chrome cookie/HttpOnly/session/security verification; bundle secret scan; full test/typecheck/build and browser evidence.
 
 Batch acceptance is sequential. A later batch may be developed behind an explicit test seam, but production integration and phase acceptance must not silently assume an earlier batch passed. Do not connect to live backend credentials until the owner confirms the local Phase 3.1 API runbook checks.
 
-**Status: IN PROGRESS — Batch 1 and Batch 2 code are pushed; Batch 2 CI has passed.**
+**Status: IN PROGRESS — Batches 1–3 are pushed; Batch 3 CI has passed.**
 
 Goal: connect the existing Three.js frontend to the five Phase 3.1 GET endpoints without exposing the API Bearer Token.
 
