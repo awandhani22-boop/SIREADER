@@ -2,7 +2,7 @@
 
 **Document status:** ROADMAP LOCKED — source of truth for phase order, scope, and acceptance gates  
 **Repository:** `awandhani22-boop/SIREADER`  
-**Current development branch:** `phase-2-2-task-dispatcher`  
+**Current development branch:** `phase-3-2-batch-1-bff-foundation`  
 **Last roadmap review:** 2026-11-08
 
 This document governs the SIREADER Virtual Office project from the existing 3D frontend through the final v1.0 release. **The canonical product mission and meaning of the final product are in [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md); read that before every task.** Keep this roadmap and `docs/PROJECT_STATE.md` aligned after every milestone. Do not create a replacement frontend or restart completed phases.
@@ -55,7 +55,7 @@ The existing React/Three.js project is the product. Preserve and extend it; do n
 | 2.2 | Global Task Dispatcher & Deterministic Simulation | COMPLETE |
 | 2.3 | Browser QA, Visual Closure & Simulation UX Stabilization | COMPLETE WITH DEFERRED ITEM |
 | 3.1 | Read-Only Observability API Gateway | COMPLETE in Python backend repository |
-| 3.2 | Secure BFF & Frontend Observability Integration | NEXT |
+| 3.2 | Secure BFF & Frontend Observability Integration | IN PROGRESS — Batch 1 pushed; local acceptance and remaining batches pending |
 | 3.3 | Real-Time Observability (SSE) | PLANNED |
 | 4.1 | Real Worker Runtime Contract & Registry | PLANNED |
 | 4.2 | AI Provider Routing, Execution & Cost Guard | PLANNED |
@@ -178,6 +178,18 @@ Boundary:
 - It does not enable AI inference or trading execution.
 
 ## Phase 3.2 — Secure BFF & Frontend Observability Integration
+**Status: IN PROGRESS.** Batch 1 foundation is on branch `phase-3-2-batch-1-bff-foundation` at `8b5c7a0`; do not infer full Phase 3.2 acceptance from this baseline.
+
+### Execution batches and gates
+1. **Batch 1 — BFF Foundation & Security Guards:** canonical route allowlist, loopback configuration, strict Host/Fetch-Metadata/Origin/raw-path/method guards, scoped auth-body parser, safe error envelope/logger. Latest remote commit: `8b5c7a09ec82e83e8bd81a25a2e8034dbe16713e`. Local Argon report: 29 BFF tests and 311 repository tests passed; typecheck/lint/build reported pass before the final simultaneous-port regression assertions. The current commit includes the final port tests, but no GitHub CI status or independent owner-run test evidence is recorded here.
+2. **Batch 2 — Fixed Upstream Proxy:** server-only bearer injection; five fixed GET mappings; no arbitrary URL/path forwarding; upstream headers created from scratch; 5-second timeout; redirect rejection; 1 MiB streamed body cap; safe error mapping; strict response-schema validation against the Python API Pydantic contract. Mock HTTP tests only; no live Supabase/API calls.
+3. **Batch 3 — Operator Authentication & Session Lifecycle:** scrypt password verification; single-user operator login; server-memory sessions; random session identifiers and CSRF tokens; rotation; idle 1-hour and absolute 8-hour expiry; rate limiting; constant-time CSRF validation; HttpOnly Secure SameSite=Strict host cookie; logout revocation. Auth configuration is presence-checked without printing secret values. Session-store restart invalidation must be documented.
+4. **Batch 4 — Frontend API Contracts & Runtime State:** typed validated DTOs and separate LIVE state/store/repository; no simulation fallback or state mixing; login/session state and safe CSRF handling; clear transport/auth/schema states.
+5. **Batch 5 — Polling & Observability Presentation:** system/pipeline/market polling every 10 seconds; usage/audit every 30 seconds; 5-second request timeout; STALE after 3 intervals; OFFLINE after 2 transport failures; bounded jittered backoff capped at 60 seconds; retain last-known LIVE values while marking stale/offline; clear private data on SESSION_REQUIRED.
+6. **Batch 6 — Vite/Production Serving & End-to-End Acceptance:** development Vite loopback `127.0.0.1:3000` proxies only `/api/*` to Express `127.0.0.1:3001` with Host preserved; production Express `127.0.0.1:3000` serves `dist/` and API routes; strict port/no fallback; manual Chrome cookie/HttpOnly/session/security verification; bundle secret scan; full test/typecheck/build and browser evidence.
+
+Batch acceptance is sequential. A later batch may be developed behind an explicit test seam, but production integration and phase acceptance must not silently assume an earlier batch passed. Do not connect to live backend credentials until the owner confirms the local Phase 3.1 API runbook checks.
+
 **Status: NEXT — after Phase 2.3 sign-off.**
 
 Goal: connect the existing Three.js frontend to the five Phase 3.1 GET endpoints without exposing the API Bearer Token.

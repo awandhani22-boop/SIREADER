@@ -1,14 +1,26 @@
 # SIREADER Virtual Office — Project State
 
 ## Current phase
-**Phase 3.2 — NEXT: Secure BFF & Frontend Observability Integration.**
-Phases 1, 2.1, 2.2, and 2.3 are complete as recorded below. Phase 2.3 achieved formal acceptance (ACCEPT WITH DEFERRED ITEMS) with all 282 automated tests passing, empirical CDP browser QA, sub-second clock precision, camera rotate/reset evidence, manual task enqueue validation, and strict C1 fixed-step determinism. The next priority is Phase 3.2: connecting the frontend to the Phase 3.1 Python backend observability endpoints via a secure loopback BFF. Do not restart the scheduler or create a replacement frontend.
+**Phase 3.2 — IN PROGRESS: Secure BFF & Frontend Observability Integration.**
 
-Product mission: [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md) — canonical purpose of SIREADER and its Virtual Office.
-Master roadmap: [`docs/ROADMAP.md`](ROADMAP.md) — authoritative phase order and v1.0 acceptance gates.
-Before every task, read PRODUCT_VISION.md, ROADMAP.md, and this PROJECT_STATE.md before inspecting code.
-Branch: `phase-2-2-task-dispatcher`<br>
-Phase 2.2 implementation baseline: `cf1083d`
+- Active branch: `phase-3-2-batch-1-bff-foundation`
+- Latest verified remote HEAD: `8b5c7a09ec82e83e8bd81a25a2e8034dbe16713e` (`fix(bff): enforce mode-specific port topology`)
+- Latest unit: Batch 1 BFF Foundation & Security Guards, implemented and pushed.
+- Batch 2 Fixed Upstream Proxy is next.
+- Phases 1, 2.1, 2.2 and 2.3 remain completed as recorded below. Phase 2.3 retains its documented FAILED live-browser trigger and final GLB avatar deferrals.
+- Phase 3.1 code and database privilege work are recorded in the separate Python Backend repository. Its runbook still lists local API credential setup and five-endpoint HTTP smoke testing as owner-side steps; do not claim those local live API checks have passed until evidence is recorded.
+
+Product mission: [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md) — canonical product purpose.
+Master roadmap: [`docs/ROADMAP.md`](ROADMAP.md) — authoritative phase order and acceptance gates.
+This file is the durable current-state ledger. Before each task, read the canonical three documents in order, then inspect only relevant code and current branch HEAD.
+
+### Current branch checkpoint
+- Branch: `phase-3-2-batch-1-bff-foundation`
+- Remote commit: `8b5c7a09ec82e83e8bd81a25a2e8034dbe16713e`
+- Batch 1 files: `server/config.ts`, `server/app.test.ts` and the seven BFF foundation files introduced in the prior commit.
+- Last Argon-reported local checks before the final port regression assertions: 29/29 BFF tests, 311/311 repository tests, TypeScript typecheck, lint script, production build, and `git diff --check` passed. Four additional simultaneous `BFF_PORT` + `overrides.port` assertions were subsequently added and committed; they are within the existing P0-3 test, so the count remains 29. The assistant verified their source on GitHub but did not execute local commands.
+- GitHub Actions status for `8b5c7a09ec82e83e8bd81a25a2e8034dbe16713e`: no status checks were returned at the time this ledger was written.
+- No merge to `main` has been performed.
 
 ## Implemented
 - **Phase 2.3 — Completed with Deferred Item (2026-11-08)**:
@@ -103,4 +115,15 @@ Phase 2.2 implementation baseline: `cf1083d`
 - **Phase 3.1 — Read-Only Observability API Gateway: COMPLETE (2026-11-08)** in the separate `awandhani22-boop/SIREADER-Python-Backend` repository. Supabase lockdown and dedicated `sireader_api_ro` access were verified; all five local GET endpoints returned 200; missing token returned 401; POST/PUT/PATCH/DELETE returned 405; 74 API tests and 50 core backend regression tests passed locally; API compile passed; GitHub Actions run `42397323807` succeeded. Backend remains a separate project boundary.
 
 ## Next
-Execute **Phase 3.2 — Secure BFF & Frontend Observability Integration**: Connect the existing Three.js Virtual Office to the five Phase 3.1 Python Backend GET endpoints via a secure backend-for-frontend loopback reverse proxy without exposing the API Bearer Token in browser bundles. Follow `docs/ROADMAP.md` for all later phases through Virtual Office v1.0.
+Begin **Phase 3.2 Batch 2 — Fixed Upstream Proxy** on `phase-3-2-batch-1-bff-foundation`.
+
+Before implementation:
+1. Read the current branch's BFF files and the separate backend contract at `awandhani22-boop/SIREADER-Python-Backend`, branch `phase-3-1-api-gateway`.
+2. Match all five response validators to `app/api/schemas.py` and the route implementations; do not invent fields.
+3. Implement only fixed loopback upstream mappings. Build upstream headers from scratch with server-only Bearer and `Accept: application/json`; never forward browser headers.
+4. Enforce a 5-second end-to-end timeout, manual redirect rejection, streaming response cap of 1 MiB, safe error mapping, and explicit schema validation.
+5. Add mock-upstream tests for all five GET routes, outbound header isolation, missing token, timeout, connection failure, redirect, HTTP error, content-type mismatch, invalid JSON/schema, and oversized streams.
+6. Run tests/typecheck/build locally where available. Record unavailable checks honestly. Commit and push only a complete, reviewed unit to this branch.
+
+Owner-side gate before real API integration: complete the remaining local steps in the Python Backend Phase 3.1 runbook, including private credential configuration and all five authenticated HTTP smoke tests. Never ask the owner to paste secrets into chat.
+

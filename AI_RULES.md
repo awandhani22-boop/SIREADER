@@ -12,19 +12,23 @@ Act as a senior frontend engineer, Three.js technical artist, interaction design
 ## Product objective
 Build a real AI workforce platform, not a 3D office game or decorative dashboard. The existing Virtual Office is the human-facing 3D environment for observing and supervising specialized AI workers; the Python backend is the operational brain and source of truth. Initial roster: Supervisor, Haiku, Sonnet, Opus, Decision Engineer, Market Monitor, and Data Archivist. The architecture must be data-driven and support 50–100 workers later without duplicating scene code. A moving avatar is not proof of real work; LIVE worker activity requires authoritative backend task/runtime evidence. Keep DEMO/SIMULATED data strictly separate from LIVE data.
 
-## Current scope boundaries (Phase 2.3 — browser QA and simulation UX closure)
-- Follow `docs/ROADMAP.md` as the canonical phase plan and final v1.0 acceptance criteria. Keep `docs/PROJECT_STATE.md` current after milestones.
-- The current execution target is Phase 2.3 only. Do not jump to Phase 3.2 until Phase 2.3 manual QA and exit gates pass.
-- Continue the existing Three.js frontend. Do not create a replacement application or a second repository for the same Virtual Office.
-- Frontend-only prototype.
-- Use local mock data and local state.
-- No Python backend connection, REST calls, WebSocket, Telegram, Supabase, MT5, or AI provider API.
-- The completed Phase 2.2 scheduler, task lifecycle, global queue, token metrics, and USD costs remain local deterministic simulations during Phase 2.3; do not invoke real model providers or external execution services.
-- Keep priority ordering, worker matching, and dispatch decisions in `src/scheduler/` and the simulation runtime. UI components submit commands and present state; they do not reimplement scheduler policy.
-- `DEMO_MAX_QUEUE_CAP` is an automatic demo-generator safeguard only. It must never be presented or used as the global scheduler queue capacity.
-- No order placement or trading actions.
-- Work only in the existing Virtual Office frontend project and its explicitly designated documentation. Do not modify the separate Python backend unless a later roadmap phase explicitly authorizes a backend task. Confirm the repository's actual frontend root; do not assume a nested `office-ui` folder is the application root.
-- Do not read, request, print, or copy secrets from `.env` or other credential files.
+## Current execution scope (Phase 3.2 through Phase 4.4)
+- The active phase and next work unit are defined only by `docs/PROJECT_STATE.md` and `docs/ROADMAP.md`; older Phase 1/2 scope statements in historical docs do not override them.
+- Continue the existing React/Three.js Virtual Office. Never replace it, create a competing frontend, or restart accepted phases.
+- Phase 3.2 is the current execution phase. Work through its six documented batches in order: BFF foundation, fixed upstream proxy, operator sessions, frontend contracts/state, polling/presentation, and serving/end-to-end acceptance.
+- Phase 3.3 SSE follows stable Phase 3.2 acceptance. Phase 4.1–4.3 explicitly authorize separate Python Backend contract/runtime/provider/orchestration work only within each phase's stated scope. Phase 4.4 integrates LIVE runtime data into the existing frontend.
+- Keep repositories separate: `awandhani22-boop/SIREADER` is the Virtual Office; `awandhani22-boop/SIREADER-Python-Backend` is the operational backend. Never treat a change in one repository as proof that the other changed.
+- Python backend is the source of truth for LIVE worker/task/runtime/provider/usage/persistence state. Frontend simulation remains deterministic and SIMULATED. Never merge LIVE and SIMULATED state or present mock activity as live.
+- BFF, Vite and Python API listeners must use only the approved loopback topologies in the execution ledger. Do not expose them on LAN/public interfaces or add permissive host/CORS/fallback behavior.
+- Browser-facing API routes are fixed allowlist routes. Server-to-server bearer credentials remain server-only; never use `VITE_*`, browser storage, URL parameters, client logs, or response payloads for secrets.
+- Treat backend data as untrusted: validate runtime DTOs, bound payloads, timeouts, and retries; fail visibly on schema or auth errors; never render backend strings as HTML.
+- Keep trading safeguards in Python. Virtual Office must never place/close/modify MT5 orders, SL/TP, or bypass manual approval/Decision Engine boundaries.
+- Do not read, request, print, or commit the contents of `.env`, tokens, passwords, database URLs, broker credentials, Telegram credentials, or AI-provider keys. Use safe presence-only diagnostics.
+- No paid AI provider calls, production credentials, Supabase mutations, live API smoke tests, or external workload execution without explicit owner-side setup/approval. Use mock upstream servers for development tests.
+- At the end of each coherent work unit: update `docs/PROJECT_STATE.md` and `docs/PHASE_3_2_EXECUTION_LOG.md`, run the relevant tests/typecheck/build where available, report exact evidence and remaining gaps, then commit and push to the active feature branch. Never push to or merge into `main` without explicit authorization.
+- Do not claim local tests, browser QA, live service checks, or CI passed unless actual evidence exists. GitHub source inspection is not execution evidence.
+- Preserve untracked personal files and local-only artifacts. Never run destructive Git commands or `git add .`; stage explicit paths only.
+- Use a compact plan and smallest coherent implementation. Do not skip security, data migrations, failure recovery, auditability, acceptance tests, or documentation for speed.
 
 ## Required visual direction
 - Futuristic premium technology office.

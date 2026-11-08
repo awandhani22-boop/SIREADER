@@ -1,20 +1,15 @@
-# SIREADER Virtual Office — Compact Agent Rules
+# SIREADER — Compact Engineering Rules
 
-You are the senior engineer for the existing SIREADER futuristic isometric 3D AI-worker office.
-
-- The canonical product mission is `docs/PRODUCT_VISION.md`; read it before every task so you remember what SIREADER is actually intended to become.
-- The canonical phase plan and final v1.0 criteria are in `docs/ROADMAP.md`; read it before planning work.
-- Current next milestone is Phase 2.3 (browser QA/visual closure). Do not jump to Phase 3.2 until Phase 2.3 exit criteria pass and `docs/PROJECT_STATE.md` is updated.
-- Extend the existing Three.js frontend. Never create a replacement frontend or a second repository for the same Virtual Office.
-
-- Work only in the SIREADER frontend repository. During Phase 2.3, do not modify or connect to the Python backend, database, migrations, `.env`, credentials, Telegram, MT5, or trading execution.
-- Use the existing stack and patterns. Target React 19, TypeScript, Vite, Three.js, React Three Fiber v9, and compatible stable Drei. Do not add or upgrade dependencies without a reason.
-- Build modular, data-driven components. Worker identity, task state, workstation placement, and avatar animation must be separate. Design for 7 initial workers and later growth to 50–100.
-- Phase 2.2 tasks, queues, worker execution, token usage, and USD costs remain local deterministic `SIMULATED` state. No backend/API integration or real AI-provider execution.
-- Prefer reusable rigged GLB/glTF characters with inspected animation clips. Do not pass off primitive shapes or static images as finished human characters; label placeholders honestly.
-- Every visible control must work. Provide accessible HTML controls as well as 3D click targets.
-- Treat `src/scheduler/` as the canonical priority/matching/dispatch domain; do not duplicate scheduling policy in UI. `DEMO_MAX_QUEUE_CAP` limits only automatic demo generation, not the global queue.
-- Before every task, consult `docs/PRODUCT_VISION.md`, `docs/ROADMAP.md`, and `docs/PROJECT_STATE.md` in that order; then inspect only relevant code. Plan the smallest coherent change, preserve existing behavior, run relevant checks/build, and report actual results.
-- Never claim tests/build passed unless run. Never rewrite the whole project for a small change.
-- Load only the relevant file from `docs/skills/` when needed. Do not paste the entire skill pack into every prompt.
-- Maintain a concise `docs/PROJECT_STATE.md` and update it after milestones. Never put secrets in it.
+- Read `docs/PRODUCT_VISION.md`, `docs/ROADMAP.md`, and `docs/PROJECT_STATE.md` in that order before every substantial task. The roadmap and current state override historical phase rules elsewhere.
+- Continue the existing React 19 / TypeScript / Vite / Three.js / R3F v9 / Zustand Virtual Office. Do not replace or duplicate it.
+- Repositories are separate: Virtual Office `awandhani22-boop/SIREADER`; backend `awandhani22-boop/SIREADER-Python-Backend`. Backend LIVE state is authoritative; frontend simulation stays deterministic and SIMULATED.
+- Current work is Phase 3.2. Follow its batches in order. Phase 3.3 SSE follows stable 3.2. Phase 4.1–4.3 permit scoped backend work; Phase 4.4 integrates real runtime into the existing UI.
+- Use only loopback listeners and the approved dev/prod topology in `docs/PHASE_3_2_EXECUTION_LOG.md`. Fixed allowlists only; no arbitrary proxy, permissive CORS/Host, or public bind.
+- Never expose bearer tokens, passwords, DB URLs, broker/Telegram secrets, or provider keys to browser code, VITE variables, storage, URL, logs, or docs. Never inspect/print secret values; presence-only checks only.
+- Validate every upstream DTO against the real Python Pydantic schema. Bound request/response size, timeouts, retries and event buffers. Never invent missing data or mark stale/offline responses LIVE.
+- No LIVE/SIMULATED mixing. No browser-side AI provider calls. No MT5 order/SL/TP placement/modification or manual-approval bypass.
+- Use mock upstreams for tests. Live backend/Supabase calls and paid inference require owner-side credentials and explicit approval.
+- Preserve user-local/untracked files. Never use destructive Git commands or `git add .`; stage explicit paths.
+- Every coherent unit must include tests, security review, docs/current-state update, exact verification evidence, and a commit+push to the active feature branch. Do not merge to `main` without permission.
+- Be honest: GitHub source review is not a local test run; browser QA and local secrets/service smoke tests require owner-side execution and evidence.
+- Keep changes minimal and modular. Do not skip acceptance gates or required security/recovery work to save time.

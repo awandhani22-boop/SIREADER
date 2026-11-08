@@ -606,3 +606,110 @@ Contract Verification
   - Verifikasi integritas Phase 2.2: Seluruh 256 unit/integration test Phase 2.2 wajib tetap passing.
   - Dokumentasi final audit Phase 3.
 - **Kriteria Keberhasilan:** Seluruh kriteria penerimaan terpenuhi, 0 regresi, disetujui untuk rilis produksi.
+
+
+---
+
+## 10. Phase 3.2 implementation authority addendum (2026-11-08)
+
+This addendum records implementation decisions made after the Phase 3.0 architecture freeze. Where historical Phase 3.0 examples conflict with this addendum and the locked execution ledger (`docs/PHASE_3_2_EXECUTION_LOG.md`), the newer execution decisions govern Phase 3.2 implementation. The earlier sections remain historical design context; do not copy their obsolete host/port examples into current runtime configuration.
+
+### 10.1 Approved local topology
+
+**Development**
+```text
+Browser http://127.0.0.1:3000
+  -> Vite 127.0.0.1:3000 (only /api/* forwarded; Host preserved)
+  -> Express BFF 127.0.0.1:3001
+  -> Python API 127.0.0.1:8000
+```
+
+**Production**
+```text
+Browser http://127.0.0.1:3000
+  -> Express BFF 127.0.0.1:3000 (serves dist/ and /api/*)
+  -> Python API 127.0.0.1:8000
+```
+
+All listeners bind literal `127.0.0.1`; strict port selection is 3001 in development and 3000 in production. No port fallback. Browser Host and Origin are fixed to `127.0.0.1:3000`. Development Vite must not bind `0.0.0.0`. Do not add CORS middleware or CORS response headers.
+
+### 10.2 BFF allowlist and transport
+- Only the three BFF auth/session routes and five fixed Python GET routes exist. Upstream mappings are explicit and do not accept arbitrary URLs or path fragments.
+- Construct upstream headers from scratch: server-side `Authorization: Bearer …` and `Accept: application/json` only. Never forward browser Cookie, Authorization, X-Forwarded, or arbitrary headers.
+- Upstream target is fixed loopback `http://127.0.0.1:8000`; redirect following is disabled/rejected.
+- Upstream timeout is at most 5 seconds. Response bodies are streamed with a hard 1 MiB cap; do not buffer unbounded upstream bodies.
+- Validate JSON response shapes against the Python backend DTOs in `app/api/schemas.py` on branch `phase-3-1-api-gateway`. A schema mismatch is an explicit error, never an invitation to infer values.
+- All upstream errors are mapped to safe BFF envelopes. Never forward upstream stack traces, raw error bodies, cookies, auth headers, or server diagnostics.
+
+### 10.3 Operator session and browser security decisions
+- BFF owns a single-operator session; Python API continues to require its independent server-to-server Bearer token.
+- Password verification uses the configured scrypt password hash; session IDs use cryptographically secure random bytes. Sessions are in-memory, rotate at login, expire after 1 hour idle and 8 hours absolute, and are destroyed at logout/restart.
+- Session cookie: `__Host-sireader_sid`, HttpOnly, Secure, SameSite=Strict, Path=/, no Domain, Max-Age=28800.
+- CSRF token is generated per session, returned only through authenticated same-origin session/login response, held in frontend memory, and checked in constant time on protected state-changing requests (login/logout policy as defined by the batch contract).
+- Exact Origin is required for login/logout; API requests require `Sec-Fetch-Site: same-origin`. Reject query strings on the protected API paths; retain route/method checks before auth body parsing.
+- Password/session secrets must never be logged or returned. In-memory session loss on BFF restart is an intentional logout boundary and must be visible to the operator.
+
+### 10.4 Runtime observability behavior
+- Separate transport, validation, application state, UI, and 3D rendering.
+- Poll system/pipeline/market every 10 seconds and telemetry/audit every 30 seconds; each request timeout is 5 seconds.
+- STALE occurs after three polling intervals without a successful fresh response; OFFLINE follows two transport failures. Backoff uses jitter and caps at 60 seconds.
+- Keep last-known values with STALE/OFFLINE provenance, but never present them as fresh LIVE. Clear private state after SESSION_REQUIRED.
+- A successful API response is not proof of an OS worker heartbeat. Preserve the backend's `IN_FLIGHT_UNCONFIRMED` semantics. Quiet business state is not stale by itself.
+
+### 10.5 Safety, authority, and rollout
+- Python backend is authoritative for LIVE tasks, workers, model calls, token/cost data and persistence. Virtual Office is an observability and later permitted non-trading control surface only.
+- No MT5 order/SL/TP placement, closure, modification or manual-approval bypass.
+- Batch development uses mock upstreams; local live API smoke checks require the owner to complete the separate Python Backend runbook. No secret values are to be pasted into chat or committed.
+- No merge to `main` without explicit owner permission. Every accepted unit updates the execution ledger and project state, then commits/pushes to the active feature branch.
+
+## 10. Phase 3.2 implementation authority addendum (2026-11-08)
+
+This addendum records implementation decisions made after the Phase 3.0 architecture freeze. Where historical Phase 3.0 examples conflict with this addendum and the locked execution ledger (`docs/PHASE_3_2_EXECUTION_LOG.md`), the newer execution decisions govern Phase 3.2 implementation. The earlier sections remain historical design context; do not copy their obsolete host/port examples into current runtime configuration.
+
+### 10.1 Approved local topology
+
+**Development**
+```text
+Browser http://127.0.0.1:3000
+  -> Vite 127.0.0.1:3000 (only /api/* forwarded; Host preserved)
+  -> Express BFF 127.0.0.1:3001
+  -> Python API 127.0.0.1:8000
+```
+
+**Production**
+```text
+Browser http://127.0.0.1:3000
+  -> Express BFF 127.0.0.1:3000 (serves dist/ and /api/*)
+  -> Python API 127.0.0.1:8000
+```
+
+All listeners bind literal `127.0.0.1`; strict port selection is 3001 in development and 3000 in production. No port fallback. Browser Host and Origin are fixed to `127.0.0.1:3000`. Development Vite must not bind `0.0.0.0`. Do not add CORS middleware or CORS response headers.
+
+### 10.2 BFF allowlist and transport
+- Only the three BFF auth/session routes and five fixed Python GET routes exist. Upstream mappings are explicit and do not accept arbitrary URLs or path fragments.
+- Construct upstream headers from scratch: server-side `Authorization: Bearer …` and `Accept: application/json` only. Never forward browser Cookie, Authorization, X-Forwarded, or arbitrary headers.
+- Upstream target is fixed loopback `http://127.0.0.1:8000`; redirect following is disabled/rejected.
+- Upstream timeout is at most 5 seconds. Response bodies are streamed with a hard 1 MiB cap; do not buffer unbounded upstream bodies.
+- Validate JSON response shapes against the Python backend DTOs in `app/api/schemas.py` on branch `phase-3-1-api-gateway`. A schema mismatch is an explicit error, never an invitation to infer values.
+- All upstream errors are mapped to safe BFF envelopes. Never forward upstream stack traces, raw error bodies, cookies, auth headers, or server diagnostics.
+
+### 10.3 Operator session and browser security decisions
+- BFF owns a single-operator session; Python API continues to require its independent server-to-server Bearer token.
+- Password verification uses the configured scrypt password hash; session IDs use cryptographically secure random bytes. Sessions are in-memory, rotate at login, expire after 1 hour idle and 8 hours absolute, and are destroyed at logout/restart.
+- Session cookie: `__Host-sireader_sid`, HttpOnly, Secure, SameSite=Strict, Path=/, no Domain, Max-Age=28800.
+- CSRF token is generated per session, returned only through authenticated same-origin session/login response, held in frontend memory, and checked in constant time on protected state-changing requests (login/logout policy as defined by the batch contract).
+- Exact Origin is required for login/logout; API requests require `Sec-Fetch-Site: same-origin`. Reject query strings on the protected API paths; retain route/method checks before auth body parsing.
+- Password/session secrets must never be logged or returned. In-memory session loss on BFF restart is an intentional logout boundary and must be visible to the operator.
+
+### 10.4 Runtime observability behavior
+- Separate transport, validation, application state, UI, and 3D rendering.
+- Poll system/pipeline/market every 10 seconds and telemetry/audit every 30 seconds; each request timeout is 5 seconds.
+- STALE occurs after three polling intervals without a successful fresh response; OFFLINE follows two transport failures. Backoff uses jitter and caps at 60 seconds.
+- Keep last-known values with STALE/OFFLINE provenance, but never present them as fresh LIVE. Clear private state after SESSION_REQUIRED.
+- A successful API response is not proof of an OS worker heartbeat. Preserve the backend's `IN_FLIGHT_UNCONFIRMED` semantics. Quiet business state is not stale by itself.
+
+### 10.5 Safety, authority, and rollout
+- Python backend is authoritative for LIVE tasks, workers, model calls, token/cost data and persistence. Virtual Office is an observability and later permitted non-trading control surface only.
+- No MT5 order/SL/TP placement, closure, modification or manual-approval bypass.
+- Batch development uses mock upstreams; local live API smoke checks require the owner to complete the separate Python Backend runbook. No secret values are to be pasted into chat or committed.
+- No merge to `main` without explicit owner permission. Every accepted unit updates the execution ledger and project state, then commits/pushes to the active feature branch.
