@@ -40,7 +40,12 @@ export type SafeLogEvent =
   | 'AUTH_LOGIN_REJECTED'
   | 'AUTH_LOGIN_SUCCEEDED'
   | 'AUTH_LOGOUT_SUCCEEDED'
-  | 'CSRF_REJECTED';
+  | 'CSRF_REJECTED'
+  | 'UPSTREAM_SSE_REJECTED'
+  | 'UPSTREAM_SSE_OPENED'
+  | 'UPSTREAM_SSE_FAILED'
+  | 'UPSTREAM_SSE_TIMEOUT'
+  | 'UPSTREAM_SSE_CLOSED';
 
 export interface SafeLogEntry {
   readonly level: 'INFO' | 'WARN' | 'ERROR';
