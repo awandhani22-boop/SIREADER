@@ -157,7 +157,7 @@ test('Phase 3.3 BFF SSE proxy — authenticated fixed-path streaming', async (t)
     assert.equal(result.status, 503);
     assert.equal(result.json?.error?.code, 'UNREACHABLE');
     assert.equal(result.headers['retry-after'], '5');
-    assert.equal(result.body.includes('unavailable'), false);
+    assert.equal(result.body.includes('{\"detail\":\"unavailable\"}'), false);
   });
 });
 
