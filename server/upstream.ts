@@ -5,6 +5,8 @@
  * DTOs are rejected before data is returned to the browser.
  */
 import type { RequestHandler } from 'express';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { isValidJsonContentType } from './guards.ts';
 import { sendBffError } from './errors.ts';
 import { SafeLogger } from './log.ts';
@@ -445,4 +447,166 @@ export function createUpstreamHandlers(
     };
   }
   return Object.freeze(handlers);
+}
+
+
+export const UPSTREAM_SSE_PATH = '/api/v1/events/stream' as const;
+export const UPSTREAM_SSE_MAX_CONNECTIONS = 4;
+export const UPSTREAM_SSE_ESTABLISH_TIMEOUT_MS = 5_000;
+const LAST_EVENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,18}$/;
+
+export function isValidLastEventId(value: string): boolean {
+  return value.length <= 64 && LAST_EVENT_ID_PATTERN.test(value);
+}
+
+/**
+ * Authenticated, fixed-path streaming proxy. Only the upstream connection
+ * establishment is timed; an established event stream is intentionally long-lived.
+ * Node's stream pipeline provides bounded backpressure and tears down both sides
+ * when the browser disconnects.
+ */
+export function createUpstreamSseHandler(
+  options: UpstreamProxyOptions = {},
+): RequestHandler {
+  const origin = resolveBaseUrl(options.baseUrl ?? UPSTREAM_ORIGIN);
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  const tokenProvider = options.tokenProvider ?? readServerToken;
+  const timeoutMs = options.timeoutMs ?? UPSTREAM_SSE_ESTABLISH_TIMEOUT_MS;
+  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > UPSTREAM_SSE_ESTABLISH_TIMEOUT_MS) {
+    throw new Error('SSE upstream establishment timeout must be between 1 and 5000 milliseconds.');
+  }
+
+  let activeStreams = 0;
+
+  return async (req, res): Promise<void> => {
+    if (activeStreams >= UPSTREAM_SSE_MAX_CONNECTIONS) {
+      sendBffError(res, 503, 'UNREACHABLE', 'Backend event stream capacity is reached.', { 'Retry-After': '5' });
+      return;
+    }
+
+    const rawCursor = req.headers['last-event-id'];
+    if (rawCursor !== undefined &&
+        (typeof rawCursor !== 'string' || !isValidLastEventId(rawCursor))) {
+      sendBffError(res, 400, 'BAD_REQUEST', 'Last-Event-ID is invalid.');
+      return;
+    }
+
+    let token: string | undefined;
+    try {
+      token = tokenProvider();
+    } catch {
+      token = undefined;
+    }
+    if (!token || !/^[A-Za-z0-9._~+/-]+=*$/.test(token)) {
+      SafeLogger.warn('UPSTREAM_AUTH_MISSING', {
+        method: 'GET', route: UPSTREAM_SSE_PATH, statusCode: 503, errorCode: 'UPSTREAM_AUTH_FAILED',
+      });
+      sendBffError(res, 503, 'UPSTREAM_AUTH_FAILED', 'Backend authentication is not configured.');
+      return;
+    }
+
+    activeStreams += 1;
+    const controller = new AbortController();
+    let established = false;
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      activeStreams = Math.max(0, activeStreams - 1);
+      if (!controller.signal.aborted) controller.abort();
+    };
+    const onClientClose = () => {
+      if (!res.writableEnded) cleanup();
+    };
+    res.once('close', onClientClose);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const target = new URL(UPSTREAM_SSE_PATH, origin);
+      const headers: Record<string, string> = {
+        Authorization: 'Bearer ' + token,
+        Accept: 'text/event-stream',
+      };
+      if (typeof rawCursor === 'string') headers['Last-Event-ID'] = rawCursor;
+
+      const upstream = await fetchImpl(target, {
+        method: 'GET',
+        headers,
+        redirect: 'manual',
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      if (upstream.status !== 200) {
+        await cancelBody(upstream);
+        const authFailure = upstream.status === 401 || upstream.status === 403;
+        const unavailable = upstream.status === 503;
+        SafeLogger.warn('UPSTREAM_SSE_REJECTED', {
+          method: 'GET', route: UPSTREAM_SSE_PATH,
+          statusCode: unavailable ? 503 : 502,
+          errorCode: authFailure ? 'UPSTREAM_AUTH_FAILED' : 'BACKEND_ERROR',
+        });
+        sendBffError(
+          res,
+          unavailable ? 503 : 502,
+          authFailure ? 'UPSTREAM_AUTH_FAILED' : unavailable ? 'UNREACHABLE' : 'BACKEND_ERROR',
+          authFailure ? 'Backend authentication failed.' : 'Backend event stream is unavailable.',
+          unavailable ? { 'Retry-After': '5' } : undefined,
+        );
+        cleanup();
+        return;
+      }
+
+      const contentType = upstream.headers.get('content-type') ?? '';
+      if (contentType.split(';', 1)[0].trim().toLowerCase() !== 'text/event-stream' || !upstream.body) {
+        await cancelBody(upstream);
+        SafeLogger.warn('UPSTREAM_SSE_REJECTED', {
+          method: 'GET', route: UPSTREAM_SSE_PATH,
+          statusCode: 502, errorCode: 'INVALID_UPSTREAM_CONTENT_TYPE',
+        });
+        sendBffError(res, 502, 'INVALID_UPSTREAM_CONTENT_TYPE', 'Backend returned an invalid event stream.');
+        cleanup();
+        return;
+      }
+
+      established = true;
+      res.status(200);
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.flushHeaders();
+
+      SafeLogger.info('UPSTREAM_SSE_OPENED', {
+        method: 'GET', route: UPSTREAM_SSE_PATH, statusCode: 200,
+      });
+      await pipeline(Readable.fromWeb(upstream.body as never), res);
+    } catch (error) {
+      if (!res.headersSent) {
+        const timedOut = controller.signal.aborted;
+        SafeLogger.warn(timedOut ? 'UPSTREAM_SSE_TIMEOUT' : 'UPSTREAM_SSE_FAILED', {
+          method: 'GET', route: UPSTREAM_SSE_PATH,
+          statusCode: timedOut ? 504 : 502,
+          errorCode: timedOut ? 'TIMEOUT' : 'UNREACHABLE',
+        });
+        sendBffError(
+          res, timedOut ? 504 : 502, timedOut ? 'TIMEOUT' : 'UNREACHABLE',
+          timedOut ? 'Backend event stream connection timed out.' : 'Backend event stream is unavailable.',
+        );
+      } else if (!res.destroyed) {
+        res.destroy();
+      }
+    } finally {
+      clearTimeout(timer);
+      res.removeListener('close', onClientClose);
+      cleanup();
+      if (established) {
+        SafeLogger.info('UPSTREAM_SSE_CLOSED', {
+          method: 'GET', route: UPSTREAM_SSE_PATH, statusCode: res.statusCode || 200,
+        });
+      }
+    }
+  };
 }
