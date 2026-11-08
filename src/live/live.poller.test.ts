@@ -22,6 +22,8 @@ import {
   type LivePollerClock,
 } from './live.poller';
 import { useLiveStore } from './live.state';
+import type { LiveEventSourceLike } from './live.events';
+import { LIVE_SSE_RECONCILIATION_INTERVAL_MS } from './live.events';
 
 const session: AuthenticatedSessionDto = {
   authenticated: true,
@@ -110,6 +112,36 @@ class FakeClock implements LivePollerClock {
 
   pendingCount(): number {
     return this.tasks.size;
+  }
+}
+
+class FakeEventSource implements LiveEventSourceLike {
+  onopen: ((event: Event) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  closed = false;
+  private handlers = new Map<string, EventListener[]>();
+
+  addEventListener(type: string, listener: EventListener): void {
+    const handlers = this.handlers.get(type) ?? [];
+    handlers.push(listener);
+    this.handlers.set(type, handlers);
+  }
+
+  open(): void {
+    this.onopen?.(new Event('open'));
+  }
+
+  fail(): void {
+    this.onerror?.(new Event('error'));
+  }
+
+  emit(type: string, data: string, lastEventId = ''): void {
+    const event = Object.assign(new Event(type), { data, lastEventId }) as MessageEvent<string>;
+    for (const listener of this.handlers.get(type) ?? []) listener(event);
+  }
+
+  close(): void {
+    this.closed = true;
   }
 }
 
@@ -339,4 +371,127 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
     assert.equal(useLiveStore.getState().resources['/api/v1/system/status'].data, null);
     assert.equal(useLiveStore.getState().session, 'UNAUTHENTICATED');
   });
+  await t.test('SSE invalidation refreshes only its resource and changes reconciliation to 60 seconds', async () => {
+    useLiveStore.getState().reset();
+    const clock = new FakeClock();
+    const counts = new Map<LiveApiPath, number>();
+    const sources: FakeEventSource[] = [];
+    const api = createApi(async (path) => {
+      counts.set(path, (counts.get(path) ?? 0) + 1);
+      return responses[path];
+    });
+    const poller = createLivePoller(createLiveController(api), {
+      clock,
+      random: () => 0.5,
+      eventSourceFactory: (url) => {
+        assert.equal(url, '/api/v1/events/stream');
+        const source = new FakeEventSource();
+        sources.push(source);
+        return source;
+      },
+    });
+
+    assert.equal(await poller.start(), true);
+    assert.equal(sources.length, 1);
+    sources[0].open();
+    await clock.flushMicrotasks();
+    assert.equal(LIVE_SSE_RECONCILIATION_INTERVAL_MS, 60_000);
+
+    sources[0].emit(
+      'resources.invalidated',
+      JSON.stringify({
+        schema_version: 1,
+        occurred_at: '2026-11-08T10:00:00Z',
+        resources: ['pipeline'],
+      }),
+      '123e4567-e89b-12d3-a456-426614174000:1',
+    );
+    await clock.flushMicrotasks();
+
+    assert.equal(counts.get('/api/v1/pipeline/active'), 2);
+    assert.equal(counts.get('/api/v1/system/status'), 1);
+    assert.equal(counts.get('/api/v1/telemetry/usage'), 1);
+
+    await clock.advanceBy(60_000);
+    assert.equal(counts.get('/api/v1/system/status'), 2);
+    assert.equal(counts.get('/api/v1/pipeline/active'), 3);
+    assert.equal(counts.get('/api/v1/telemetry/usage'), 2);
+    assert.equal(counts.get('/api/v1/audit/decisions'), 2);
+
+    poller.stop();
+    assert.equal(sources[0].closed, true);
+  });
+
+  await t.test('SSE failure restores normal polling as a safe fallback', async () => {
+    useLiveStore.getState().reset();
+    const clock = new FakeClock();
+    const counts = new Map<LiveApiPath, number>();
+    const sources: FakeEventSource[] = [];
+    const api = createApi(async (path) => {
+      counts.set(path, (counts.get(path) ?? 0) + 1);
+      return responses[path];
+    });
+    const poller = createLivePoller(createLiveController(api), {
+      clock,
+      random: () => 0.5,
+      eventSourceFactory: () => {
+        const source = new FakeEventSource();
+        sources.push(source);
+        return source;
+      },
+    });
+
+    assert.equal(await poller.start(), true);
+    sources[0].open();
+    await clock.flushMicrotasks();
+    sources[0].fail();
+    await clock.flushMicrotasks();
+
+    assert.equal(counts.get('/api/v1/system/status'), 2);
+    assert.equal(counts.get('/api/v1/pipeline/active'), 2);
+    await clock.advanceBy(10_000);
+    assert.equal(counts.get('/api/v1/system/status'), 3);
+    assert.equal(counts.get('/api/v1/pipeline/active'), 3);
+    assert.equal(counts.get('/api/v1/telemetry/usage'), 2);
+
+    poller.stop();
+    assert.equal(sources[0].closed, true);
+  });
+
+  await t.test('SSE stream reset performs full snapshot reconciliation and reconnects', async () => {
+    useLiveStore.getState().reset();
+    const clock = new FakeClock();
+    const counts = new Map<LiveApiPath, number>();
+    const sources: FakeEventSource[] = [];
+    const api = createApi(async (path) => {
+      counts.set(path, (counts.get(path) ?? 0) + 1);
+      return responses[path];
+    });
+    const poller = createLivePoller(createLiveController(api), {
+      clock,
+      random: () => 0.5,
+      eventSourceFactory: () => {
+        const source = new FakeEventSource();
+        sources.push(source);
+        return source;
+      },
+    });
+
+    assert.equal(await poller.start(), true);
+    sources[0].open();
+    sources[0].emit(
+      'stream.reset',
+      JSON.stringify({ schema_version: 1, reason: 'replay_gap' }),
+    );
+    await clock.flushMicrotasks();
+
+    assert.equal(sources[0].closed, true);
+    assert.equal(counts.get('/api/v1/system/status'), 2);
+    assert.equal(counts.get('/api/v1/pipeline/active'), 2);
+    await clock.advanceBy(2_000);
+    assert.equal(sources.length, 2);
+
+    poller.stop();
+  });
+
 });
