@@ -462,3 +462,110 @@ export function parseBffErrorCode(value: unknown): BffErrorCode | null {
   if (!isObject(error) || !hasExactKeys(error, ['code', 'message']) || !isString(error.message)) return null;
   return BFF_ERROR_CODES.includes(error.code as BffErrorCode) ? error.code as BffErrorCode : null;
 }
+
+
+export const LIVE_EVENT_RESOURCES = Object.freeze([
+  'system',
+  'telemetry',
+  'pipeline',
+  'market_watches',
+  'audit',
+] as const);
+export type LiveEventResource = (typeof LIVE_EVENT_RESOURCES)[number];
+
+export const LIVE_EVENT_RESET_REASONS = Object.freeze([
+  'cursor_expired',
+  'epoch_changed',
+  'replay_gap',
+  'subscriber_overflow',
+  'listener_recovered',
+  'listener_unavailable',
+  'invalid_cursor',
+] as const);
+export type LiveEventResetReason = (typeof LIVE_EVENT_RESET_REASONS)[number];
+
+export interface LiveInvalidationEvent {
+  readonly kind: 'resources.invalidated';
+  readonly eventId: string;
+  readonly epoch: string;
+  readonly sequence: number;
+  readonly occurredAt: string;
+  readonly resources: readonly LiveEventResource[];
+}
+
+export interface LiveStreamResetEvent {
+  readonly kind: 'stream.reset';
+  readonly eventId: string;
+  readonly epoch: string;
+  readonly sequence: number;
+  readonly occurredAt: string;
+  readonly reason: LiveEventResetReason;
+}
+
+export type LiveStreamEvent = LiveInvalidationEvent | LiveStreamResetEvent;
+
+const LIVE_EVENT_ID_PATTERN = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):([1-9][0-9]{0,18})$/;
+
+export function parseLiveStreamEvent(
+  name: string,
+  data: string,
+  eventId: string,
+): LiveStreamEvent {
+  const match = LIVE_EVENT_ID_PATTERN.exec(eventId);
+  if (!match) throw new LiveContractError();
+  const sequence = Number(match[2]);
+  if (!Number.isSafeInteger(sequence) || sequence < 1) throw new LiveContractError();
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(data) as unknown;
+  } catch {
+    throw new LiveContractError();
+  }
+  if (!isObject(payload)) throw new LiveContractError();
+  if (
+    !Object.prototype.hasOwnProperty.call(payload, 'schema_version') ||
+    payload.schema_version !== 1 ||
+    !isString(payload.occurred_at) ||
+    !isIsoDateTime(payload.occurred_at)
+  ) throw new LiveContractError();
+
+  if (name === 'resources.invalidated') {
+    if (!hasExactKeys(payload, ['schema_version', 'occurred_at', 'resources'])) {
+      throw new LiveContractError();
+    }
+    const resources = payload.resources;
+    if (
+      !Array.isArray(resources) ||
+      resources.length < 1 ||
+      resources.length > LIVE_EVENT_RESOURCES.length ||
+      resources.some((resource) => !LIVE_EVENT_RESOURCES.includes(resource as LiveEventResource)) ||
+      new Set(resources).size !== resources.length
+    ) throw new LiveContractError();
+    return {
+      kind: 'resources.invalidated',
+      eventId,
+      epoch: match[1],
+      sequence,
+      occurredAt: payload.occurred_at,
+      resources: resources as LiveEventResource[],
+    };
+  }
+
+  if (name === 'stream.reset') {
+    if (!hasExactKeys(payload, ['schema_version', 'occurred_at', 'reason']) ||
+        !LIVE_EVENT_RESET_REASONS.includes(payload.reason as LiveEventResetReason)) {
+      throw new LiveContractError();
+    }
+    return {
+      kind: 'stream.reset',
+      eventId,
+      epoch: match[1],
+      sequence,
+      occurredAt: payload.occurred_at,
+      reason: payload.reason as LiveEventResetReason,
+    };
+  }
+
+  throw new LiveContractError();
+}
