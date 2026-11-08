@@ -366,14 +366,15 @@ test('13. Diagnostic propagation during pending wall-clock flush before global p
 
   try {
     SimulationEngine.syncRealtimeClockAnchor(useOfficeStore.getState(), mockTime, true);
-    mockTime += 600; // 600ms pending
+    mockTime += 600; // 600ms pending: 500ms full tick + 100ms in accumulator
 
     useOfficeStore.getState().setGlobalPaused(true);
 
     const state = useOfficeStore.getState();
     assert.equal(state.isGlobalPaused, true);
-    assert.equal(state.simTimeMs, 600); // 500ms full tick + 100ms fractional tick
-    assert.equal(state.lastDispatchDiagnosticsAtSimMs, 600);
+    assert.equal(state.simTimeMs, 500); // 1 full tick committed
+    assert.equal(state.accumulatorMs, 100); // 100ms preserved in accumulator
+    assert.equal(state.lastDispatchDiagnosticsAtSimMs, 500);
   } finally {
     performance.now = origNow;
   }
@@ -385,9 +386,19 @@ test('14. Fractional pending delta below 500 ms causes expected tick and diagnos
   const current = useOfficeStore.getState();
   const advanceRes = SimulationEngine.advanceByWallClockDeltaWithDiagnostics(current, 250);
 
-  assert.equal(advanceRes.snapshot.simTimeMs, 250);
-  assert.ok(advanceRes.lastDispatchResult);
-  assert.equal(advanceRes.lastDispatchResult.snapshot.simTimeMs, 250);
+  // Delta < 500ms does NOT advance simTimeMs or tickCount; only accumulates
+  assert.equal(advanceRes.snapshot.simTimeMs, 0);
+  assert.equal(advanceRes.snapshot.tickCount, 0);
+  assert.equal(advanceRes.snapshot.accumulatorMs, 250);
+  assert.equal(advanceRes.lastDispatchResult, undefined);
+
+  // Advancing another 250ms reaches 500ms: triggers exactly 1 full tick
+  const advanceRes2 = SimulationEngine.advanceByWallClockDeltaWithDiagnostics(advanceRes.snapshot, 250);
+  assert.equal(advanceRes2.snapshot.simTimeMs, 500);
+  assert.equal(advanceRes2.snapshot.tickCount, 1);
+  assert.equal(advanceRes2.snapshot.accumulatorMs, 0);
+  assert.ok(advanceRes2.lastDispatchResult);
+  assert.equal(advanceRes2.lastDispatchResult.snapshot.simTimeMs, 500);
 });
 
 test('15. Global Resume does not dispatch immediately', () => {

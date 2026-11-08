@@ -2,11 +2,12 @@ import type {
   QueuedTaskEntry,
   SchedulerSnapshotState,
 } from './scheduler.types';
-import type {
-  SimulationSnapshot,
-  TaskEntity,
-  WorkerEntity,
-  WorkerId,
+import {
+  FIXED_TICK_SIM_MS,
+  type SimulationSnapshot,
+  type TaskEntity,
+  type WorkerEntity,
+  type WorkerId,
 } from '../workers/worker.types';
 
 /**
@@ -243,12 +244,25 @@ export function normalizeSimulationSnapshot(
   const normalizedScheduler = normalizeSchedulerState(snapshot.scheduler);
   const schedulerChanged = normalizedScheduler !== snapshot.scheduler;
 
-  if (!workersChanged && !schedulerChanged) {
+  const rawAcc = snapshot.accumulatorMs;
+  const hasValidAccumulator =
+    typeof rawAcc === 'number' &&
+    Number.isFinite(rawAcc) &&
+    rawAcc >= 0 &&
+    rawAcc < FIXED_TICK_SIM_MS;
+  const normalizedAccumulatorMs = hasValidAccumulator
+    ? Number(rawAcc.toFixed(3))
+    : 0;
+  const accumulatorChanged =
+    !hasValidAccumulator || rawAcc !== normalizedAccumulatorMs;
+
+  if (!workersChanged && !schedulerChanged && !accumulatorChanged) {
     return snapshot;
   }
 
   return {
     ...snapshot,
+    accumulatorMs: normalizedAccumulatorMs,
     workers: workersChanged ? nextWorkers : snapshot.workers,
     scheduler: normalizedScheduler,
   };

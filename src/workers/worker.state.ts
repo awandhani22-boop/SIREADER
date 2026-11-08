@@ -108,6 +108,7 @@ function applySnapshotPatch(
   | 'prngState'
   | 'simTimeMs'
   | 'tickCount'
+  | 'accumulatorMs'
   | 'isGlobalPaused'
   | 'simSpeedMultiplier'
   | 'workers'
@@ -121,6 +122,7 @@ function applySnapshotPatch(
     prngState: snapshot.prngState,
     simTimeMs: snapshot.simTimeMs,
     tickCount: snapshot.tickCount,
+    accumulatorMs: snapshot.accumulatorMs,
     isGlobalPaused: snapshot.isGlobalPaused,
     simSpeedMultiplier: snapshot.simSpeedMultiplier,
     workers: snapshot.workers,
@@ -368,12 +370,12 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
           const advanceRes = SimulationEngine.advanceByWallClockDeltaWithDiagnostics(current, pendingWallMs);
           current = advanceRes.snapshot;
           latestDispatch = advanceRes.lastDispatchResult;
-          SimulationEngine.syncRealtimeClockAnchor(
-            { ...current, simSpeedMultiplier: speed },
-            now,
-            true,
-          );
         }
+        SimulationEngine.syncRealtimeClockAnchor(
+          { ...current, simSpeedMultiplier: speed },
+          now,
+          true,
+        );
       }
       const diagPatch = syncDiagnostics(state, current, latestDispatch);
       return {

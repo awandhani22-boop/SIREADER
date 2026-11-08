@@ -141,12 +141,13 @@ export class SimulationEngine {
     nowWallTimeMs: number,
     isRealtimeLoopActive: boolean,
   ): void {
+    const committedSimMs = snapshot.simTimeMs + (snapshot.accumulatorMs ?? 0);
     clockAnchor.baseSimTimeMs = snapshot.simTimeMs;
     clockAnchor.anchorWallTimeMs = nowWallTimeMs;
     clockAnchor.isRealtimeLoopActive = isRealtimeLoopActive && !snapshot.isGlobalPaused;
     clockAnchor.highWaterSimTimeMs = Math.max(
       clockAnchor.highWaterSimTimeMs,
-      snapshot.simTimeMs,
+      committedSimMs,
     );
   }
 
@@ -177,16 +178,14 @@ export class SimulationEngine {
     snapshot: SimulationSnapshot,
     nowWallTimeMs?: number,
   ): number {
-    if (snapshot.simTimeMs === 0 && snapshot.tickCount === 0) {
-      return 0;
-    }
+    const committedSimMs = snapshot.simTimeMs + (snapshot.accumulatorMs ?? 0);
 
     if (
       snapshot.isGlobalPaused ||
       !clockAnchor.isRealtimeLoopActive ||
       nowWallTimeMs === undefined
     ) {
-      return Math.max(snapshot.simTimeMs, clockAnchor.highWaterSimTimeMs);
+      return Math.max(committedSimMs, clockAnchor.highWaterSimTimeMs);
     }
 
     const elapsedWallMs = Math.max(
@@ -194,11 +193,11 @@ export class SimulationEngine {
       Math.min(nowWallTimeMs - clockAnchor.anchorWallTimeMs, FIXED_TICK_SIM_MS),
     );
     const interpolatedSimMs =
-      snapshot.simTimeMs + elapsedWallMs * snapshot.simSpeedMultiplier;
+      committedSimMs + elapsedWallMs * snapshot.simSpeedMultiplier;
 
     clockAnchor.highWaterSimTimeMs = Math.max(
       clockAnchor.highWaterSimTimeMs,
-      snapshot.simTimeMs,
+      committedSimMs,
       interpolatedSimMs,
     );
     return clockAnchor.highWaterSimTimeMs;
@@ -222,6 +221,7 @@ export class SimulationEngine {
       prngState: seed,
       simTimeMs: 0,
       tickCount: 0,
+      accumulatorMs: 0,
       isGlobalPaused: false,
       simSpeedMultiplier: 1,
       workers,
@@ -283,31 +283,30 @@ export class SimulationEngine {
       return { snapshot };
     }
 
-    // Clamp wall-clock delta to MAX_DELTA_CLAMP_MS before applying speed multiplier
+    const currentNormalized = normalizeSimulationSnapshot(snapshot);
     const clampedBaseMs = Math.max(0, Math.min(rawElapsedMs, MAX_DELTA_CLAMP_MS));
-    const totalSimMsToAdvance = clampedBaseMs * snapshot.simSpeedMultiplier;
+    const addedSimMs = Number((clampedBaseMs * currentNormalized.simSpeedMultiplier).toFixed(3));
+    let accumulator = Number(((currentNormalized.accumulatorMs ?? 0) + addedSimMs).toFixed(3));
 
-    let current = normalizeSimulationSnapshot(snapshot);
-    let remainingMs = totalSimMsToAdvance;
+    let current = currentNormalized;
     let lastDispatchResult: DispatchPassResult<SimulationSnapshot> | undefined;
 
-    while (remainingMs >= FIXED_TICK_SIM_MS) {
+    while (accumulator >= FIXED_TICK_SIM_MS) {
       const tickResult = this.stepSimulationTickWithDiagnostics(current, FIXED_TICK_SIM_MS);
       current = tickResult.snapshot;
       lastDispatchResult = tickResult.dispatchResult;
-      remainingMs -= FIXED_TICK_SIM_MS;
+      accumulator = Number((accumulator - FIXED_TICK_SIM_MS).toFixed(3));
     }
 
-    if (remainingMs > 0) {
-      const tickResult = this.stepSimulationTickWithDiagnostics(current, remainingMs);
-      current = tickResult.snapshot;
-      lastDispatchResult = tickResult.dispatchResult;
-    }
+    current = {
+      ...current,
+      accumulatorMs: Math.max(0, accumulator),
+    };
 
     clockAnchor.baseSimTimeMs = current.simTimeMs;
     clockAnchor.highWaterSimTimeMs = Math.max(
       clockAnchor.highWaterSimTimeMs,
-      current.simTimeMs,
+      current.simTimeMs + (current.accumulatorMs ?? 0),
     );
     return {
       snapshot: current,
@@ -330,25 +329,31 @@ export class SimulationEngine {
     snapshot: SimulationSnapshot,
     stepSimMs: number = FIXED_TICK_SIM_MS,
   ): SimulationTickResult {
-    if (snapshot.isGlobalPaused || stepSimMs <= 0) {
+    if (stepSimMs !== FIXED_TICK_SIM_MS) {
+      throw new RangeError(
+        `stepSimulationTick only accepts exact ${FIXED_TICK_SIM_MS} ms ticks, received: ${stepSimMs}`,
+      );
+    }
+
+    if (snapshot.isGlobalPaused) {
       return { snapshot };
     }
 
     const normalizedSnapshot = normalizeSimulationSnapshot(snapshot);
 
     // 1. Advance simulation clock (bounded so stage transitions are never skipped)
-    const boundedStepMs = Math.min(stepSimMs, MAX_DELTA_CLAMP_MS);
     let nextSnapshot: SimulationSnapshot = {
       ...normalizedSnapshot,
-      simTimeMs: Number((normalizedSnapshot.simTimeMs + boundedStepMs).toFixed(3)),
+      simTimeMs: Number((normalizedSnapshot.simTimeMs + FIXED_TICK_SIM_MS).toFixed(3)),
       tickCount: normalizedSnapshot.tickCount + 1,
+      accumulatorMs: normalizedSnapshot.accumulatorMs,
       workers: { ...normalizedSnapshot.workers },
       tasks: { ...normalizedSnapshot.tasks },
     };
 
     // 2. Step all workers and their active tasks in canonical workerOrder
     for (const workerId of nextSnapshot.workerOrder) {
-      nextSnapshot = this.stepSingleWorker(nextSnapshot, workerId, boundedStepMs);
+      nextSnapshot = this.stepSingleWorker(nextSnapshot, workerId, FIXED_TICK_SIM_MS);
     }
 
     // 3. Deterministic demo task generator: every 12 ticks, if queue cap permits,
@@ -382,7 +387,7 @@ export class SimulationEngine {
     clockAnchor.baseSimTimeMs = nextSnapshot.simTimeMs;
     clockAnchor.highWaterSimTimeMs = Math.max(
       clockAnchor.highWaterSimTimeMs,
-      nextSnapshot.simTimeMs,
+      nextSnapshot.simTimeMs + (nextSnapshot.accumulatorMs ?? 0),
     );
     return {
       snapshot: nextSnapshot,

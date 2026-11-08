@@ -42,6 +42,9 @@ import type {
   SchedulerSnapshotState,
 } from '../scheduler/scheduler.types';
 
+export const FIXED_TICK_SIM_MS = 500;
+export const MAX_DELTA_CLAMP_MS = 1000;
+
 export {
   PERMANENT_WORKER_IDS,
   TASK_CATEGORIES,
@@ -301,6 +304,7 @@ export interface SimulationSnapshot {
   prngState: number;
   simTimeMs: number;
   tickCount: number;
+  accumulatorMs?: number;
   isGlobalPaused: boolean;
   simSpeedMultiplier: 1 | 2 | 4;
   workers: Record<WorkerId, WorkerEntity>;
