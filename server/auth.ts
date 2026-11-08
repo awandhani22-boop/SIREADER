@@ -125,23 +125,19 @@ export class OperatorAuthService {
       if (now - window.startedAt >= OPERATOR_LOGIN_WINDOW_MS) this.failedLogins.delete(ip);
     }
   }
-  private isRateLimited(ip: string, now: number): boolean {
-    const window = this.failedLogins.get(ip);
-    if (!window) return false;
-    if (now - window.startedAt >= OPERATOR_LOGIN_WINDOW_MS) {
-      this.failedLogins.delete(ip);
-      return false;
-    }
-    return window.failures >= OPERATOR_LOGIN_MAX_FAILURES;
-  }
-  private recordFailedLogin(ip: string, now: number): boolean {
+  /**
+   * Reserve a login attempt synchronously before scrypt yields to the event loop.
+   * This prevents concurrent password guesses from bypassing the per-IP window.
+   */
+  private reserveLoginAttempt(ip: string, now: number): boolean {
     let window = this.failedLogins.get(ip);
     if (!window || now - window.startedAt >= OPERATOR_LOGIN_WINDOW_MS) {
       window = { startedAt: now, failures: 0 };
       this.failedLogins.set(ip, window);
     }
+    if (window.failures >= OPERATOR_LOGIN_MAX_FAILURES) return false;
     window.failures += 1;
-    return window.failures >= OPERATOR_LOGIN_MAX_FAILURES;
+    return true;
   }
   private revokeCookie(cookieHeader: string | undefined): void {
     const sessionId = findSessionCookie(cookieHeader);
@@ -165,11 +161,12 @@ export class OperatorAuthService {
     const now = this.now();
     this.removeExpired(now);
     const ip = remoteAddress || 'unknown';
-    if (this.isRateLimited(ip, now)) return { kind: 'rate_limited' };
+    if (!this.reserveLoginAttempt(ip, now)) return { kind: 'rate_limited' };
     const candidate = await deriveKey(password, this.passwordHash.salt);
     const valid = timingSafeEqual(candidate, this.passwordHash.derivedKey);
     if (!valid) {
-      return this.recordFailedLogin(ip, now)
+      const window = this.failedLogins.get(ip);
+      return window && window.failures >= OPERATOR_LOGIN_MAX_FAILURES
         ? { kind: 'rate_limited' }
         : { kind: 'invalid_credentials' };
     }

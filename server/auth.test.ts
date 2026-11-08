@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createBffApp } from './app.ts';
-import { hashOperatorPassword } from './auth.ts';
+import { hashOperatorPassword, OPERATOR_SESSION_ABSOLUTE_MS } from './auth.ts';
 
 const TEST_PASSWORD = 'Test-only-operator-password-2026!';
 const HEADERS = {
@@ -231,13 +231,23 @@ test('SIREADER operator authentication — secure in-memory sessions', async (t)
       assert.equal(idleExpired.json?.error?.code, 'SESSION_REQUIRED');
 
       const secondLogin = await harness.request('POST', '/api/auth/login', { password: TEST_PASSWORD });
+      assert.equal(secondLogin.status, 200);
       const secondCookie = sessionCookie(secondLogin);
-      now += 7 * 60 * 60 * 1000 + 59 * 60 * 1000;
-      const nearAbsolute = await harness.request('GET', '/api/auth/session', undefined, { cookie: secondCookie });
-      assert.equal(nearAbsolute.status, 200);
+
+      // Keep the session active while advancing close to its absolute deadline.
+      let remainingToAbsoluteMinusOneMinute = OPERATOR_SESSION_ABSOLUTE_MS - 60 * 1000;
+      while (remainingToAbsoluteMinusOneMinute > 0) {
+        const step = Math.min(59 * 60 * 1000, remainingToAbsoluteMinusOneMinute);
+        now += step;
+        remainingToAbsoluteMinusOneMinute -= step;
+        const refreshed = await harness.request('GET', '/api/auth/session', undefined, { cookie: secondCookie });
+        assert.equal(refreshed.status, 200, 'session must remain alive while idle time is refreshed');
+      }
+
       now += 60 * 1000;
       const absoluteExpired = await harness.request('GET', '/api/auth/session', undefined, { cookie: secondCookie });
       assert.equal(absoluteExpired.status, 401);
+      assert.equal(absoluteExpired.json?.error?.code, 'SESSION_REQUIRED');
     } finally { await harness.close(); }
   });
 
