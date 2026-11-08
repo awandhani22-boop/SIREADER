@@ -255,7 +255,7 @@ function resolveBaseUrl(raw: string): string {
   return parsed.origin;
 }
 
-function readServerToken(): string | undefined {
+export function readServerToken(): string | undefined {
   const raw = process.env.SIREADER_API_AUTH_TOKEN;
   if (raw === undefined) return undefined;
   const token = raw.trim();

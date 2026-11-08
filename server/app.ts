@@ -28,6 +28,7 @@ import {
 import { sendBffError } from './errors.ts';
 import { SafeLogger } from './log.ts';
 import { createUpstreamHandlers, type UpstreamProxyOptions, type UpstreamApiPath } from './upstream.ts';
+import { createEventStreamProxyHandler, type SseProxyOptions } from './sse.ts';
 import { OperatorAuthService, disableAuthCaching, type OperatorAuthOptions } from './auth.ts';
 
 export interface BffAppDependencies extends UpstreamProxyOptions {
@@ -36,6 +37,8 @@ export interface BffAppDependencies extends UpstreamProxyOptions {
   readonly authOptions?: OperatorAuthOptions;
   /** Fixed dist root in production; injectable temp root for static integration tests. */
   readonly staticRoot?: string;
+  /** Fixed-origin SSE upstream injection seam for tests. */
+  readonly eventStreamOptions?: SseProxyOptions;
 }
 
 function installStaticFrontend(app: express.Application, staticRoot: string): void {
@@ -100,6 +103,7 @@ export function createBffApp(
   const config = loadBffConfig(configOverrides);
   const app = express();
   const upstreamHandlers = createUpstreamHandlers(dependencies);
+  const eventStreamHandler = createEventStreamProxyHandler(dependencies.eventStreamOptions);
   const operatorAuth = new OperatorAuthService(dependencies.authOptions);
   const requireOperatorSession = dependencies.requireOperatorSession ?? operatorAuth.requireSession;
 
@@ -255,6 +259,7 @@ export function createBffApp(
   for (const path of upstreamRoutes) {
     app.get(path, requireOperatorSession, upstreamHandlers[path]);
   }
+  app.get('/api/v1/events/stream', requireOperatorSession, eventStreamHandler);
 
   // 8. Production static frontend (never handles the /api namespace).
   if (dependencies.staticRoot) {
