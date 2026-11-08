@@ -2,70 +2,124 @@
  * SIREADER Phase 3.2 BFF - Sanitized Safe Logger
  *
  * Strict Security Boundary:
- * - NEVER log request headers (especially Cookie, Authorization, X-CSRF-Token, Host).
+ * - NEVER log request headers (Cookie, Authorization, X-CSRF-Token, Host, etc.).
  * - NEVER log request or response body contents.
- * - NEVER log secrets, tokens, credentials, or internal stack traces.
- * - Records only sanitized operational metadata: method, path (query stripped), status, code, duration.
+ * - NEVER log secrets, tokens, credentials, database connection strings, or internal stack traces.
+ * - NEVER print arbitrary dynamic error strings; use static predefined SafeLogEvent identifiers.
+ * - Sanitize CR/LF and control characters to prevent log injection.
+ * - Only log known canonical API routes or safe route identifiers (no arbitrary raw paths).
+ * - Keep query strings stripped.
  */
+
+import type { BffErrorCode } from './errors.ts';
+import { isAllowlistedPath } from './allowlist.ts';
+
+export type SafeLogEvent =
+  | 'BFF_STARTUP'
+  | 'BFF_LISTENING'
+  | 'BFF_SHUTDOWN'
+  | 'HOST_REJECTED'
+  | 'FETCH_METADATA_REJECTED'
+  | 'ORIGIN_REJECTED'
+  | 'RAW_PATH_REJECTED'
+  | 'QUERY_STRING_REJECTED'
+  | 'ROUTE_NOT_FOUND'
+  | 'METHOD_NOT_ALLOWED'
+  | 'LOGIN_POLICY_VIOLATION'
+  | 'PAYLOAD_TOO_LARGE'
+  | 'MALFORMED_JSON'
+  | 'SESSION_UNAUTHENTICATED'
+  | 'INTERNAL_ERROR'
+  | 'REQUEST_COMPLETED';
 
 export interface SafeLogEntry {
   readonly level: 'INFO' | 'WARN' | 'ERROR';
+  readonly event: SafeLogEvent;
   readonly method?: string;
-  readonly path?: string;
+  readonly route?: string;
   readonly statusCode?: number;
-  readonly errorCode?: string;
-  readonly message: string;
+  readonly errorCode?: BffErrorCode;
   readonly durationMs?: number;
 }
 
 export class SafeLogger {
-  private static sanitizePath(rawPath?: string): string | undefined {
-    if (!rawPath) return undefined;
-    // Strip query strings and fragment
-    const clean = rawPath.split(/[?#]/)[0] || '';
-    // Bounded length and strip non-printable characters
-    return clean.replace(/[^\x20-\x7E]/g, '').slice(0, 100);
+  /**
+   * Sanitizes route: outputs only known canonical routes or safe discrete labels.
+   * Arbitrary paths or query strings are never logged directly.
+   */
+  static sanitizeRoute(rawRoute?: string): string {
+    if (!rawRoute) return '';
+    // Strip query string and fragment if somehow present
+    const clean = rawRoute.split(/[?#]/)[0] || '';
+    if (isAllowlistedPath(clean)) {
+      return clean;
+    }
+    if (clean === '/api' || clean.startsWith('/api/')) {
+      return 'UNKNOWN_API_ROUTE';
+    }
+    return 'STATIC_ROUTE';
+  }
+
+  private static readonly KNOWN_METHODS = new Set([
+    'GET',
+    'POST',
+    'PUT',
+    'DELETE',
+    'PATCH',
+    'HEAD',
+    'OPTIONS',
+    'STARTUP',
+  ]);
+
+  static sanitizeMethod(rawMethod?: string): string {
+    if (!rawMethod) return '';
+    const upper = rawMethod.trim().toUpperCase();
+    if (this.KNOWN_METHODS.has(upper)) {
+      return upper;
+    }
+    return 'UNKNOWN_METHOD';
   }
 
   static formatEntry(entry: SafeLogEntry): string {
     const parts: string[] = [
       `[${entry.level}]`,
-      entry.method ? `${entry.method}` : '',
-      entry.path ? `${this.sanitizePath(entry.path)}` : '',
-      entry.statusCode ? `${entry.statusCode}` : '',
+      entry.event,
+      entry.method ? this.sanitizeMethod(entry.method) : '',
+      entry.route ? this.sanitizeRoute(entry.route) : '',
+      entry.statusCode !== undefined ? String(entry.statusCode) : '',
       entry.errorCode ? `(${entry.errorCode})` : '',
-      entry.message,
       entry.durationMs !== undefined ? `${entry.durationMs.toFixed(2)}ms` : '',
     ].filter(Boolean);
 
-    return parts.join(' ');
+    // Guaranteed single line output with zero CR/LF injection
+    return parts.join(' ').replace(/[\r\n\x00-\x1F\x7F]/g, ' ');
   }
 
   static info(
-    message: string,
-    meta?: Omit<SafeLogEntry, 'level' | 'message'>,
+    event: SafeLogEvent,
+    meta?: Omit<SafeLogEntry, 'level' | 'event'>,
   ): void {
-    const entry: SafeLogEntry = { level: 'INFO', message, ...meta };
+    const entry: SafeLogEntry = { level: 'INFO', event, ...meta };
     if (process.env.BFF_ENABLE_CONSOLE_LOGS === 'true') {
       console.log(this.formatEntry(entry));
     }
   }
 
   static warn(
-    message: string,
-    meta?: Omit<SafeLogEntry, 'level' | 'message'>,
+    event: SafeLogEvent,
+    meta?: Omit<SafeLogEntry, 'level' | 'event'>,
   ): void {
-    const entry: SafeLogEntry = { level: 'WARN', message, ...meta };
+    const entry: SafeLogEntry = { level: 'WARN', event, ...meta };
     if (process.env.BFF_ENABLE_CONSOLE_LOGS === 'true') {
       console.warn(this.formatEntry(entry));
     }
   }
 
   static error(
-    message: string,
-    meta?: Omit<SafeLogEntry, 'level' | 'message'>,
+    event: SafeLogEvent,
+    meta?: Omit<SafeLogEntry, 'level' | 'event'>,
   ): void {
-    const entry: SafeLogEntry = { level: 'ERROR', message, ...meta };
+    const entry: SafeLogEntry = { level: 'ERROR', event, ...meta };
     if (process.env.BFF_ENABLE_CONSOLE_LOGS === 'true') {
       console.error(this.formatEntry(entry));
     }

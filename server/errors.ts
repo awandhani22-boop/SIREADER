@@ -24,7 +24,8 @@ export type BffErrorCode =
   | 'BACKEND_ERROR'
   | 'TOO_LARGE'
   | 'INVALID_UPSTREAM_CONTENT_TYPE'
-  | 'SCHEMA_INVALID';
+  | 'SCHEMA_INVALID'
+  | 'NOT_IMPLEMENTED';
 
 export interface BffErrorEnvelope {
   readonly error: {

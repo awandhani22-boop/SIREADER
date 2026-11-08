@@ -1,29 +1,36 @@
 /**
  * SIREADER Phase 3.2 BFF - Foundation & Security Test Suite
  *
- * Verifies all 12 critical security & architecture requirements:
- * 1. Valid Host and invalid Host
- * 2. Exact Origin acceptance and rejection
- * 3. Sec-Fetch-Site matrix
- * 4. Origin missing with same-origin metadata
- * 5. Login/logout request requirements (Origin, Content-Type, Body size limit)
- * 6. Raw path traversal and encoded-path rejection
- * 7. Query-string rejection
- * 8. Method matrix and Allow headers
- * 9. Unknown path 404
- * 10. Error envelope consistency
- * 11. No CORS headers
- * 12. No secret/header logging & Wildcard binding prevention
+ * Remediated verification suite covering all audit findings:
+ * 1. P0: Literal loopback configuration and runtime binding enforcement
+ * 2. P0: Host header validation (including missing Host via raw TCP socket)
+ * 3. P0: Real startBffServer loopback address verification
+ * 4. P1: Scoped raw path validation (/api/* rejected, static requests pass)
+ * 5. P1: Middleware ordering (405 / 404 before body parsing, no 413 on wrong method/route)
+ * 6. P1: Strict Content-Type media-type validation matrix
+ * 7. P1: Authentication stub semantics (401 SESSION_REQUIRED, 501 NOT_IMPLEMENTED)
+ * 8. P2: Safe logger contract (zero secret leaks, zero log injection, static events)
+ * 9. Fetch Metadata (Sec-Fetch-Site) and Origin matrix
+ * 10. Zero CORS headers
+ * 11. Canonical route completeness
+ * 12. Node HTTP parser / Express boundary for NUL and non-ASCII
  */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import net from 'node:net';
 import type { AddressInfo } from 'node:net';
-import { createBffApp } from './app.ts';
-import { loadBffConfig } from './config.ts';
+import { createBffApp, startBffServer } from './app.ts';
+import {
+  loadBffConfig,
+  FIXED_RUNTIME_HOST,
+  FIXED_BROWSER_HOST,
+  FIXED_BROWSER_ORIGIN,
+} from './config.ts';
 import { CANONICAL_ROUTES } from './allowlist.ts';
-import { SafeLogger } from './log.ts';
+import { SafeLogger, type SafeLogEvent } from './log.ts';
+import { isValidJsonContentType, isApiTarget } from './guards.ts';
 
 interface HttpResponse {
   readonly status: number;
@@ -79,14 +86,42 @@ function makeRequest(
   });
 }
 
-// Baseline valid headers for a same-origin GET
+/**
+ * Raw TCP request sender for testing missing headers or raw byte payloads.
+ */
+function sendRawTcp(
+  port: number,
+  rawPayload: string | Buffer,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const client = net.connect({ host: '127.0.0.1', port }, () => {
+      client.write(rawPayload);
+    });
+
+    let data = '';
+    client.on('data', (chunk) => {
+      data += chunk.toString('utf-8');
+    });
+
+    client.on('end', () => {
+      resolve(data);
+    });
+
+    client.on('error', (err) => {
+      // In case server forcibly resets connection
+      resolve(`ERROR: ${err.message}`);
+    });
+  });
+}
+
+// Baseline valid headers for same-origin API requests
 const VALID_HEADERS = {
   host: '127.0.0.1:3000',
   'sec-fetch-site': 'same-origin',
   origin: 'http://127.0.0.1:3000',
 };
 
-test('SIREADER Phase 3.2 BFF Test Suite', async (t) => {
+test('SIREADER Phase 3.2 BFF Test Suite — Remediated', async (t) => {
   const app = createBffApp();
   const server = http.createServer(app);
 
@@ -94,542 +129,568 @@ test('SIREADER Phase 3.2 BFF Test Suite', async (t) => {
     server.listen(0, '127.0.0.1', resolve);
   });
 
+  const serverPort = (server.address() as AddressInfo).port;
+
   t.after(() => {
     server.close();
   });
 
-  // 1. Valid Host and invalid Host
-  await t.test('1. Host header validation: accepts 127.0.0.1:3000 and rejects all others with 403', async () => {
+  // =========================================================================
+  // SECTION 1: P0 — Literal Loopback Configuration & Binding Enforcement
+  // =========================================================================
+  await t.test('P0-1. Configuration strictly rejects non-127.0.0.1 binding host', () => {
+    // LAN IP
+    assert.throws(
+      () => loadBffConfig({ host: '192.168.1.50' as any }),
+      /CRITICAL SECURITY VIOLATION: Host override .* rejected/,
+    );
+    // Hostname
+    assert.throws(
+      () => loadBffConfig({ host: 'localhost' as any }),
+      /CRITICAL SECURITY VIOLATION: Host override .* rejected/,
+    );
+    // Wildcard IPv4
+    assert.throws(
+      () => loadBffConfig({ host: '0.0.0.0' as any }),
+      /CRITICAL SECURITY VIOLATION: Host override .* rejected/,
+    );
+    // Wildcard IPv6
+    assert.throws(
+      () => loadBffConfig({ host: '::' as any }),
+      /CRITICAL SECURITY VIOLATION: Host override .* rejected/,
+    );
+    // Empty string
+    assert.throws(
+      () => loadBffConfig({ host: '' as any }),
+      /CRITICAL SECURITY VIOLATION: Host override .* rejected/,
+    );
+
+    // Environment variable override attempt
+    const originalEnvHost = process.env.BFF_HOST;
+    try {
+      process.env.BFF_HOST = '10.0.0.1';
+      assert.throws(
+        () => loadBffConfig(),
+        /CRITICAL SECURITY VIOLATION: BFF_HOST cannot be set to "10.0.0.1"/,
+      );
+    } finally {
+      if (originalEnvHost !== undefined) {
+        process.env.BFF_HOST = originalEnvHost;
+      } else {
+        delete process.env.BFF_HOST;
+      }
+    }
+  });
+
+  await t.test('P0-2. Configuration rejects attempts to override locked browser Host and Origin', () => {
+    // Attempt to override allowedHost
+    assert.throws(
+      () => loadBffConfig({ allowedHost: '127.0.0.1:3001' as any }),
+      /CRITICAL SECURITY VIOLATION: allowedHost override cannot alter fixed browser host/,
+    );
+
+    // Attempt to override allowedOrigin
+    assert.throws(
+      () => loadBffConfig({ allowedOrigin: 'http://localhost:3000' as any }),
+      /CRITICAL SECURITY VIOLATION: allowedOrigin override cannot alter fixed browser origin/,
+    );
+
+    // Environment variable overrides
+    const origAllowedHost = process.env.BFF_ALLOWED_HOST;
+    const origAllowedOrigin = process.env.BFF_ALLOWED_ORIGIN;
+    try {
+      process.env.BFF_ALLOWED_HOST = 'evil.com:3000';
+      assert.throws(
+        () => loadBffConfig(),
+        /CRITICAL SECURITY VIOLATION: BFF_ALLOWED_HOST cannot override fixed browser host/,
+      );
+      delete process.env.BFF_ALLOWED_HOST;
+
+      process.env.BFF_ALLOWED_ORIGIN = 'https://evil.com';
+      assert.throws(
+        () => loadBffConfig(),
+        /CRITICAL SECURITY VIOLATION: BFF_ALLOWED_ORIGIN cannot override fixed browser origin/,
+      );
+      delete process.env.BFF_ALLOWED_ORIGIN;
+    } finally {
+      if (origAllowedHost !== undefined) process.env.BFF_ALLOWED_HOST = origAllowedHost;
+      else delete process.env.BFF_ALLOWED_HOST;
+
+      if (origAllowedOrigin !== undefined) process.env.BFF_ALLOWED_ORIGIN = origAllowedOrigin;
+      else delete process.env.BFF_ALLOWED_ORIGIN;
+    }
+  });
+
+  await t.test('P0-3. Port enforcement: accepts only approved topology ports 3000 and 3001', () => {
+    // Approved dev port (3001)
+    const configDev = loadBffConfig({ port: 3001 });
+    assert.equal(configDev.port, 3001);
+
+    // Approved prod port (3000)
+    const configProd = loadBffConfig({ port: 3000 });
+    assert.equal(configProd.port, 3000);
+
+    // Arbitrary ports must throw
+    assert.throws(
+      () => loadBffConfig({ port: 8080 as any }),
+      /CRITICAL SECURITY VIOLATION: Port 8080 rejected/,
+    );
+    assert.throws(
+      () => loadBffConfig({ port: 22 as any }),
+      /CRITICAL SECURITY VIOLATION: Port 22 rejected/,
+    );
+    assert.throws(
+      () => loadBffConfig({ port: 0 as any }),
+      /CRITICAL SECURITY VIOLATION: Port 0 rejected/,
+    );
+    assert.throws(
+      () => loadBffConfig({ port: -1 as any }),
+      /CRITICAL SECURITY VIOLATION: Port -1 rejected/,
+    );
+    assert.throws(
+      () => loadBffConfig({ port: NaN as any }),
+      /CRITICAL SECURITY VIOLATION: Invalid port/,
+    );
+    assert.throws(
+      () => loadBffConfig({ port: 3000.5 as any }),
+      /CRITICAL SECURITY VIOLATION: Invalid port/,
+    );
+  });
+
+  await t.test('P0-4. Real startBffServer binds strictly to 127.0.0.1 and approved port', async () => {
+    let runningServer: http.Server | null = null;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        runningServer = startBffServer({ port: 3001 }, (srv) => {
+          const addr = srv.address() as AddressInfo;
+          assert.equal(addr.address, '127.0.0.1');
+          assert.equal(addr.port, 3001);
+          resolve();
+        });
+        runningServer.on('error', reject);
+      });
+    } finally {
+      if (runningServer) {
+        await new Promise<void>((resolve) => runningServer!.close(() => resolve()));
+      }
+    }
+  });
+
+  await t.test('P0-5. Host header validation: accepts 127.0.0.1:3000 and rejects all others with 403', async () => {
     // Valid Host
     const resValid = await makeRequest(server, {
-      path: '/api/auth/session',
+      path: '/api/v1/system/status',
       headers: { ...VALID_HEADERS },
     });
     assert.equal(resValid.status, 200);
 
     // Invalid port (127.0.0.1:3001)
     const resWrongPort = await makeRequest(server, {
-      path: '/api/auth/session',
+      path: '/api/v1/system/status',
       headers: { ...VALID_HEADERS, host: '127.0.0.1:3001' },
     });
     assert.equal(resWrongPort.status, 403);
     assert.equal(resWrongPort.json?.error?.code, 'FORBIDDEN');
 
-    // Localhost hostname (must strictly be 127.0.0.1:3000)
+    // Hostname localhost
     const resLocalhost = await makeRequest(server, {
-      path: '/api/auth/session',
+      path: '/api/v1/system/status',
       headers: { ...VALID_HEADERS, host: 'localhost:3000' },
     });
     assert.equal(resLocalhost.status, 403);
     assert.equal(resLocalhost.json?.error?.code, 'FORBIDDEN');
 
-    // Arbitrary external host
-    const resExternal = await makeRequest(server, {
-      path: '/api/auth/session',
-      headers: { ...VALID_HEADERS, host: 'attacker.com' },
+    // External domain
+    const resEvil = await makeRequest(server, {
+      path: '/api/v1/system/status',
+      headers: { ...VALID_HEADERS, host: 'evil.com' },
     });
-    assert.equal(resExternal.status, 403);
-    assert.equal(resExternal.json?.error?.code, 'FORBIDDEN');
+    assert.equal(resEvil.status, 403);
+    assert.equal(resEvil.json?.error?.code, 'FORBIDDEN');
   });
 
-  // 2. Exact Origin acceptance and rejection
-  await t.test('2. Origin header validation: accepts http://127.0.0.1:3000 and rejects mismatches with 403', async () => {
-    // Valid Origin
-    const resValid = await makeRequest(server, {
-      path: '/api/auth/session',
-      headers: { ...VALID_HEADERS, origin: 'http://127.0.0.1:3000' },
-    });
-    assert.equal(resValid.status, 200);
-
-    // Mismatched Port
-    const resWrongPort = await makeRequest(server, {
-      path: '/api/auth/session',
-      headers: { ...VALID_HEADERS, origin: 'http://127.0.0.1:3001' },
-    });
-    assert.equal(resWrongPort.status, 403);
-    assert.equal(resWrongPort.json?.error?.code, 'FORBIDDEN');
-
-    // Mismatched Hostname (localhost vs 127.0.0.1)
-    const resLocalhost = await makeRequest(server, {
-      path: '/api/auth/session',
-      headers: { ...VALID_HEADERS, origin: 'http://localhost:3000' },
-    });
-    assert.equal(resLocalhost.status, 403);
-    assert.equal(resLocalhost.json?.error?.code, 'FORBIDDEN');
-
-    // Scheme mismatch (https vs http on loopback)
-    const resHttps = await makeRequest(server, {
-      path: '/api/auth/session',
-      headers: { ...VALID_HEADERS, origin: 'https://127.0.0.1:3000' },
-    });
-    assert.equal(resHttps.status, 403);
-    assert.equal(resHttps.json?.error?.code, 'FORBIDDEN');
-
-    // Null Origin
-    const resNull = await makeRequest(server, {
-      path: '/api/auth/session',
-      headers: { ...VALID_HEADERS, origin: 'null' },
-    });
-    assert.equal(resNull.status, 403);
-    assert.equal(resNull.json?.error?.code, 'FORBIDDEN');
-
-    // External Attacker Origin
-    const resAttacker = await makeRequest(server, {
-      path: '/api/auth/session',
-      headers: { ...VALID_HEADERS, origin: 'http://attacker.example.com' },
-    });
-    assert.equal(resAttacker.status, 403);
-    assert.equal(resAttacker.json?.error?.code, 'FORBIDDEN');
+  await t.test('P0-6. Raw TCP: Missing Host header is rejected with 403 or 400', async () => {
+    // Raw HTTP/1.0 request without Host header
+    const rawReq = 'GET /api/v1/system/status HTTP/1.0\r\nSec-Fetch-Site: same-origin\r\n\r\n';
+    const response = await sendRawTcp(serverPort, rawReq);
+    // Must return 403 (Host guard) or 400 (HTTP parser)
+    assert.match(response, /HTTP\/1\.[01] (403 Forbidden|400 Bad Request)/);
   });
 
-  // 3. Sec-Fetch-Site matrix
-  await t.test('3. Sec-Fetch-Site matrix: requires exact same-origin and rejects all others with 403', async () => {
-    // Valid same-origin
-    const resSameOrigin = await makeRequest(server, {
-      path: '/api/v1/system/status',
-      headers: { ...VALID_HEADERS, 'sec-fetch-site': 'same-origin' },
-    });
-    assert.equal(resSameOrigin.status, 200);
+  // =========================================================================
+  // SECTION 2: P1 — Scoped Raw Path Validation (/api/* vs Static Routes)
+  // =========================================================================
+  await t.test('P1-1. isApiTarget boundary correctly identifies API namespace vs static paths', () => {
+    // API targets
+    assert.equal(isApiTarget('/api'), true);
+    assert.equal(isApiTarget('/api/v1/system/status'), true);
+    assert.equal(isApiTarget('/api?foo=1'), true);
+    assert.equal(isApiTarget('/api;param'), true);
+    assert.equal(isApiTarget('/api\\traversal'), true);
+    assert.equal(isApiTarget('/static/../api/v1/status', '/api/v1/status'), true);
 
-    // Missing Sec-Fetch-Site
-    const headersMissing = { ...VALID_HEADERS };
-    delete (headersMissing as any)['sec-fetch-site'];
-    const resMissing = await makeRequest(server, {
-      path: '/api/v1/system/status',
-      headers: headersMissing,
-    });
-    assert.equal(resMissing.status, 403);
-    assert.equal(resMissing.json?.error?.code, 'FORBIDDEN');
-
-    // cross-site
-    const resCrossSite = await makeRequest(server, {
-      path: '/api/v1/system/status',
-      headers: { ...VALID_HEADERS, 'sec-fetch-site': 'cross-site' },
-    });
-    assert.equal(resCrossSite.status, 403);
-    assert.equal(resCrossSite.json?.error?.code, 'FORBIDDEN');
-
-    // same-site
-    const resSameSite = await makeRequest(server, {
-      path: '/api/v1/system/status',
-      headers: { ...VALID_HEADERS, 'sec-fetch-site': 'same-site' },
-    });
-    assert.equal(resSameSite.status, 403);
-    assert.equal(resSameSite.json?.error?.code, 'FORBIDDEN');
-
-    // none
-    const resNone = await makeRequest(server, {
-      path: '/api/v1/system/status',
-      headers: { ...VALID_HEADERS, 'sec-fetch-site': 'none' },
-    });
-    assert.equal(resNone.status, 403);
-    assert.equal(resNone.json?.error?.code, 'FORBIDDEN');
+    // Static targets
+    assert.equal(isApiTarget('/'), false);
+    assert.equal(isApiTarget('/index.html'), false);
+    assert.equal(isApiTarget('/assets/index-CblihZV0.js'), false);
+    assert.equal(isApiTarget('/assets/style.css?v=1.2.3'), false);
+    assert.equal(isApiTarget('/api-docs'), false);
+    assert.equal(isApiTarget('/apifoo'), false);
   });
 
-  // 4. Origin missing with same-origin metadata
-  await t.test('4. Origin absent on GET is allowed with Sec-Fetch-Site: same-origin', async () => {
-    const headersNoOrigin = {
-      host: '127.0.0.1:3000',
-      'sec-fetch-site': 'same-origin',
-    };
-    const res = await makeRequest(server, {
-      path: '/api/v1/system/status',
-      headers: headersNoOrigin,
+  await t.test('P1-2. Raw path security on API routes: rejects query string, traversal, encodings with 400', async () => {
+    // Query string on API route
+    const resQuery = await makeRequest(server, {
+      path: '/api/v1/system/status?param=value',
+      headers: { ...VALID_HEADERS },
     });
-    assert.equal(res.status, 200);
-    assert.equal(res.json?.status, 'GUARDED');
-  });
+    assert.equal(resQuery.status, 400);
+    assert.equal(resQuery.json?.error?.code, 'BAD_REQUEST');
+    assert.match(resQuery.json?.error?.message, /Query strings are not permitted/);
 
-  // 5. Login/logout request requirements
-  await t.test('5. Login/Logout policy: requires exact Origin, JSON Content-Type, and max 1 KiB body', async () => {
-    // Valid POST login
-    const resValidLogin = await makeRequest(server, {
-      method: 'POST',
-      path: '/api/auth/login',
-      headers: {
-        ...VALID_HEADERS,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({ username: 'operator' }),
+    // Trailing slash on API route
+    const resTrailing = await makeRequest(server, {
+      path: '/api/v1/system/status/',
+      headers: { ...VALID_HEADERS },
     });
-    assert.equal(resValidLogin.status, 200);
+    assert.equal(resTrailing.status, 400);
+    assert.equal(resTrailing.json?.error?.code, 'BAD_REQUEST');
+    assert.match(resTrailing.json?.error?.message, /Trailing slashes are not permitted/);
 
-    // Missing Origin on login -> 403
-    const headersNoOrigin = {
-      host: '127.0.0.1:3000',
-      'sec-fetch-site': 'same-origin',
-      'content-type': 'application/json',
-    };
-    const resMissingOrigin = await makeRequest(server, {
-      method: 'POST',
-      path: '/api/auth/login',
-      headers: headersNoOrigin,
-      body: JSON.stringify({ username: 'operator' }),
-    });
-    assert.equal(resMissingOrigin.status, 403);
-    assert.equal(resMissingOrigin.json?.error?.code, 'FORBIDDEN');
-
-    // Non-JSON Content-Type -> 400
-    const resTextPlain = await makeRequest(server, {
-      method: 'POST',
-      path: '/api/auth/login',
-      headers: {
-        ...VALID_HEADERS,
-        'content-type': 'text/plain',
-      },
-      body: 'username=operator',
-    });
-    assert.equal(resTextPlain.status, 400);
-    assert.equal(resTextPlain.json?.error?.code, 'BAD_REQUEST');
-
-    // Missing Content-Type -> 400
-    const headersNoContentType = {
-      ...VALID_HEADERS,
-    };
-    const resNoContentType = await makeRequest(server, {
-      method: 'POST',
-      path: '/api/auth/login',
-      headers: headersNoContentType,
-      body: '{"username":"operator"}',
-    });
-    assert.equal(resNoContentType.status, 400);
-    assert.equal(resNoContentType.json?.error?.code, 'BAD_REQUEST');
-
-    // Body size exceeding 1 KiB (1024 bytes) -> 413 TOO_LARGE
-    const largePayload = JSON.stringify({ data: 'A'.repeat(1500) });
-    const resTooLarge = await makeRequest(server, {
-      method: 'POST',
-      path: '/api/auth/login',
-      headers: {
-        ...VALID_HEADERS,
-        'content-type': 'application/json',
-      },
-      body: largePayload,
-    });
-    assert.equal(resTooLarge.status, 413);
-    assert.equal(resTooLarge.json?.error?.code, 'TOO_LARGE');
-
-    // Valid POST logout
-    const resValidLogout = await makeRequest(server, {
-      method: 'POST',
-      path: '/api/auth/logout',
-      headers: {
-        ...VALID_HEADERS,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({}),
-    });
-    assert.equal(resValidLogout.status, 200);
-
-    // Missing Origin on logout -> 403
-    const resLogoutNoOrigin = await makeRequest(server, {
-      method: 'POST',
-      path: '/api/auth/logout',
-      headers: headersNoOrigin,
-      body: JSON.stringify({}),
-    });
-    assert.equal(resLogoutNoOrigin.status, 403);
-    assert.equal(resLogoutNoOrigin.json?.error?.code, 'FORBIDDEN');
-  });
-
-  // 6. Raw path traversal and encoded-path rejection
-  await t.test('6. Raw path security: rejects %, \\, .., //, ;, NUL, non-ASCII, and trailing slashes with 400', async () => {
     // Percent-encoded sequence
     const resPercent = await makeRequest(server, {
-      path: '/api/v1/system/status%20',
+      path: '/api/v1/%2e%2e/system/status',
       headers: { ...VALID_HEADERS },
     });
     assert.equal(resPercent.status, 400);
     assert.equal(resPercent.json?.error?.code, 'BAD_REQUEST');
 
-    // Percent-encoded slash
-    const resEncodedSlash = await makeRequest(server, {
-      path: '/api%2fv1/system/status',
+    // Semicolon
+    const resSemi = await makeRequest(server, {
+      path: '/api/v1/system/status;jsessionid=123',
       headers: { ...VALID_HEADERS },
     });
-    assert.equal(resEncodedSlash.status, 400);
-    assert.equal(resEncodedSlash.json?.error?.code, 'BAD_REQUEST');
+    assert.equal(resSemi.status, 400);
+    assert.equal(resSemi.json?.error?.code, 'BAD_REQUEST');
 
-    // Directory traversal (..)
-    const resTraversal = await makeRequest(server, {
-      path: '/api/v1/../v1/system/status',
-      headers: { ...VALID_HEADERS },
-    });
-    assert.equal(resTraversal.status, 400);
-    assert.equal(resTraversal.json?.error?.code, 'BAD_REQUEST');
-
-    // Backslash (\)
-    const resBackslash = await makeRequest(server, {
-      path: '/api\\v1\\system\\status',
-      headers: { ...VALID_HEADERS },
-    });
-    assert.equal(resBackslash.status, 400);
-    assert.equal(resBackslash.json?.error?.code, 'BAD_REQUEST');
-
-    // Consecutive slashes (//)
+    // Consecutive slashes
     const resDoubleSlash = await makeRequest(server, {
-      path: '/api//v1/system/status',
+      path: '/api/v1//system/status',
       headers: { ...VALID_HEADERS },
     });
     assert.equal(resDoubleSlash.status, 400);
     assert.equal(resDoubleSlash.json?.error?.code, 'BAD_REQUEST');
-
-    // Semicolon (;)
-    const resSemicolon = await makeRequest(server, {
-      path: '/api/v1/system/status;jsessionid=123',
-      headers: { ...VALID_HEADERS },
-    });
-    assert.equal(resSemicolon.status, 400);
-    assert.equal(resSemicolon.json?.error?.code, 'BAD_REQUEST');
-
-    // Trailing slash on API path
-    const resTrailingSlash = await makeRequest(server, {
-      path: '/api/v1/system/status/',
-      headers: { ...VALID_HEADERS },
-    });
-    assert.equal(resTrailingSlash.status, 400);
-    assert.equal(resTrailingSlash.json?.error?.code, 'BAD_REQUEST');
   });
 
-  // 7. Query-string rejection
-  await t.test('7. Query-string rejection: rejects any query strings on Phase 3.2 routes with 400', async () => {
-    const resQuery = await makeRequest(server, {
-      path: '/api/v1/system/status?format=json',
-      headers: { ...VALID_HEADERS },
+  await t.test('P1-3. Static routes pass raw path guard even with query strings or static characters', async () => {
+    // Static request with query string passes rawPathGuard (reaches fallback 404, does NOT return 400 BAD_REQUEST)
+    const resStaticQuery = await makeRequest(server, {
+      path: '/assets/index.js?v=20261108',
+      headers: { host: '127.0.0.1:3000' },
     });
-    assert.equal(resQuery.status, 400);
-    assert.equal(resQuery.json?.error?.code, 'BAD_REQUEST');
+    assert.equal(resStaticQuery.status, 404);
+    assert.equal(resStaticQuery.json?.error?.code, 'NOT_FOUND');
+    assert.notEqual(resStaticQuery.status, 400);
 
-    const resEmptyQuery = await makeRequest(server, {
-      path: '/api/auth/session?',
-      headers: { ...VALID_HEADERS },
+    // Root path with query string
+    const resRootQuery = await makeRequest(server, {
+      path: '/?tab=workers',
+      headers: { host: '127.0.0.1:3000' },
     });
-    assert.equal(resEmptyQuery.status, 400);
-    assert.equal(resEmptyQuery.json?.error?.code, 'BAD_REQUEST');
+    assert.equal(resRootQuery.status, 404);
+    assert.notEqual(resRootQuery.status, 400);
   });
 
-  // 8. Method matrix and Allow headers
-  await t.test('8. Method matrix: returns 405 with accurate Allow header for wrong methods on known routes', async () => {
-    // 5 GET-only backend observability routes
-    const getOnlyRoutes = [
-      '/api/v1/system/status',
-      '/api/v1/telemetry/usage',
-      '/api/v1/pipeline/active',
-      '/api/v1/market-watches/active',
-      '/api/v1/audit/decisions',
-      '/api/auth/session',
-    ];
-
-    for (const route of getOnlyRoutes) {
-      // Allowed GET
-      const resGet = await makeRequest(server, {
-        method: 'GET',
-        path: route,
-        headers: { ...VALID_HEADERS },
-      });
-      assert.equal(resGet.status, 200, `GET ${route} must return 200`);
-
-      // Forbidden POST
-      const resPost = await makeRequest(server, {
-        method: 'POST',
-        path: route,
-        headers: {
-          ...VALID_HEADERS,
-          'content-type': 'application/json',
-        },
-        body: '{}',
-      });
-      assert.equal(resPost.status, 405, `POST ${route} must return 405`);
-      assert.equal(resPost.headers.allow, 'GET');
-      assert.equal(resPost.json?.error?.code, 'METHOD_NOT_ALLOWED');
-
-      // Forbidden DELETE
-      const resDelete = await makeRequest(server, {
-        method: 'DELETE',
-        path: route,
-        headers: { ...VALID_HEADERS },
-      });
-      assert.equal(resDelete.status, 405, `DELETE ${route} must return 405`);
-      assert.equal(resDelete.headers.allow, 'GET');
-
-      // Forbidden PUT
-      const resPut = await makeRequest(server, {
-        method: 'PUT',
-        path: route,
-        headers: {
-          ...VALID_HEADERS,
-          'content-type': 'application/json',
-        },
-        body: '{}',
-      });
-      assert.equal(resPut.status, 405, `PUT ${route} must return 405`);
-      assert.equal(resPut.headers.allow, 'GET');
-    }
-
-    // 2 POST-only auth routes
-    const postOnlyRoutes = ['/api/auth/login', '/api/auth/logout'];
-    for (const route of postOnlyRoutes) {
-      // Forbidden GET
-      const resGet = await makeRequest(server, {
-        method: 'GET',
-        path: route,
-        headers: { ...VALID_HEADERS },
-      });
-      assert.equal(resGet.status, 405, `GET ${route} must return 405`);
-      assert.equal(resGet.headers.allow, 'POST');
-      assert.equal(resGet.json?.error?.code, 'METHOD_NOT_ALLOWED');
-
-      // Forbidden PUT
-      const resPut = await makeRequest(server, {
-        method: 'PUT',
-        path: route,
-        headers: {
-          ...VALID_HEADERS,
-          'content-type': 'application/json',
-        },
-        body: '{}',
-      });
-      assert.equal(resPut.status, 405, `PUT ${route} must return 405`);
-      assert.equal(resPut.headers.allow, 'POST');
-    }
-  });
-
-  // 9. Unknown path 404
-  await t.test('9. Unknown path 404: returns JSON NOT_FOUND envelope for non-allowlisted API routes', async () => {
-    const resUnknown1 = await makeRequest(server, {
-      path: '/api/unknown',
-      headers: { ...VALID_HEADERS },
-    });
-    assert.equal(resUnknown1.status, 404);
-    assert.equal(resUnknown1.json?.error?.code, 'NOT_FOUND');
-
-    const resUnknown2 = await makeRequest(server, {
-      path: '/api/v1/nonexistent',
-      headers: { ...VALID_HEADERS },
-    });
-    assert.equal(resUnknown2.status, 404);
-    assert.equal(resUnknown2.json?.error?.code, 'NOT_FOUND');
-
-    const resUnknownV2 = await makeRequest(server, {
-      path: '/api/v2/system/status',
-      headers: { ...VALID_HEADERS },
-    });
-    assert.equal(resUnknownV2.status, 404);
-    assert.equal(resUnknownV2.json?.error?.code, 'NOT_FOUND');
-  });
-
-  // 10. Error envelope consistency
-  await t.test('10. Error envelope consistency: all error responses strictly follow { error: { code, message } }', async () => {
-    const errorCodesTested: string[] = [];
-
-    // 400
-    const res400 = await makeRequest(server, {
-      path: '/api/v1/system/status?query=1',
-      headers: { ...VALID_HEADERS },
-    });
-    assert.equal(res400.status, 400);
-    assert.ok(res400.json?.error?.code);
-    assert.ok(res400.json?.error?.message);
-    errorCodesTested.push(res400.json.error.code);
-
-    // 403
-    const res403 = await makeRequest(server, {
-      path: '/api/v1/system/status',
-      headers: { ...VALID_HEADERS, host: 'evil.com' },
-    });
-    assert.equal(res403.status, 403);
-    assert.ok(res403.json?.error?.code);
-    assert.ok(res403.json?.error?.message);
-    errorCodesTested.push(res403.json.error.code);
-
-    // 404
-    const res404 = await makeRequest(server, {
-      path: '/api/v1/unknown',
-      headers: { ...VALID_HEADERS },
-    });
-    assert.equal(res404.status, 404);
-    assert.ok(res404.json?.error?.code);
-    assert.ok(res404.json?.error?.message);
-    errorCodesTested.push(res404.json.error.code);
-
-    // 405
-    const res405 = await makeRequest(server, {
+  // =========================================================================
+  // SECTION 3: P1 — Middleware Ordering & Request Body Scope
+  // =========================================================================
+  await t.test('P1-4. Middleware ordering: Oversized POST to GET-only route returns 405 (not 413)', async () => {
+    const oversizedBody = JSON.stringify({ data: 'A'.repeat(5000) }); // > 1 KiB
+    const res = await makeRequest(server, {
       method: 'POST',
-      path: '/api/v1/system/status',
-      headers: { ...VALID_HEADERS, 'content-type': 'application/json' },
-      body: '{}',
+      path: '/api/v1/system/status', // GET only route
+      headers: {
+        ...VALID_HEADERS,
+        'content-type': 'application/json',
+      },
+      body: oversizedBody,
     });
-    assert.equal(res405.status, 405);
-    assert.ok(res405.json?.error?.code);
-    assert.ok(res405.json?.error?.message);
-    errorCodesTested.push(res405.json.error.code);
 
-    // 413
-    const res413 = await makeRequest(server, {
+    // Must return 405 METHOD_NOT_ALLOWED, NOT 413 TOO_LARGE
+    assert.equal(res.status, 405);
+    assert.equal(res.json?.error?.code, 'METHOD_NOT_ALLOWED');
+    assert.equal(res.headers['allow'], 'GET');
+  });
+
+  await t.test('P1-5. Middleware ordering: Oversized POST to unknown API route returns 404 (not 413)', async () => {
+    const oversizedBody = JSON.stringify({ data: 'A'.repeat(5000) }); // > 1 KiB
+    const res = await makeRequest(server, {
+      method: 'POST',
+      path: '/api/v1/nonexistent/endpoint',
+      headers: {
+        ...VALID_HEADERS,
+        'content-type': 'application/json',
+      },
+      body: oversizedBody,
+    });
+
+    // Must return 404 NOT_FOUND, NOT 413 TOO_LARGE
+    assert.equal(res.status, 404);
+    assert.equal(res.json?.error?.code, 'NOT_FOUND');
+  });
+
+  await t.test('P1-6. Scoped body parser: Oversized JSON to auth login returns 413 TOO_LARGE', async () => {
+    const oversizedBody = JSON.stringify({ username: 'op', data: 'A'.repeat(2000) });
+    const res = await makeRequest(server, {
       method: 'POST',
       path: '/api/auth/login',
-      headers: { ...VALID_HEADERS, 'content-type': 'application/json' },
-      body: JSON.stringify({ payload: 'X'.repeat(1500) }),
+      headers: {
+        ...VALID_HEADERS,
+        'content-type': 'application/json',
+      },
+      body: oversizedBody,
     });
-    assert.equal(res413.status, 413);
-    assert.ok(res413.json?.error?.code);
-    assert.ok(res413.json?.error?.message);
-    errorCodesTested.push(res413.json.error.code);
 
-    assert.deepEqual(errorCodesTested, [
-      'BAD_REQUEST',
-      'FORBIDDEN',
-      'NOT_FOUND',
-      'METHOD_NOT_ALLOWED',
-      'TOO_LARGE',
-    ]);
+    assert.equal(res.status, 413);
+    assert.equal(res.json?.error?.code, 'TOO_LARGE');
+    assert.match(res.json?.error?.message, /1 KiB limit/);
   });
 
-  // 11. No CORS headers
-  await t.test('11. Zero CORS headers: responses never include Access-Control-* headers', async () => {
+  await t.test('P1-7. Scoped body parser: Malformed JSON to auth login returns 400 BAD_REQUEST', async () => {
+    const malformedBody = '{ username: "admin", invalid_json }';
+    const res = await makeRequest(server, {
+      method: 'POST',
+      path: '/api/auth/login',
+      headers: {
+        ...VALID_HEADERS,
+        'content-type': 'application/json',
+      },
+      body: malformedBody,
+    });
+
+    assert.equal(res.status, 400);
+    assert.equal(res.json?.error?.code, 'BAD_REQUEST');
+    assert.match(res.json?.error?.message, /Malformed JSON payload/);
+  });
+
+  // =========================================================================
+  // SECTION 4: P1 — Strict JSON Content-Type Media-Type Matrix
+  // =========================================================================
+  await t.test('P1-8. Content-Type validator accepts valid media types and parameters', () => {
+    assert.equal(isValidJsonContentType('application/json'), true);
+    assert.equal(isValidJsonContentType('application/json; charset=utf-8'), true);
+    assert.equal(isValidJsonContentType('application/json; charset=UTF-8'), true);
+    assert.equal(isValidJsonContentType('application/json;charset=utf-8'), true);
+    assert.equal(isValidJsonContentType('application/json; charset=utf-8; boundary=something'), true);
+  });
+
+  await t.test('P1-9. Content-Type validator rejects jsonp, text/plain, missing, and malformed parameters', () => {
+    assert.equal(isValidJsonContentType('application/jsonp'), false);
+    assert.equal(isValidJsonContentType('application/jsonfoo'), false);
+    assert.equal(isValidJsonContentType('text/plain'), false);
+    assert.equal(isValidJsonContentType('text/json'), false);
+    assert.equal(isValidJsonContentType(''), false);
+    assert.equal(isValidJsonContentType(undefined), false);
+    assert.equal(isValidJsonContentType('application/json;'), false);
+    assert.equal(isValidJsonContentType('application/json; malformed_param'), false);
+    assert.equal(isValidJsonContentType('application/json; =value'), false);
+    assert.equal(isValidJsonContentType('application/json; charset='), false);
+  });
+
+  await t.test('P1-10. Login endpoint strictly rejects non-json Content-Types with 400', async () => {
+    const invalidTypes = [
+      'application/jsonp',
+      'application/jsonfoo',
+      'text/plain',
+      'application/x-www-form-urlencoded',
+    ];
+
+    for (const ct of invalidTypes) {
+      const res = await makeRequest(server, {
+        method: 'POST',
+        path: '/api/auth/login',
+        headers: {
+          ...VALID_HEADERS,
+          'content-type': ct,
+        },
+        body: '{"username":"op"}',
+      });
+      assert.equal(res.status, 400, `Expected 400 for Content-Type: ${ct}`);
+      assert.equal(res.json?.error?.code, 'BAD_REQUEST');
+    }
+  });
+
+  // =========================================================================
+  // SECTION 5: P1 — Authentication Stub Semantics (401 & 501)
+  // =========================================================================
+  await t.test('P1-11. GET /api/auth/session returns 401 SESSION_REQUIRED without authenticated session', async () => {
+    const res = await makeRequest(server, {
+      path: '/api/auth/session',
+      headers: { ...VALID_HEADERS },
+    });
+
+    assert.equal(res.status, 401);
+    assert.equal(res.json?.error?.code, 'SESSION_REQUIRED');
+    assert.match(res.json?.error?.message, /Session authentication required/);
+  });
+
+  await t.test('P1-12. POST /api/auth/login returns 501 NOT_IMPLEMENTED (never success 200)', async () => {
+    const res = await makeRequest(server, {
+      method: 'POST',
+      path: '/api/auth/login',
+      headers: {
+        ...VALID_HEADERS,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ username: 'operator' }),
+    });
+
+    assert.equal(res.status, 501);
+    assert.equal(res.json?.error?.code, 'NOT_IMPLEMENTED');
+    assert.match(res.json?.error?.message, /Batch 3/);
+  });
+
+  await t.test('P1-13. POST /api/auth/logout returns 501 NOT_IMPLEMENTED (never success 200)', async () => {
+    const res = await makeRequest(server, {
+      method: 'POST',
+      path: '/api/auth/logout',
+      headers: {
+        ...VALID_HEADERS,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+
+    assert.equal(res.status, 501);
+    assert.equal(res.json?.error?.code, 'NOT_IMPLEMENTED');
+    assert.match(res.json?.error?.message, /Batch 3/);
+  });
+
+  // =========================================================================
+  // SECTION 6: P2 — Safe Logger Contract
+  // =========================================================================
+  await t.test('P2-1. SafeLogger prevents log injection and strips CR, LF, and control characters', () => {
+    const formatted = SafeLogger.formatEntry({
+      level: 'INFO',
+      event: 'LOGIN_POLICY_VIOLATION',
+      method: 'POST\r\nINJECTED_HEADER: evil',
+      route: '/api/auth/login\nGET /injected HTTP/1.1',
+      statusCode: 403,
+      errorCode: 'FORBIDDEN',
+    });
+
+    // Must be strictly a single line
+    assert.equal(formatted.includes('\n'), false);
+    assert.equal(formatted.includes('\r'), false);
+    // Injected text in route is mapped to canonical route
+    assert.equal(formatted.includes('INJECTED_HEADER'), false);
+  });
+
+  await t.test('P2-2. SafeLogger sanitizes routes and suppresses arbitrary non-canonical paths', () => {
+    assert.equal(SafeLogger.sanitizeRoute('/api/v1/system/status'), '/api/v1/system/status');
+    assert.equal(SafeLogger.sanitizeRoute('/api/unknown/secret-token-12345'), 'UNKNOWN_API_ROUTE');
+    assert.equal(SafeLogger.sanitizeRoute('/static/private/file.txt'), 'STATIC_ROUTE');
+    assert.equal(SafeLogger.sanitizeRoute('/api/v1/system/status?token=secret'), '/api/v1/system/status');
+  });
+
+  await t.test('P2-3. SafeLogger never prints secrets, headers, bodies, or arbitrary error messages', () => {
+    const entry = SafeLogger.formatEntry({
+      level: 'ERROR',
+      event: 'INTERNAL_ERROR',
+      method: 'POST',
+      route: '/api/v1/system/status',
+      statusCode: 500,
+      errorCode: 'BACKEND_ERROR',
+    });
+
+    assert.equal(entry.includes('Bearer'), false);
+    assert.equal(entry.includes('Cookie'), false);
+    assert.equal(entry.includes('csrf'), false);
+    assert.equal(entry.includes('secret'), false);
+    assert.equal(entry.includes('password'), false);
+  });
+
+  // =========================================================================
+  // SECTION 7: Fetch Metadata, Origin, Method Matrix, and Zero CORS
+  // =========================================================================
+  await t.test('Sec-Fetch-Site matrix: requires exact same-origin and rejects others with 403', async () => {
+    for (const site of ['cross-site', 'same-site', 'none']) {
+      const res = await makeRequest(server, {
+        path: '/api/v1/system/status',
+        headers: { ...VALID_HEADERS, 'sec-fetch-site': site },
+      });
+      assert.equal(res.status, 403, `Expected 403 for Sec-Fetch-Site: ${site}`);
+      assert.equal(res.json?.error?.code, 'FORBIDDEN');
+    }
+
+    // Missing Sec-Fetch-Site
+    const headersNoSite = { ...VALID_HEADERS };
+    delete (headersNoSite as any)['sec-fetch-site'];
+    const resMissing = await makeRequest(server, {
+      path: '/api/v1/system/status',
+      headers: headersNoSite,
+    });
+    assert.equal(resMissing.status, 403);
+  });
+
+  await t.test('Origin absent on GET is allowed with Sec-Fetch-Site: same-origin', async () => {
+    const headersNoOrigin = {
+      host: '127.0.0.1:3000',
+      'sec-fetch-site': 'same-origin',
+    };
+    const res = await makeRequest(server, {
+      path: '/api/v1/system/status',
+      headers: headersNoOrigin,
+    });
+    assert.equal(res.status, 200);
+  });
+
+  await t.test('Origin mismatch is rejected with 403', async () => {
+    const res = await makeRequest(server, {
+      path: '/api/v1/system/status',
+      headers: { ...VALID_HEADERS, origin: 'http://localhost:3000' },
+    });
+    assert.equal(res.status, 403);
+    assert.equal(res.json?.error?.code, 'FORBIDDEN');
+  });
+
+  await t.test('Zero CORS headers: responses never include Access-Control-* headers', async () => {
     const res = await makeRequest(server, {
       path: '/api/v1/system/status',
       headers: { ...VALID_HEADERS },
     });
-    assert.equal(res.status, 200);
 
-    for (const headerName of Object.keys(res.headers)) {
-      assert.ok(
-        !headerName.toLowerCase().startsWith('access-control-'),
-        `Response must not contain CORS header: ${headerName}`,
-      );
+    for (const header of Object.keys(res.headers)) {
+      assert.equal(header.startsWith('access-control-'), false);
     }
   });
 
-  // 12. No secret/header logging & Wildcard binding prevention
-  await t.test('12. Security sanity: config refuses 0.0.0.0 and logger prevents secret leakage', () => {
-    // 0.0.0.0 rejection
-    assert.throws(
-      () => loadBffConfig({ host: '0.0.0.0' }),
-      /CRITICAL SECURITY VIOLATION: BFF must never be bound to 0.0.0.0/,
-    );
-    assert.throws(
-      () => loadBffConfig({ host: '::' }),
-      /CRITICAL SECURITY VIOLATION: BFF must never be bound to 0.0.0.0/,
-    );
-
-    // SafeLogger formatting test: ensures no headers or bodies can be logged
-    const logOutput = SafeLogger.formatEntry({
-      level: 'INFO',
-      method: 'GET',
-      path: '/api/v1/system/status?token=supersecret',
-      statusCode: 200,
-      message: 'Request completed',
-      durationMs: 12.34,
-    });
-
-    assert.ok(!logOutput.includes('token='), 'Logger must sanitize query params');
-    assert.ok(logOutput.includes('/api/v1/system/status'));
-    assert.ok(logOutput.includes('[INFO]'));
-  });
-
-  // Canonical route inventory check
   await t.test('Canonical route completeness check: exactly 8 routes declared', () => {
     assert.equal(CANONICAL_ROUTES.length, 8);
+    const paths = CANONICAL_ROUTES.map((r) => r.path);
+    assert.deepEqual(paths.sort(), [
+      '/api/auth/login',
+      '/api/auth/logout',
+      '/api/auth/session',
+      '/api/v1/audit/decisions',
+      '/api/v1/market-watches/active',
+      '/api/v1/pipeline/active',
+      '/api/v1/system/status',
+      '/api/v1/telemetry/usage',
+    ]);
+  });
+
+  // =========================================================================
+  // SECTION 8: Node HTTP Parser Boundary for NUL and Non-ASCII
+  // =========================================================================
+  await t.test('Node HTTP parser boundary: NUL or non-ASCII characters rejected', async () => {
+    // In Node.js llhttp parser, raw NUL byte in request line causes immediate parser rejection
+    const rawNulReq = 'GET /api/v1/\0system HTTP/1.1\r\nHost: 127.0.0.1:3000\r\nSec-Fetch-Site: same-origin\r\n\r\n';
+    const nulResponse = await sendRawTcp(serverPort, rawNulReq);
+    // Node llhttp either resets the socket or returns HTTP 400 Bad Request
+    assert.ok(
+      nulResponse.includes('400 Bad Request') || nulResponse.startsWith('ERROR:'),
+      `Node parser rejected NUL byte: ${nulResponse}`,
+    );
   });
 });

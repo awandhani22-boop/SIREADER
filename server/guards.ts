@@ -5,8 +5,8 @@
  * 1. Host header validation (strictly 127.0.0.1:3000)
  * 2. Fetch Metadata policy (Sec-Fetch-Site: same-origin required for /api/*)
  * 3. Origin header validation (strictly http://127.0.0.1:3000 when present)
- * 4. Auth route policy (Origin + JSON content-type mandatory on POST login/logout)
- * 5. Raw path validation (reject %, \, .., //, ;, NUL, non-ASCII, trailing slash, query strings)
+ * 4. Auth route policy (Origin + strict JSON content-type on POST login/logout)
+ * 5. Scoped raw path validation for /api/* (reject %, \, .., //, ;, NUL, non-ASCII, trailing slash, query strings)
  * 6. Method allowlist enforcement & 405 with Allow header
  * 7. Anti-CORS protection (zero Access-Control-* headers)
  */
@@ -17,7 +17,70 @@ import { isAllowlistedPath, getAllowedMethods, isMethodAllowed } from './allowli
 import { sendBffError } from './errors.ts';
 
 /**
+ * Determines whether a raw URL or resolved path targets the /api namespace.
+ * Uses discrete boundary checks to prevent false positives on /api-foo or /apifoo.
+ */
+export function isApiTarget(rawUrl: string, parsedPath?: string): boolean {
+  if (
+    rawUrl === '/api' ||
+    rawUrl.startsWith('/api/') ||
+    rawUrl.startsWith('/api?') ||
+    rawUrl.startsWith('/api;') ||
+    rawUrl.startsWith('/api\\')
+  ) {
+    return true;
+  }
+
+  if (parsedPath && (parsedPath === '/api' || parsedPath.startsWith('/api/'))) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Strictly validates Content-Type header against application/json media type.
+ * Accepts:
+ * - "application/json"
+ * - "application/json; charset=utf-8"
+ * Rejects:
+ * - "application/jsonp", "application/jsonfoo", "text/plain", missing, malformed parameters
+ */
+export function isValidJsonContentType(headerValue?: string): boolean {
+  if (!headerValue || typeof headerValue !== 'string') {
+    return false;
+  }
+
+  const parts = headerValue.split(';').map((p) => p.trim());
+  const mediaType = parts[0]?.toLowerCase();
+
+  if (mediaType !== 'application/json') {
+    return false;
+  }
+
+  // Validate parameters if present (e.g. charset=utf-8)
+  for (let i = 1; i < parts.length; i++) {
+    const param = parts[i];
+    if (!param) {
+      return false;
+    }
+    const eqIdx = param.indexOf('=');
+    if (eqIdx <= 0 || eqIdx === param.length - 1) {
+      return false;
+    }
+    const paramKey = param.slice(0, eqIdx).trim().toLowerCase();
+    const paramVal = param.slice(eqIdx + 1).trim();
+    if (!paramKey || !paramVal) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
  * 1. Host Guard: Validates that the request Host header matches exactly the allowed host.
+ * Applies to all requests entering the BFF.
  */
 export function createHostGuard(config: BffConfig) {
   return (req: Request, res: Response, next: NextFunction): void => {
@@ -34,10 +97,18 @@ export function createHostGuard(config: BffConfig) {
 
 /**
  * 2. Raw Path Guard: Inspects unparsed, un-decoded URL before route handling.
- * Rejects traversal, encodings, backslashes, semicolons, NUL, query strings, and trailing slashes.
+ * Strictly scoped to /api and /api/* requests only.
+ * Static frontend GET routes pass through freely.
  */
 export function rawPathGuard(req: Request, res: Response, next: NextFunction): void {
   const rawUrl = req.originalUrl || req.url || '';
+  const parsedPath = req.path;
+
+  // Raw path guard is strictly scoped to /api requests
+  if (!isApiTarget(rawUrl, parsedPath)) {
+    next();
+    return;
+  }
 
   // Reject query strings on Phase 3.2 API routes
   if (rawUrl.includes('?')) {
@@ -88,7 +159,8 @@ export function rawPathGuard(req: Request, res: Response, next: NextFunction): v
   }
 
   // Reject trailing slashes on API routes (e.g. /api/v1/system/status/)
-  if (rawUrl.length > 1 && rawUrl.endsWith('/')) {
+  const cleanPath = rawUrl.split('?')[0] || '';
+  if (cleanPath.length > 1 && cleanPath.endsWith('/')) {
     sendBffError(res, 400, 'BAD_REQUEST', 'Trailing slashes are not permitted on API routes.');
     return;
   }
@@ -97,13 +169,15 @@ export function rawPathGuard(req: Request, res: Response, next: NextFunction): v
 }
 
 /**
- * 3. Fetch Metadata Guard: Enforces Sec-Fetch-Site and Origin policies for all /api/* routes.
+ * 3. Fetch Metadata Guard: Enforces Sec-Fetch-Site and Origin policies for /api/* routes.
  */
 export function createFetchMetadataGuard(config: BffConfig) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    // Only inspect /api routes
+    const rawUrl = req.originalUrl || req.url || '';
     const path = req.path || '';
-    if (!path.startsWith('/api')) {
+
+    // Only inspect /api routes
+    if (!isApiTarget(rawUrl, path)) {
       next();
       return;
     }
@@ -121,7 +195,7 @@ export function createFetchMetadataGuard(config: BffConfig) {
       return;
     }
 
-    // Origin header validation
+    // Origin header validation when present
     const origin = req.headers.origin;
     if (origin !== undefined) {
       if (origin !== config.allowedOrigin) {
@@ -136,38 +210,30 @@ export function createFetchMetadataGuard(config: BffConfig) {
 
 /**
  * 4. Login/Logout Policy Guard:
- * POST login/logout requires exact Origin and application/json Content-Type.
+ * POST login/logout requires exact Origin and strict application/json Content-Type.
  */
 export function createLoginLogoutPolicyGuard(config: BffConfig) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const path = req.path || '';
-    const isAuthPost =
-      (path === '/api/auth/login' || path === '/api/auth/logout') &&
-      req.method === 'POST';
+    const origin = req.headers.origin;
+    if (!origin || origin !== config.allowedOrigin) {
+      sendBffError(
+        res,
+        403,
+        'FORBIDDEN',
+        'Origin header matching application origin is required for authentication state changes.',
+      );
+      return;
+    }
 
-    if (isAuthPost) {
-      const origin = req.headers.origin;
-      if (!origin || origin !== config.allowedOrigin) {
-        sendBffError(
-          res,
-          403,
-          'FORBIDDEN',
-          'Origin header matching application origin is required for authentication state changes.',
-        );
-        return;
-      }
-
-      const contentType = req.headers['content-type'] || '';
-      const isJson = contentType.toLowerCase().startsWith('application/json');
-      if (!isJson) {
-        sendBffError(
-          res,
-          400,
-          'BAD_REQUEST',
-          'Content-Type must be application/json for authentication requests.',
-        );
-        return;
-      }
+    const contentType = req.headers['content-type'];
+    if (!isValidJsonContentType(contentType)) {
+      sendBffError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'Content-Type must be application/json for authentication requests.',
+      );
+      return;
     }
 
     next();
@@ -176,13 +242,14 @@ export function createLoginLogoutPolicyGuard(config: BffConfig) {
 
 /**
  * 5. Route and Method Guard:
- * Validates known canonical routes, handles unknown 404, and wrong method 405 with Allow header.
+ * Runs BEFORE body parser. Rejects unknown /api paths with 404, wrong method with 405.
  */
 export function routeAndMethodGuard(req: Request, res: Response, next: NextFunction): void {
+  const rawUrl = req.originalUrl || req.url || '';
   const path = req.path || '';
 
   // Only handle /api paths
-  if (!path.startsWith('/api')) {
+  if (!isApiTarget(rawUrl, path)) {
     next();
     return;
   }
