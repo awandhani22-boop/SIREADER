@@ -6,8 +6,7 @@
 
 - Virtual Office repository: `awandhani22-boop/SIREADER`
 - Active branch: `phase-3-2-batch-1-bff-foundation`
-- Latest verified remote HEAD: `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5`
-- Latest verified commit: `fix(serving): keep cross-platform launcher valid JavaScript`
+- Latest verified implementation commit: `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5` (`fix(serving): keep cross-platform launcher valid JavaScript`). Later commits only update current-state documentation.
 - Previous docs checkpoint before Batch 3: `94228186e22e548cc61f05909bc10f4cd9a79bae`
 - Python backend repository: `awandhani22-boop/SIREADER-Python-Backend`, branch `phase-3-1-api-gateway`, reviewed baseline `76b968fce399a5f591b1bd48e1501e9baa45c92a`
 - Never merge to `main` without owner approval. No destructive Git operations. Preserve untracked/local-only files.
