@@ -9,6 +9,13 @@ import { LiveApiError, type LiveApiErrorCode } from './live.api';
 import { LIVE_API_PATHS, type LiveApiPath } from './live.contracts';
 import { liveController, type LiveController } from './live.controller';
 import { useLiveStore } from './live.state';
+import {
+  LIVE_EVENT_STREAM_URL,
+  LIVE_SSE_RECONCILIATION_INTERVAL_MS,
+  parseLiveInvalidationEvent,
+  parseLiveResetEvent,
+  type LiveEventSourceLike,
+} from './live.events';
 
 export const LIVE_POLL_INTERVALS: Readonly<Record<LiveApiPath, number>> = Object.freeze({
   '/api/v1/system/status': 10_000,
@@ -22,6 +29,7 @@ export const LIVE_STALE_INTERVAL_MULTIPLIER = 3;
 export const LIVE_OFFLINE_FAILURE_THRESHOLD = 2;
 export const LIVE_RETRY_BASE_MS = 1_000;
 export const LIVE_RETRY_MAX_MS = 60_000;
+export const LIVE_SSE_FAILURE_THRESHOLD = 3;
 
 export interface LivePollerClock {
   now(): number;
@@ -32,6 +40,7 @@ export interface LivePollerClock {
 export interface LivePollerOptions {
   readonly clock?: LivePollerClock;
   readonly random?: () => number;
+  readonly eventSourceFactory?: (url: string) => LiveEventSourceLike;
 }
 
 export interface LivePoller {
@@ -82,6 +91,20 @@ export function createLivePoller(
   const staleTimers = new Map<LiveApiPath, number>();
   const inFlight = new Map<LiveApiPath, number>();
   const retryCounts = new Map<LiveApiPath, number>();
+  const dirtyPaths = new Set<LiveApiPath>();
+
+  let eventSource: LiveEventSourceLike | null = null;
+  let eventSourceRetryTimer: number | null = null;
+  let eventStreamHealthy = false;
+  let eventStreamFailures = 0;
+  let eventEpoch: string | null = null;
+  let lastEventSequence: number | null = null;
+
+  const eventSourceFactory = options.eventSourceFactory ?? (
+    typeof EventSource === 'undefined'
+      ? undefined
+      : (url: string) => new EventSource(url)
+  );
 
   let running = false;
   let generation = 0;
@@ -130,6 +153,12 @@ export function createLivePoller(
     }
   }
 
+  function currentPollInterval(path: LiveApiPath): number {
+    return eventStreamHealthy
+      ? LIVE_SSE_RECONCILIATION_INTERVAL_MS
+      : LIVE_POLL_INTERVALS[path];
+  }
+
   function scheduleNext(path: LiveApiPath, delayMs: number, runGeneration: number): void {
     if (!isCurrent(runGeneration)) return;
     clearTimer(nextTimers, path);
@@ -146,7 +175,7 @@ export function createLivePoller(
     runGeneration: number,
   ): void {
     clearTimer(staleTimers, path);
-    const staleAt = fetchedAt + LIVE_POLL_INTERVALS[path] * LIVE_STALE_INTERVAL_MULTIPLIER;
+    const staleAt = fetchedAt + currentPollInterval(path) * LIVE_STALE_INTERVAL_MULTIPLIER;
     const delay = Math.max(0, staleAt - clock.now());
     const handle = clock.setTimeout(() => {
       staleTimers.delete(path);
@@ -161,7 +190,11 @@ export function createLivePoller(
     if (!isCurrent(runGeneration)) return;
 
     // A slow request must never overlap with another request to the same route.
-    if (inFlight.has(path)) return;
+    // Preserve an invalidation received during an in-flight snapshot fetch.
+    if (inFlight.has(path)) {
+      dirtyPaths.add(path);
+      return;
+    }
 
     const previous = useLiveStore.getState().resources[path];
     inFlight.set(path, runGeneration);
@@ -179,7 +212,7 @@ export function createLivePoller(
       transportOffline = false;
       recomputeConnection();
       scheduleStaleDeadline(path, fetchedAt, runGeneration);
-      scheduleNext(path, LIVE_POLL_INTERVALS[path], runGeneration);
+      scheduleNext(path, currentPollInterval(path), runGeneration);
     } catch (error) {
       if (!isCurrent(runGeneration)) return;
 
@@ -218,6 +251,10 @@ export function createLivePoller(
     } finally {
       if (inFlight.get(path) === runGeneration) inFlight.delete(path);
 
+      if (dirtyPaths.delete(path) && isCurrent(runGeneration)) {
+        scheduleNext(path, 0, runGeneration);
+      }
+
       // If a new session/polling generation began while this request was in flight,
       // immediately service the path that the new generation safely skipped.
       if (
@@ -231,10 +268,144 @@ export function createLivePoller(
     }
   }
 
+  function refreshPaths(paths: readonly LiveApiPath[], runGeneration: number): Promise<void> {
+    if (!isCurrent(runGeneration)) return Promise.resolve();
+    for (const path of paths) clearTimer(nextTimers, path);
+    return Promise.all(paths.map((path) => pollPath(path, runGeneration))).then(() => undefined);
+  }
+
+  function setEventStreamHealth(healthy: boolean, runGeneration: number): void {
+    if (!isCurrent(runGeneration) || eventStreamHealthy === healthy) return;
+    eventStreamHealthy = healthy;
+    for (const path of LIVE_API_PATHS) {
+      clearTimer(nextTimers, path);
+      scheduleNext(path, currentPollInterval(path), runGeneration);
+      const fetchedAt = useLiveStore.getState().resources[path].fetchedAt;
+      if (fetchedAt !== null) scheduleStaleDeadline(path, fetchedAt, runGeneration);
+    }
+  }
+
+  function clearEventStreamRetry(): void {
+    if (eventSourceRetryTimer !== null) {
+      clock.clearTimeout(eventSourceRetryTimer);
+      eventSourceRetryTimer = null;
+    }
+  }
+
+  function closeEventSource(): void {
+    clearEventStreamRetry();
+    if (eventSource !== null) {
+      eventSource.onopen = null;
+      eventSource.onerror = null;
+      eventSource.close();
+      eventSource = null;
+    }
+    eventStreamHealthy = false;
+    eventEpoch = null;
+    lastEventSequence = null;
+  }
+
+  function scheduleEventStreamRetry(runGeneration: number): void {
+    if (!eventSourceFactory || !isCurrent(runGeneration) || eventSourceRetryTimer !== null) return;
+    const delay = calculateLiveRetryDelay(Math.max(1, eventStreamFailures), random());
+    eventSourceRetryTimer = clock.setTimeout(() => {
+      eventSourceRetryTimer = null;
+      connectEventStream(runGeneration);
+    }, delay);
+  }
+
+  function resetEventStream(runGeneration: number): void {
+    if (!isCurrent(runGeneration)) return;
+    closeEventSource();
+    void refreshPaths(LIVE_API_PATHS, runGeneration);
+    scheduleEventStreamRetry(runGeneration);
+  }
+
+  function onInvalidationEvent(event: Event, runGeneration: number): void {
+    if (!isCurrent(runGeneration)) return;
+    const message = event as MessageEvent<string>;
+    const parsed = parseLiveInvalidationEvent(message.data, message.lastEventId);
+    if (!parsed) {
+      eventStreamFailures += 1;
+      resetEventStream(runGeneration);
+      return;
+    }
+
+    if (eventEpoch === null) {
+      eventEpoch = parsed.epoch;
+      lastEventSequence = parsed.sequence;
+      void refreshPaths(parsed.paths, runGeneration);
+      return;
+    }
+    if (eventEpoch !== parsed.epoch) {
+      eventEpoch = parsed.epoch;
+      lastEventSequence = parsed.sequence;
+      void refreshPaths(LIVE_API_PATHS, runGeneration);
+      return;
+    }
+    if (lastEventSequence !== null && parsed.sequence <= lastEventSequence) return;
+    const sequenceGap = lastEventSequence !== null && parsed.sequence > lastEventSequence + 1;
+    lastEventSequence = parsed.sequence;
+    void refreshPaths(sequenceGap ? LIVE_API_PATHS : parsed.paths, runGeneration);
+  }
+
+  function connectEventStream(runGeneration: number): void {
+    if (!eventSourceFactory || !isCurrent(runGeneration)) return;
+    closeEventSource();
+
+    let source: LiveEventSourceLike;
+    try {
+      source = eventSourceFactory(LIVE_EVENT_STREAM_URL);
+    } catch {
+      eventStreamFailures += 1;
+      setEventStreamHealth(false, runGeneration);
+      scheduleEventStreamRetry(runGeneration);
+      return;
+    }
+    eventSource = source;
+
+    source.onopen = () => {
+      if (!isCurrent(runGeneration) || eventSource !== source) return;
+      eventStreamFailures = 0;
+      setEventStreamHealth(true, runGeneration);
+    };
+
+    source.onerror = () => {
+      if (!isCurrent(runGeneration) || eventSource !== source) return;
+      eventStreamFailures += 1;
+      const wasHealthy = eventStreamHealthy;
+      setEventStreamHealth(false, runGeneration);
+      if (wasHealthy) void refreshPaths(LIVE_API_PATHS, runGeneration);
+
+      // Let EventSource perform a small number of native reconnect attempts.
+      // Then close it and use bounded application-level backoff while snapshots
+      // continue on the regular 10s/30s cadence.
+      if (eventStreamFailures >= LIVE_SSE_FAILURE_THRESHOLD) {
+        source.close();
+        if (eventSource === source) eventSource = null;
+        scheduleEventStreamRetry(runGeneration);
+      }
+    };
+
+    source.addEventListener('resources.invalidated', (event) => {
+      if (eventSource === source) onInvalidationEvent(event, runGeneration);
+    });
+    source.addEventListener('stream.reset', (event) => {
+      if (!isCurrent(runGeneration) || eventSource !== source) return;
+      const message = event as MessageEvent<string>;
+      const reason = parseLiveResetEvent(message.data);
+      if (reason === null) eventStreamFailures += 1;
+      else eventStreamFailures = Math.max(1, eventStreamFailures);
+      resetEventStream(runGeneration);
+    });
+  }
+
   function stop(): void {
     running = false;
     generation += 1;
     clearAllTimers();
+    closeEventSource();
+    dirtyPaths.clear();
   }
 
   return {
@@ -245,6 +416,12 @@ export function createLivePoller(
       consecutiveTransportFailures = 0;
       transportOffline = false;
       retryCounts.clear();
+      dirtyPaths.clear();
+      eventStreamFailures = 0;
+      eventStreamHealthy = false;
+      eventEpoch = null;
+      lastEventSequence = null;
+      clearEventStreamRetry();
       useLiveStore.getState().setConnection('CONNECTING');
 
       try {
@@ -268,6 +445,7 @@ export function createLivePoller(
 
       if (!isCurrent(runGeneration)) return false;
       await Promise.all(LIVE_API_PATHS.map((path) => pollPath(path, runGeneration)));
+      if (isCurrent(runGeneration)) connectEventStream(runGeneration);
       return isCurrent(runGeneration);
     },
 
@@ -275,14 +453,12 @@ export function createLivePoller(
 
     async refresh(path: LiveApiPath): Promise<void> {
       if (!running) return;
-      clearTimer(nextTimers, path);
-      await pollPath(path, generation);
+      await refreshPaths([path], generation);
     },
 
     async refreshAll(): Promise<void> {
       if (!running) return;
-      for (const path of LIVE_API_PATHS) clearTimer(nextTimers, path);
-      await Promise.all(LIVE_API_PATHS.map((path) => pollPath(path, generation)));
+      await refreshPaths(LIVE_API_PATHS, generation);
     },
 
     isRunning(): boolean {
