@@ -340,3 +340,62 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
     assert.equal(useLiveStore.getState().session, 'UNAUTHENTICATED');
   });
 });
+
+
+test('SSE-connected snapshots reconcile every 60 seconds and fallback restores the normal cadence', async () => {
+  useLiveStore.getState().reset();
+  const clock = new FakeClock();
+  const counts = new Map<LiveApiPath, number>();
+  const api = createApi(async (path) => {
+    counts.set(path, (counts.get(path) ?? 0) + 1);
+    return responses[path];
+  });
+  const poller = createLivePoller(createLiveController(api), { clock, random: () => 0.5 });
+  await poller.start();
+
+  poller.setEventConnected(true);
+  await clock.advanceBy(59_999);
+  assert.equal(counts.get('/api/v1/system/status'), 1);
+  assert.equal(counts.get('/api/v1/telemetry/usage'), 1);
+
+  await clock.advanceBy(1);
+  assert.equal(counts.get('/api/v1/system/status'), 2);
+  assert.equal(counts.get('/api/v1/telemetry/usage'), 2);
+
+  poller.setEventConnected(false);
+  await clock.advanceBy(9_999);
+  assert.equal(counts.get('/api/v1/system/status'), 2);
+  await clock.advanceBy(1);
+  assert.equal(counts.get('/api/v1/system/status'), 3);
+  poller.stop();
+});
+
+test('invalidation arriving during an in-flight snapshot is not lost and causes one follow-up refresh', async () => {
+  useLiveStore.getState().reset();
+  const clock = new FakeClock();
+  let systemCalls = 0;
+  let resolveFirst: ((value: SystemStatusDto) => void) | undefined;
+  const api = createApi(async (path) => {
+    if (path === '/api/v1/system/status') {
+      systemCalls += 1;
+      if (systemCalls === 1) {
+        return new Promise<SystemStatusDto>((resolve) => { resolveFirst = resolve; });
+      }
+    }
+    return responses[path];
+  });
+  const poller = createLivePoller(createLiveController(api), { clock });
+  const starting = poller.start();
+  await clock.flushMicrotasks();
+  assert.equal(systemCalls, 1);
+
+  await poller.refresh('/api/v1/system/status');
+  assert.equal(systemCalls, 1);
+  resolveFirst?.(responses['/api/v1/system/status']);
+  assert.equal(await starting, true);
+
+  await clock.advanceBy(0);
+  assert.equal(systemCalls, 2);
+  assert.equal(useLiveStore.getState().resources['/api/v1/system/status'].status, 'LIVE');
+  poller.stop();
+});
