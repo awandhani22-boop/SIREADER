@@ -247,6 +247,8 @@ Exit gate:
 ## Phase 4.1 — Real Worker Runtime Contract & Registry
 **Status: PLANNED.**
 
+Preparatory design: [`docs/PHASE_4_1_WORKER_RUNTIME_ARCHITECTURE.md`](PHASE_4_1_WORKER_RUNTIME_ARCHITECTURE.md). It distinguishes logical worker definitions, actual process instances/heartbeats, generic tasks, attempts/leases, provider requests and activity audit. Existing Telegram analysis and AIUsageLog records remain intact.
+
 Goal: define the backend source of truth for real workers, capabilities, task ownership, runtime state, and health.
 
 Requirements:
@@ -283,6 +285,8 @@ Exit gate:
 ## Phase 4.3 — Persistent Backend Task Orchestration
 **Status: PLANNED.**
 
+Preparatory design: [`docs/PHASE_4_3_TASK_ORCHESTRATION_ARCHITECTURE.md`](PHASE_4_3_TASK_ORCHESTRATION_ARCHITECTURE.md).
+
 Goal: move real task queueing and dispatch authority to the Python backend.
 
 Requirements:
@@ -300,6 +304,8 @@ Exit gate:
 
 ## Phase 4.4 — Frontend Live Runtime Adapter & Demo/Live Separation
 **Status: PLANNED.**
+
+Preparatory design: [`docs/PHASE_4_4_FRONTEND_LIVE_RUNTIME_ARCHITECTURE.md`](PHASE_4_4_FRONTEND_LIVE_RUNTIME_ARCHITECTURE.md).
 
 Goal: visualize real worker/task data while preserving the existing 3D scene and an explicit offline/demo mode.
 
@@ -319,6 +325,8 @@ Exit gate:
 
 ## Phase 5.1 — Human-Supervised Worker and Task Operations
 **Status: PLANNED.**
+
+Preparatory guidance: [`docs/PHASE_5_6_READINESS_ARCHITECTURE.md`](PHASE_5_6_READINESS_ARCHITECTURE.md).
 
 Goal: add authenticated, narrowly scoped operations for managing AI worker tasks.
 
@@ -361,6 +369,8 @@ Exit gate:
 
 ## Phase 6.1 — Security, Reliability & Failure Recovery
 **Status: PLANNED.**
+
+Preparatory guidance: [`docs/PHASE_5_6_READINESS_ARCHITECTURE.md`](PHASE_5_6_READINESS_ARCHITECTURE.md).
 
 Requirements:
 - Threat model and least-privilege review across browser, BFF, API Gateway, backend, database, and provider boundaries.
