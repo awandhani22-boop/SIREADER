@@ -22,6 +22,7 @@ export const LIVE_STALE_INTERVAL_MULTIPLIER = 3;
 export const LIVE_OFFLINE_FAILURE_THRESHOLD = 2;
 export const LIVE_RETRY_BASE_MS = 1_000;
 export const LIVE_RETRY_MAX_MS = 60_000;
+export const LIVE_SSE_RECONCILIATION_INTERVAL_MS = 60_000;
 
 export interface LivePollerClock {
   now(): number;
@@ -39,6 +40,7 @@ export interface LivePoller {
   stop(): void;
   refresh(path: LiveApiPath): Promise<void>;
   refreshAll(): Promise<void>;
+  setEventConnected(connected: boolean): void;
   isRunning(): boolean;
 }
 
@@ -82,11 +84,17 @@ export function createLivePoller(
   const staleTimers = new Map<LiveApiPath, number>();
   const inFlight = new Map<LiveApiPath, number>();
   const retryCounts = new Map<LiveApiPath, number>();
+  const dirtyPaths = new Set<LiveApiPath>();
 
   let running = false;
   let generation = 0;
   let consecutiveTransportFailures = 0;
   let transportOffline = false;
+  let eventConnected = false;
+
+  function pollingInterval(path: LiveApiPath): number {
+    return eventConnected ? LIVE_SSE_RECONCILIATION_INTERVAL_MS : LIVE_POLL_INTERVALS[path];
+  }
 
   function isCurrent(runGeneration: number): boolean {
     return running && generation === runGeneration;
@@ -146,7 +154,7 @@ export function createLivePoller(
     runGeneration: number,
   ): void {
     clearTimer(staleTimers, path);
-    const staleAt = fetchedAt + LIVE_POLL_INTERVALS[path] * LIVE_STALE_INTERVAL_MULTIPLIER;
+    const staleAt = fetchedAt + pollingInterval(path) * LIVE_STALE_INTERVAL_MULTIPLIER;
     const delay = Math.max(0, staleAt - clock.now());
     const handle = clock.setTimeout(() => {
       staleTimers.delete(path);
@@ -161,7 +169,10 @@ export function createLivePoller(
     if (!isCurrent(runGeneration)) return;
 
     // A slow request must never overlap with another request to the same route.
-    if (inFlight.has(path)) return;
+    if (inFlight.has(path)) {
+      dirtyPaths.add(path);
+      return;
+    }
 
     const previous = useLiveStore.getState().resources[path];
     inFlight.set(path, runGeneration);
@@ -179,7 +190,7 @@ export function createLivePoller(
       transportOffline = false;
       recomputeConnection();
       scheduleStaleDeadline(path, fetchedAt, runGeneration);
-      scheduleNext(path, LIVE_POLL_INTERVALS[path], runGeneration);
+      scheduleNext(path, pollingInterval(path), runGeneration);
     } catch (error) {
       if (!isCurrent(runGeneration)) return;
 
@@ -220,13 +231,10 @@ export function createLivePoller(
 
       // If a new session/polling generation began while this request was in flight,
       // immediately service the path that the new generation safely skipped.
-      if (
-        running &&
-        generation !== runGeneration &&
-        !inFlight.has(path) &&
-        !nextTimers.has(path)
-      ) {
-        scheduleNext(path, 0, generation);
+      if (running && !inFlight.has(path) && !nextTimers.has(path)) {
+        if (dirtyPaths.delete(path) || generation !== runGeneration) {
+          scheduleNext(path, 0, generation);
+        }
       }
     }
   }
@@ -235,6 +243,8 @@ export function createLivePoller(
     running = false;
     generation += 1;
     clearAllTimers();
+    dirtyPaths.clear();
+    eventConnected = false;
   }
 
   return {
@@ -283,6 +293,17 @@ export function createLivePoller(
       if (!running) return;
       for (const path of LIVE_API_PATHS) clearTimer(nextTimers, path);
       await Promise.all(LIVE_API_PATHS.map((path) => pollPath(path, generation)));
+    },
+
+    setEventConnected(connected: boolean): void {
+      if (eventConnected === connected || !running) return;
+      eventConnected = connected;
+      for (const path of LIVE_API_PATHS) {
+        clearTimer(nextTimers, path);
+        if (!inFlight.has(path)) scheduleNext(path, pollingInterval(path), generation);
+        const snapshot = useLiveStore.getState().resources[path];
+        if (snapshot.fetchedAt !== null) scheduleStaleDeadline(path, snapshot.fetchedAt, generation);
+      }
     },
 
     isRunning(): boolean {
