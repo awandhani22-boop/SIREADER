@@ -351,7 +351,7 @@ export function createUpstreamHandlers(
         const upstream = await fetchImpl(target, {
           method: 'GET',
           headers: {
-            Authorization: 'Bearer ${token}',
+            Authorization: 'Bearer ' + token,
             Accept: 'application/json',
           },
           redirect: 'manual',
