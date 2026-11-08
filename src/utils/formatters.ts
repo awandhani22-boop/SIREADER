@@ -13,17 +13,36 @@ export function formatSimulatedCost(costUsd: number): string {
   return `$${costUsd.toFixed(3)}`;
 }
 
-export function formatSimDuration(simMs: number): string {
-  const totalSeconds = Math.max(0, Math.floor(simMs / 1000));
+export interface SimDurationFormatOptions {
+  showFractionalSeconds?: boolean;
+}
+
+export function formatSimDuration(
+  simMs: number,
+  options?: SimDurationFormatOptions,
+): string {
+  if (!options?.showFractionalSeconds && simMs < 0) {
+    return '00:00';
+  }
+
+  const isNegative = simMs < 0;
+  const nonNegativeMs = Math.max(0, Math.abs(simMs));
+  const totalSeconds = Math.floor(nonNegativeMs / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
 
   const pad = (n: number) => String(n).padStart(2, '0');
-  if (hours > 0) {
-    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  let timeStr = hours > 0
+    ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+    : `${pad(minutes)}:${pad(seconds)}`;
+
+  if (options?.showFractionalSeconds) {
+    const tenths = Math.floor((nonNegativeMs % 1000) / 100);
+    timeStr += `.${tenths}`;
   }
-  return `${pad(minutes)}:${pad(seconds)}`;
+
+  return isNegative ? `-${timeStr}` : timeStr;
 }
 
 export function formatProgressPercent(progress: number): string {

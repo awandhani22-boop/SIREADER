@@ -53,9 +53,9 @@ The existing React/Three.js project is the product. Preserve and extend it; do n
 | 1 | Project Foundation & 3D Office Visualization | COMPLETE per current project state |
 | 2.1 | Worker Intelligence Foundation | COMPLETE |
 | 2.2 | Global Task Dispatcher & Deterministic Simulation | COMPLETE |
-| 2.3 | Browser QA, Visual Closure & Simulation UX Stabilization | NEXT |
+| 2.3 | Browser QA, Visual Closure & Simulation UX Stabilization | COMPLETE WITH DEFERRED ITEM |
 | 3.1 | Read-Only Observability API Gateway | COMPLETE in Python backend repository |
-| 3.2 | Secure BFF & Frontend Observability Integration | PLANNED |
+| 3.2 | Secure BFF & Frontend Observability Integration | NEXT |
 | 3.3 | Real-Time Observability (SSE) | PLANNED |
 | 4.1 | Real Worker Runtime Contract & Registry | PLANNED |
 | 4.2 | AI Provider Routing, Execution & Cost Guard | PLANNED |
@@ -123,7 +123,7 @@ Important rules:
 - No real AI provider, backend worker, persistence, or external execution is connected in this phase.
 
 ## Phase 2.3 — Browser QA, Visual Closure & Simulation UX Stabilization
-**Status: NEXT — do this before frontend/backend integration.**
+**Status: COMPLETE WITH DEFERRED ITEM — acceptance audit completed 2026-11-08.**
 
 Goal: close the visual and interaction gaps that the current project state lists as unverified, without reopening or rewriting the completed scheduler.
 
@@ -178,7 +178,7 @@ Boundary:
 - It does not enable AI inference or trading execution.
 
 ## Phase 3.2 — Secure BFF & Frontend Observability Integration
-**Status: PLANNED — after Phase 2.3 sign-off.**
+**Status: NEXT — after Phase 2.3 sign-off.**
 
 Goal: connect the existing Three.js frontend to the five Phase 3.1 GET endpoints without exposing the API Bearer Token.
 

@@ -326,6 +326,7 @@ test('10. Diagnostic propagation from manual simulation tick', () => {
   assert.ok(res.ok);
 
   // Advance simulation tick
+  useOfficeStore.getState().setGlobalPaused(true);
   useOfficeStore.getState().tickSimulation();
 
   const state = useOfficeStore.getState();
@@ -1166,14 +1167,28 @@ test('42. Only RUNNING lifecycle tasks contribute to activeTasksCount', () => {
 });
 
 
-test('43. Running task count remains equal to worker active task IDs after deterministic ticks', () => {
+test('43. Running task count remains equal to worker active task IDs after 48 deterministic manual ticks', () => {
   resetStore();
+
+  const enqueue = useOfficeStore.getState().enqueueGlobalMockTask({
+    category: 'CLASSIFICATION',
+    type: 'QUICK_RESEARCH',
+    priority: 'HIGH',
+    title: 'Deterministic Non-Vacuous Long Task',
+    durationSimMs: 60000,
+  });
+  assert.ok(enqueue.ok && enqueue.taskId, 'Deterministic global task must enqueue successfully');
+
+  useOfficeStore.getState().setGlobalPaused(true);
 
   for (let tick = 0; tick < 48; tick += 1) {
     useOfficeStore.getState().tickSimulation();
   }
 
   const state = useOfficeStore.getState();
+  assert.equal(state.tickCount, 48, 'Tick count must advance by exactly 48 ticks');
+  assert.equal(state.simTimeMs, 48 * FIXED_TICK_SIM_MS, 'Simulation time must advance to 24000ms');
+
   const runningTaskIds = Object.values(state.tasks)
     .filter((task) => task.lifecycleStatus === 'RUNNING')
     .map((task) => task.id)
@@ -1183,6 +1198,8 @@ test('43. Running task count remains equal to worker active task IDs after deter
     .flatMap((worker) => worker.activeTaskIds ?? [])
     .sort();
 
+  assert.ok(runningTaskIds.length > 0, 'Must have at least one active RUNNING task after 48 ticks');
+  assert.ok(workerActiveTaskIds.length > 0, 'Worker active task IDs must not be empty');
   assert.equal(
     new Set(workerActiveTaskIds).size,
     workerActiveTaskIds.length,
@@ -1207,6 +1224,7 @@ test('44. Dispatched pool task failure uses its real error occurrence timestamp'
   });
   assert.ok(enqueue.ok && enqueue.taskId);
 
+  useOfficeStore.getState().setGlobalPaused(true);
   useOfficeStore.getState().tickSimulation();
   const dispatchedSnapshot = useOfficeStore.getState();
   const dispatchedTask = dispatchedSnapshot.tasks[enqueue.taskId];
@@ -1320,6 +1338,7 @@ test('45. TopBar distinguishes global queued total from pool-only queue count', 
     durationSimMs: 5000,
   });
   assert.ok(dispatch.ok);
+  useOfficeStore.getState().setGlobalPaused(true);
   useOfficeStore.getState().tickSimulation();
   assert.equal(useOfficeStore.getState().scheduler?.entries.length, 0);
   const afterDispatch = readCounters();
@@ -1463,6 +1482,71 @@ test('47. GlobalQueuePanel states when FAILED diagnostics are unavailable', () =
   }
 });
 
+test('47b. GlobalQueuePanel renders partial FAILED activity diagnostics without undefined', () => {
+  ensureMinimalDomEnvironment();
+  resetStore();
+
+  const failedTask = {
+    id: 'tsk_pool_ui_failed_partial_error',
+    workerId: 'sonnet',
+    type: 'INSTRUCTION_INTAKE',
+    title: 'Partial Error Task',
+    description: 'A task with partial error payload.',
+    category: 'ROUTING',
+    priority: 'NORMAL',
+    status: 'FAILED',
+    lifecycleStatus: 'FAILED',
+    assignedWorkerId: 'sonnet',
+    parentTaskId: null,
+    dependencyIds: [],
+    input: {},
+    result: null,
+    error: {
+      message: 'Simulated downstream connection reset',
+    },
+    attemptCount: 1,
+    maxAttempts: 3,
+    createdAt: 0,
+    queuedAt: 50,
+    startedAt: 100,
+    completedAt: null,
+    updatedAt: 500,
+    progress: 20,
+    elapsedSimMs: 400,
+    totalDurationSimMs: 2000,
+    stagePipeline: [],
+    simulatedTokens: 80,
+    targetTokens: 500,
+    simulatedCostUsd: 0,
+    costPerThousandTokensUsd: 0,
+    createdAtSimMs: 0,
+    startedAtSimMs: 100,
+    completedAtSimMs: null,
+    isSimulated: true,
+  } as unknown as TaskEntity;
+
+  useOfficeStore.setState({
+    tasks: { [failedTask.id]: failedTask },
+    scheduler: undefined,
+  } as any);
+
+  const container = document.createElement('div') as unknown as MockDomNode;
+  const root = createRoot(container as unknown as HTMLElement);
+  act(() => root.render(React.createElement(GlobalQueuePanel)));
+
+  try {
+    invokeReactProp(findNodeByTestId(container, 'tab-activity'), 'onClick');
+
+    const errorDetails = findNodeByTestId(container, 'activity-error-tsk_pool_ui_failed_partial_error');
+    assert.ok(errorDetails, 'Partial error details node must exist');
+    const text = collectDomText(errorDetails);
+    assert.ok(text.includes('Simulated downstream connection reset'), 'Error message must be displayed');
+    assert.ok(!text.includes('undefined'), 'Rendered diagnostics must not contain literal "undefined"');
+  } finally {
+    act(() => root.unmount());
+  }
+});
+
 
 test('48. TopBar speed controls update the selected speed and expose pressed state', () => {
   ensureMinimalDomEnvironment();
@@ -1545,6 +1629,85 @@ test('50. WorkerControls pause and resume buttons update the selected worker sta
     invokeReactProp(resumeButton, 'onClick');
     assert.equal(useOfficeStore.getState().workers.sonnet.status, 'IDLE');
     assert.equal(useOfficeStore.getState().workers.sonnet.statusBeforePause, null);
+  } finally {
+    act(() => root.unmount());
+  }
+});
+
+test('51. tickSimulation is NO-OP when isGlobalPaused === false', () => {
+  resetStore();
+  const stateBefore = useOfficeStore.getState();
+  assert.equal(stateBefore.isGlobalPaused, false);
+  const initialTime = stateBefore.simTimeMs;
+  const initialTickCount = stateBefore.tickCount;
+
+  useOfficeStore.getState().tickSimulation();
+
+  const stateAfter = useOfficeStore.getState();
+  assert.equal(stateAfter.simTimeMs, initialTime, 'simTimeMs must remain unchanged when unpaused');
+  assert.equal(stateAfter.tickCount, initialTickCount, 'tickCount must remain unchanged when unpaused');
+  assert.equal(stateAfter.isGlobalPaused, false, 'isGlobalPaused must remain false');
+});
+
+test('52. tickSimulation advances +500ms and +1 tick when isGlobalPaused === true', () => {
+  resetStore();
+  useOfficeStore.getState().setGlobalPaused(true);
+  const stateBefore = useOfficeStore.getState();
+  assert.equal(stateBefore.isGlobalPaused, true);
+  const initialTime = stateBefore.simTimeMs;
+  const initialTickCount = stateBefore.tickCount;
+
+  useOfficeStore.getState().tickSimulation();
+
+  const stateAfter = useOfficeStore.getState();
+  assert.equal(stateAfter.simTimeMs, initialTime + 500, 'simTimeMs must advance by +500ms');
+  assert.equal(stateAfter.tickCount, initialTickCount + 1, 'tickCount must advance by +1 tick');
+  assert.equal(stateAfter.isGlobalPaused, true, 'isGlobalPaused must remain true after manual stepping');
+});
+
+test('53. TopBar Step button is disabled when running and enabled when paused', () => {
+  ensureMinimalDomEnvironment();
+  resetStore();
+
+  const container = document.createElement('div') as unknown as MockDomNode;
+  const root = createRoot(container as unknown as HTMLElement);
+  act(() => root.render(React.createElement(TopBar)));
+
+  try {
+    // When running (isGlobalPaused === false)
+    assert.equal(useOfficeStore.getState().isGlobalPaused, false);
+    let stepButton = findNodeByAriaLabel(container, 'Step Simulation +500ms');
+    assert.ok(stepButton);
+    assert.equal(stepButton.attributes['aria-disabled'], 'true');
+    assert.equal('disabled' in stepButton.attributes, true);
+    const reactKey1 = Object.keys(stepButton).find(k => k.startsWith('__reactProps'));
+    assert.ok(reactKey1);
+    assert.equal((stepButton as any)[reactKey1].disabled, true);
+
+    // Clicking step when running should NO-OP and not advance time
+    const timeBefore = useOfficeStore.getState().simTimeMs;
+    invokeReactProp(stepButton, 'onClick');
+    assert.equal(useOfficeStore.getState().simTimeMs, timeBefore);
+
+    // Pause simulation
+    const pauseButton = findNodeByAriaLabel(container, 'Pause Global Simulation');
+    assert.ok(pauseButton);
+    invokeReactProp(pauseButton, 'onClick');
+    assert.equal(useOfficeStore.getState().isGlobalPaused, true);
+
+    // Re-render TopBar to reflect paused state
+    act(() => root.render(React.createElement(TopBar)));
+    stepButton = findNodeByAriaLabel(container, 'Step Simulation +500ms');
+    assert.ok(stepButton);
+    assert.equal(stepButton.attributes['aria-disabled'], 'false');
+    assert.equal('disabled' in stepButton.attributes, false);
+    const reactKey2 = Object.keys(stepButton).find(k => k.startsWith('__reactProps'));
+    assert.ok(reactKey2);
+    assert.equal((stepButton as any)[reactKey2].disabled, false);
+
+    // Clicking step when paused advances time
+    invokeReactProp(stepButton, 'onClick');
+    assert.equal(useOfficeStore.getState().simTimeMs, timeBefore + 500);
   } finally {
     act(() => root.unmount());
   }

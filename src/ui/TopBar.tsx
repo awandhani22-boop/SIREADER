@@ -75,7 +75,7 @@ export function TopBar() {
             className="font-mono font-semibold text-white"
             data-testid="sim-clock-value"
           >
-            {formatSimDuration(simTimeMs)}
+            {formatSimDuration(simTimeMs, { showFractionalSeconds: true })}
           </span>
         </div>
         <span className="text-slate-700" aria-hidden="true">
@@ -208,8 +208,18 @@ export function TopBar() {
           <button
             type="button"
             onClick={() => tickSimulation(500)}
-            className="flex items-center gap-0.5 px-2 py-1 text-[11px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer whitespace-nowrap"
-            title="Advance Simulation Clock by +500ms deterministically"
+            disabled={!isGlobalPaused}
+            aria-disabled={!isGlobalPaused}
+            className={`flex items-center gap-0.5 px-2 py-1 text-[11px] font-medium rounded transition-colors whitespace-nowrap ${
+              isGlobalPaused
+                ? 'text-slate-300 hover:text-white hover:bg-slate-800 cursor-pointer'
+                : 'text-slate-600 opacity-40 cursor-not-allowed'
+            }`}
+            title={
+              isGlobalPaused
+                ? 'Advance Simulation Clock by +500ms deterministically'
+                : 'Manual step is available only when simulation is paused'
+            }
             aria-label="Step Simulation +500ms"
           >
             <StepForward className="w-3 h-3" />

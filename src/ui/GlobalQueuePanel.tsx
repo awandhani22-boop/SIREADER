@@ -371,13 +371,26 @@ export function GlobalQueuePanel() {
                       {item.task.error ? (
                         <>
                           <p className="text-[10px] text-rose-200 break-words">
-                            {item.task.error.message}
+                            {item.task.error.message || 'Execution failed.'}
                           </p>
-                          <p className="font-mono text-[9px] text-rose-300/80 break-words">
-                            {item.task.error.code} · Attempt {item.task.error.attemptNumber}
-                            {' · '}
-                            {item.task.error.recoverable ? 'Recoverable' : 'Non-recoverable'}
-                          </p>
+                          {(() => {
+                            const details = [
+                              item.task.error.code,
+                              item.task.error.attemptNumber !== undefined
+                                ? `Attempt ${item.task.error.attemptNumber}`
+                                : null,
+                              item.task.error.recoverable !== undefined
+                                ? item.task.error.recoverable
+                                  ? 'Recoverable'
+                                  : 'Non-recoverable'
+                                : null,
+                            ].filter((v): v is string => Boolean(v));
+                            return details.length > 0 ? (
+                              <p className="font-mono text-[9px] text-rose-300/80 break-words">
+                                {details.join(' · ')}
+                              </p>
+                            ) : null;
+                          })()}
                         </>
                       ) : (
                         <p className="text-[10px] text-rose-200">

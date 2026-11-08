@@ -306,8 +306,16 @@ test('9. Reset clears scheduler entries, resets nextSequence to 1, and clears ac
   }
 
   // Advance one tick after reset and verify activeTaskIds and scheduler remain valid
+  useOfficeStore.getState().setGlobalPaused(true);
+  const beforeTickCount = useOfficeStore.getState().tickCount;
+  const beforeSimTime = useOfficeStore.getState().simTimeMs;
+
   useOfficeStore.getState().tickSimulation(FIXED_TICK_SIM_MS);
-  assert.deepEqual(useOfficeStore.getState().scheduler, {
+
+  const afterState = useOfficeStore.getState();
+  assert.equal(afterState.tickCount, beforeTickCount + 1, 'Exactly one tick must occur');
+  assert.equal(afterState.simTimeMs, beforeSimTime + FIXED_TICK_SIM_MS, 'Simulation time must advance by 500ms');
+  assert.deepEqual(afterState.scheduler, {
     entries: [],
     nextSequence: 1,
   });

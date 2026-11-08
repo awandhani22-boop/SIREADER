@@ -307,7 +307,11 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
 
   tickSimulation: (stepSimMs = FIXED_TICK_SIM_MS) =>
     set((state) => {
-      // Manual step advances exact stepSimMs even if globally paused, preserving isGlobalPaused
+      // Store-level guard: Manual step is strictly prohibited while global simulation is running
+      if (!state.isGlobalPaused) {
+        return state;
+      }
+      // Manual step advances exact stepSimMs when globally paused, preserving isGlobalPaused = true
       const tempUnpaused: SimulationSnapshot = {
         ...state,
         isGlobalPaused: false,
@@ -317,7 +321,7 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
       return {
         ...applySnapshotPatch(res.snapshot),
         ...diagPatch,
-        isGlobalPaused: state.isGlobalPaused,
+        isGlobalPaused: true,
       };
     }),
 

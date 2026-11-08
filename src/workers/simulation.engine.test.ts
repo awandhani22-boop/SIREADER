@@ -589,16 +589,19 @@ test('10. Speed multipliers (1x, 2x, 4x) scale simulation clock and avatar anima
 // 11. Step advances exactly the intended simulation interval.
 test('11. Step control advances simulation by the exact FIXED_TICK_SIM_MS (500ms) interval', () => {
   useOfficeStore.getState().resetSimulationWithSeed(DEFAULT_SIMULATION_SEED);
+  // Manual step requires store to be paused
+  useOfficeStore.getState().setGlobalPaused(true);
   const beforeSimTime = useOfficeStore.getState().simTimeMs;
   const beforeTicks = useOfficeStore.getState().tickCount;
 
-  // Step once while running
+  // Step once while paused
   useOfficeStore.getState().tickSimulation(FIXED_TICK_SIM_MS);
   assert.equal(
     useOfficeStore.getState().simTimeMs,
     beforeSimTime + FIXED_TICK_SIM_MS,
   );
   assert.equal(useOfficeStore.getState().tickCount, beforeTicks + 1);
+  assert.equal(useOfficeStore.getState().isGlobalPaused, true);
 
   // Step once more
   useOfficeStore.getState().tickSimulation(FIXED_TICK_SIM_MS);
@@ -607,6 +610,7 @@ test('11. Step control advances simulation by the exact FIXED_TICK_SIM_MS (500ms
     beforeSimTime + FIXED_TICK_SIM_MS * 2,
   );
   assert.equal(useOfficeStore.getState().tickCount, beforeTicks + 2);
+  assert.equal(useOfficeStore.getState().isGlobalPaused, true);
 });
 
 // 12. A failed GLB model displays its placeholder.
