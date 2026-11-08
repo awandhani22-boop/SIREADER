@@ -1,16 +1,18 @@
 # SIREADER Virtual Office — Project State
 
 ## Current phase
-**Phase 3.2 — IN PROGRESS: Secure BFF & Frontend Observability Integration.**
+**Phase 3.3 — PLANNED: Real-Time Observability (SSE).**
 
-- Active branch: `phase-3-2-batch-1-bff-foundation`
+- Phase 3.2 — Secure BFF & Frontend Observability Integration: **COMPLETE — owner acceptance confirmed 2026-11-09**.
+
+- Active documentation/continuation branch: `phase-3-2-closeout-phase-3-3-sse-plan` (created from the previously verified Phase 3.2 branch head).
 - Latest verified implementation commit: `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5` (`fix(serving): keep cross-platform launcher valid JavaScript`). Later commits only update the current-state documentation.
 - Batch 1 — BFF Foundation & Security Guards: implementation pushed; port and security changes source-audited.
 - Batch 2 — Fixed Upstream Proxy: implementation pushed; GitHub Actions run `42482847460` passed (323/323).
 - Batch 3 — Operator Authentication & Session Lifecycle: implementation pushed; GitHub Actions run `42483616073` passed (331/331), typecheck and production build passed.
-- Next work unit: Owner-side Phase 3.2 local acceptance (Windows, Chrome, operator session, and private Python API smoke checks).
+- Next work unit: Phase 3.3 SSE architecture and event-contract design; implementation must follow the approved contract and tests.
 - Phases 1, 2.1, 2.2 and 2.3 remain complete with historical evidence and documented deferrals.
-- Phase 3.1 is implemented in the separate Python Backend repo; owner-side local credential setup and authenticated five-endpoint smoke test remain unconfirmed in its runbook.
+- Phase 3.1 is implemented in the separate Python Backend repo. Owner-provided local report confirms the dedicated read-only database/API configuration and five authenticated GET smoke checks; the backend runbook still needs its own status wording synchronized.
 
 Product mission: [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md).
 Master roadmap: [`docs/ROADMAP.md`](ROADMAP.md).
@@ -18,7 +20,7 @@ Durable execution hand-off: [`docs/PHASE_3_2_EXECUTION_LOG.md`](PHASE_3_2_EXECUT
 Before every substantial task, re-read the three canonical docs in order, verify current branch HEAD, then inspect only relevant code.
 
 ### Current Phase 3.2 checkpoint
-- Branch: `phase-3-2-batch-1-bff-foundation`; latest verified implementation commit: `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5`.
+- Documentation branch: `phase-3-2-closeout-phase-3-3-sse-plan`; latest verified implementation commit remains `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5` (documentation-only commits are not implementation commits).
 - Batch 1 and Batch 2 details are recorded in the execution log below.
 - Batch 3 added `server/auth.ts`, `server/auth.test.ts`, the login/session/logout routes, error/log event updates, a masked local password-hash helper at `scripts/create-operator-password-hash.ts`, and `docs/OPERATOR_AUTH_SETUP.md`.
 - Password hash uses fixed scrypt N=16384, r=8, p=1, 16-byte salt and 64-byte derived key. No default password. Missing/malformed hash returns `503 AUTH_NOT_CONFIGURED`.
@@ -35,7 +37,10 @@ Before every substantial task, re-read the three canonical docs in order, verify
 - Batch 6 CI: first run `42486677113` passed 358/358 tests but typecheck flagged TypeScript-only syntax in the `.mjs` launcher. Commit `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5` corrected it. GitHub Actions run `42486731963`: 358/358 tests passed, 0 failed/skipped; TypeScript check passed; production build passed (653 ms); workflow SUCCESS.
 - The first Batch 3 CI run on `6c10ddf` failed one time-expiry assertion (401 instead of 200). The test was corrected to refresh idle time while advancing toward the absolute deadline. The login-attempt limiter was additionally hardened to reserve attempts before asynchronous scrypt. The rerun on `8dfa504` passed fully.
 - CI tests used in-process loopback servers and deterministic test hashes only; no live Python API, Supabase, paid provider, or real credentials were used.
-- Not yet verified locally by the owner: Windows `bun run dev` and production `bun run start`; actual browser login/HttpOnly cookie/CSRF/logout in Chrome; locally generated operator password hash; private Python API authenticated five-endpoint smoke tests; presence-only local `SIREADER_API_AUTH_TOKEN` configuration; a real end-to-end LIVE data session. GitHub CI verifies the code, unit/integration tests, typecheck and build, but does not prove the owner machine's local secrets, backend service, browser cookie behavior, or real Supabase connectivity.
+- Owner acceptance confirmed by the user (2026-11-09; manual owner-reported evidence, not independently captured logs): local development services and production-like launcher were reported safe; operator login succeeded; the Python Backend and five authenticated read-only API endpoints had previously passed local smoke checks; the server-to-server token remained configured without exposing its value; Chrome showed the `__Host-sireader_sid` cookie with HttpOnly, Secure, SameSite=Strict, Path=/ and host-only behavior; `document.cookie` could not read the session cookie; LIVE observability loaded; refresh restored the LIVE view; Simulation and LIVE remained isolated; logout/reload/session revocation were reported safe.
+- Production-like check limitation: the owner confirmed the production launcher test as safe, but did not provide command output or a sanitized HTTP transcript. Treat it as owner-reported acceptance, not independently reproducible evidence. Repeat from the runbook when preparing a formal release or diagnosing deployment issues.
+- Pipeline may display a transient `LOADING` state while a request is in progress; do not describe it as permanently LIVE. Empty datasets (for example zero active market watches) are valid when the endpoint snapshot itself is LIVE.
+- GitHub CI and local owner acceptance are separate evidence classes. No secret values or credentials are recorded here.
 - No merge to `main` has been performed.
 
 ## Implemented
