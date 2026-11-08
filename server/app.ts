@@ -25,10 +25,12 @@ import {
 import { sendBffError } from './errors.ts';
 import { SafeLogger } from './log.ts';
 import { createUpstreamHandlers, type UpstreamProxyOptions, type UpstreamApiPath } from './upstream.ts';
+import { OperatorAuthService, disableAuthCaching, type OperatorAuthOptions } from './auth.ts';
 
 export interface BffAppDependencies extends UpstreamProxyOptions {
-  /** Test seam only. Production defaults to deny until Batch 3 session auth is installed. */
+  /** Test seam for upstream-only fixtures; never set in the production entrypoint. */
   readonly requireOperatorSession?: RequestHandler;
+  readonly authOptions?: OperatorAuthOptions;
 }
 
 export function createBffApp(
@@ -38,22 +40,8 @@ export function createBffApp(
   const config = loadBffConfig(configOverrides);
   const app = express();
   const upstreamHandlers = createUpstreamHandlers(dependencies);
-  const requireOperatorSession: RequestHandler =
-    dependencies.requireOperatorSession ??
-    ((req, res) => {
-      SafeLogger.warn('SESSION_UNAUTHENTICATED', {
-        method: 'GET',
-        route: req.path,
-        statusCode: 401,
-        errorCode: 'SESSION_REQUIRED',
-      });
-      sendBffError(
-        res,
-        401,
-        'SESSION_REQUIRED',
-        'Operator session is required before accessing backend observability.',
-      );
-    });
+  const operatorAuth = new OperatorAuthService(dependencies.authOptions);
+  const requireOperatorSession = dependencies.requireOperatorSession ?? operatorAuth.requireSession;
 
   // Disable Express framework signature
   app.disable('x-powered-by');
@@ -113,30 +101,67 @@ export function createBffApp(
   };
 
   // 7. Canonical Endpoints (Guarded Route Handlers)
-  // Domain 1: Operator Authentication & Session lifecycle
-  // Without active session, returns 401 SESSION_REQUIRED
-  app.get('/api/auth/session', (_req: Request, res: Response) => {
-    sendBffError(
-      res,
-      401,
-      'SESSION_REQUIRED',
-      'Phase 3.2 Batch 1: Session authentication required; session management scheduled for Batch 3.',
-    );
+  // Domain 1: Operator authentication and single-user session lifecycle.
+  app.get('/api/auth/session', operatorAuth.requireSession, (_req: Request, res: Response) => {
+    res.status(200).json({ authenticated: true, csrfToken: res.locals.operatorCsrfToken });
   });
 
-  // Stubs for login/logout return explicit 501 NOT_IMPLEMENTED (never success-shaped 200)
   app.post(
     '/api/auth/login',
     authPolicyGuard,
     authBodyParser,
     handleAuthBodyError,
-    (_req: Request, res: Response) => {
-      sendBffError(
-        res,
-        501,
-        'NOT_IMPLEMENTED',
-        'Phase 3.2 Batch 1: Login endpoint guarded; credential verification scheduled for Batch 3.',
-      );
+    async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+      const body = req.body as unknown;
+      if (
+        typeof body !== 'object' ||
+        body === null ||
+        Array.isArray(body) ||
+        typeof (body as Record<string, unknown>).password !== 'string' ||
+        (body as Record<string, string>).password.length < 1 ||
+        Buffer.byteLength((body as Record<string, string>).password, 'utf8') > 256
+      ) {
+        sendBffError(res, 400, 'BAD_REQUEST', 'Login body must contain a password of 1–256 UTF-8 bytes.');
+        return;
+      }
+      try {
+        const result = await operatorAuth.authenticate(
+          (body as Record<string, string>).password,
+          req.socket.remoteAddress,
+          req.headers.cookie,
+        );
+        if (result.kind === 'not_configured') {
+          SafeLogger.error('AUTH_CONFIGURATION_UNAVAILABLE', {
+            method: 'POST', route: '/api/auth/login', statusCode: 503, errorCode: 'AUTH_NOT_CONFIGURED',
+          });
+          disableAuthCaching(res);
+          sendBffError(res, 503, 'AUTH_NOT_CONFIGURED', 'Operator authentication is not configured.');
+          return;
+        }
+        if (result.kind === 'rate_limited') {
+          SafeLogger.warn('AUTH_RATE_LIMITED', {
+            method: 'POST', route: '/api/auth/login', statusCode: 429, errorCode: 'RATE_LIMITED',
+          });
+          disableAuthCaching(res);
+          sendBffError(res, 429, 'RATE_LIMITED', 'Too many failed login attempts. Try again later.');
+          return;
+        }
+        if (result.kind === 'invalid_credentials') {
+          SafeLogger.warn('AUTH_LOGIN_REJECTED', {
+            method: 'POST', route: '/api/auth/login', statusCode: 401, errorCode: 'INVALID_CREDENTIALS',
+          });
+          disableAuthCaching(res);
+          sendBffError(res, 401, 'INVALID_CREDENTIALS', 'Invalid operator credentials.');
+          return;
+        }
+        operatorAuth.setLoginCookie(res, result.sessionId);
+        SafeLogger.info('AUTH_LOGIN_SUCCEEDED', {
+          method: 'POST', route: '/api/auth/login', statusCode: 200,
+        });
+        res.status(200).json({ authenticated: true, csrfToken: result.csrfToken });
+      } catch (error) {
+        next(error);
+      }
     },
   );
 
@@ -145,13 +170,15 @@ export function createBffApp(
     authPolicyGuard,
     authBodyParser,
     handleAuthBodyError,
-    (_req: Request, res: Response) => {
-      sendBffError(
-        res,
-        501,
-        'NOT_IMPLEMENTED',
-        'Phase 3.2 Batch 1: Logout endpoint guarded; session destruction scheduled for Batch 3.',
-      );
+    operatorAuth.requireSession,
+    operatorAuth.requireCsrf,
+    (req: Request, res: Response) => {
+      operatorAuth.revokeRequestSession(req);
+      operatorAuth.clearCookie(res);
+      SafeLogger.info('AUTH_LOGOUT_SUCCEEDED', {
+        method: 'POST', route: '/api/auth/logout', statusCode: 200,
+      });
+      res.status(200).json({ authenticated: false });
     },
   );
 

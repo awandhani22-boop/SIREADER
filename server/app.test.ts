@@ -125,6 +125,7 @@ test('SIREADER Phase 3.2 BFF Test Suite — Remediated', async (t) => {
   const app = createBffApp(undefined, {
     tokenProvider: () => 'unit-test-server-token',
     requireOperatorSession: (_req, _res, next) => next(),
+    authOptions: { passwordHash: '' },
     fetchImpl: async () =>
       new Response(
         JSON.stringify({
@@ -672,52 +673,39 @@ test('SIREADER Phase 3.2 BFF Test Suite — Remediated', async (t) => {
   });
 
   // =========================================================================
-  // SECTION 5: P1 — Authentication Stub Semantics (401 & 501)
-  // =========================================================================
-  await t.test('P1-11. GET /api/auth/session returns 401 SESSION_REQUIRED without authenticated session', async () => {
+  // SECTION 5: P1 — Authentication fails closed without operator configuration
+  await t.test('P1-11. GET /api/auth/session returns 401 without a valid cookie', async () => {
     const res = await makeRequest(server, {
       path: '/api/auth/session',
       headers: { ...VALID_HEADERS },
     });
-
     assert.equal(res.status, 401);
     assert.equal(res.json?.error?.code, 'SESSION_REQUIRED');
-    assert.match(res.json?.error?.message, /Session authentication required/);
+    assert.match(res.json?.error?.message, /active operator session is required/i);
   });
 
-  await t.test('P1-12. POST /api/auth/login returns 501 NOT_IMPLEMENTED (never success 200)', async () => {
+  await t.test('P1-12. POST /api/auth/login fails closed when password hash is not configured', async () => {
     const res = await makeRequest(server, {
       method: 'POST',
       path: '/api/auth/login',
-      headers: {
-        ...VALID_HEADERS,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({ username: 'operator' }),
+      headers: { ...VALID_HEADERS, 'content-type': 'application/json' },
+      body: JSON.stringify({ password: 'test-only-password' }),
     });
-
-    assert.equal(res.status, 501);
-    assert.equal(res.json?.error?.code, 'NOT_IMPLEMENTED');
-    assert.match(res.json?.error?.message, /Batch 3/);
+    assert.equal(res.status, 503);
+    assert.equal(res.json?.error?.code, 'AUTH_NOT_CONFIGURED');
   });
 
-  await t.test('P1-13. POST /api/auth/logout returns 501 NOT_IMPLEMENTED (never success 200)', async () => {
+  await t.test('P1-13. POST /api/auth/logout requires an active operator session', async () => {
     const res = await makeRequest(server, {
       method: 'POST',
       path: '/api/auth/logout',
-      headers: {
-        ...VALID_HEADERS,
-        'content-type': 'application/json',
-      },
+      headers: { ...VALID_HEADERS, 'content-type': 'application/json' },
       body: JSON.stringify({}),
     });
-
-    assert.equal(res.status, 501);
-    assert.equal(res.json?.error?.code, 'NOT_IMPLEMENTED');
-    assert.match(res.json?.error?.message, /Batch 3/);
+    assert.equal(res.status, 401);
+    assert.equal(res.json?.error?.code, 'SESSION_REQUIRED');
   });
 
-  // =========================================================================
   // SECTION 6: P2 — Safe Logger Contract
   // =========================================================================
   await t.test('P2-1. SafeLogger prevents log injection and strips CR, LF, and control characters', () => {

@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test src/scheduler/priority.scheduler.test.ts src/scheduler/scheduler.state.test.ts src/scheduler/task.dispatcher.test.ts src/scheduler/worker.matching.test.ts src/scheduler/worker.selector.test.ts src/tasks/task.model.test.ts src/tasks/task.transitions.test.ts src/utils/formatters.test.ts src/workers/simulation.engine.determinism.test.ts src/workers/simulation.engine.scheduler.test.ts src/workers/simulation.engine.test.ts src/workers/worker.capabilities.test.ts src/workers/worker.concurrency.test.ts src/workers/worker.execution.test.ts src/workers/worker.state.test.ts server/app.test.ts server/upstream.test.ts"
+    "test": "node --import tsx --test src/scheduler/priority.scheduler.test.ts src/scheduler/scheduler.state.test.ts src/scheduler/task.dispatcher.test.ts src/scheduler/worker.matching.test.ts src/scheduler/worker.selector.test.ts src/tasks/task.model.test.ts src/tasks/task.transitions.test.ts src/utils/formatters.test.ts src/workers/simulation.engine.determinism.test.ts src/workers/simulation.engine.scheduler.test.ts src/workers/simulation.engine.test.ts src/workers/worker.capabilities.test.ts src/workers/worker.concurrency.test.ts src/workers/worker.execution.test.ts src/workers/worker.state.test.ts server/app.test.ts server/upstream.test.ts server/auth.test.ts",
+    "hash:operator": "tsx scripts/create-operator-password-hash.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
