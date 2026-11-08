@@ -584,7 +584,10 @@ export function createUpstreamSseHandler(
       });
       await pipeline(Readable.fromWeb(upstream.body as never), res);
     } catch (error) {
-      if (!res.headersSent) {
+      if (res.destroyed) {
+        // The browser has already gone away; do not attempt to write a JSON error
+        // to a closed socket. cleanup() below still aborts the upstream fetch.
+      } else if (!res.headersSent) {
         const timedOut = controller.signal.aborted;
         SafeLogger.warn(timedOut ? 'UPSTREAM_SSE_TIMEOUT' : 'UPSTREAM_SSE_FAILED', {
           method: 'GET', route: UPSTREAM_SSE_PATH,
@@ -595,7 +598,7 @@ export function createUpstreamSseHandler(
           res, timedOut ? 504 : 502, timedOut ? 'TIMEOUT' : 'UNREACHABLE',
           timedOut ? 'Backend event stream connection timed out.' : 'Backend event stream is unavailable.',
         );
-      } else if (!res.destroyed) {
+      } else {
         res.destroy();
       }
     } finally {
