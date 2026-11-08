@@ -5,8 +5,8 @@
 
 - Phase 3.2 — Secure BFF & Frontend Observability Integration: **COMPLETE — owner acceptance confirmed 2026-11-09**.
 
-- Active Virtual Office implementation branch: `phase-3-3-sse` (latest Phase 3.3 code commit `1f73a6990d3ec71d8d581fb4dc27af07ab52e04b`).
-- Active Python Backend implementation branch: `phase-3-3-sse-backend` (latest Phase 3.3 code commit `c372d4540a701e3b860b297a8e4b18710b47e90f`).
+- Active Virtual Office implementation branch: `phase-3-3-sse` (branch HEAD `39df24187b6ff1b0a06cccee6f966942f5109fc4`; latest SSE code commit `1f73a6990d3ec71d8d581fb4dc27af07ab52e04b`).
+- Active Python Backend implementation branch: `phase-3-3-sse-backend` (branch HEAD `e7ba6655c91b0beaad3a95276a0fbfc58ce8cca1`; latest listener code commit `6d928cc037666a14096c2b2d9f4020d0198b01b8`).
 - Phase 3.2 closeout documentation branch: `phase-3-2-closeout-phase-3-3-sse-plan`; kept separate from implementation work.
 - Latest verified implementation commit: `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5` (`fix(serving): keep cross-platform launcher valid JavaScript`). Later commits only update the current-state documentation.
 - Batch 1 — BFF Foundation & Security Guards: implementation pushed; port and security changes source-audited.
@@ -143,11 +143,12 @@ Before every substantial task, re-read the three canonical docs in order, verify
 - Durable implementation ledger: `docs/PHASE_3_3_EXECUTION_LOG.md`.
 - Python Backend branch `phase-3-3-sse-backend`: static resource-key trigger migration + rollback; Psycopg 3 async LISTEN listener; bounded EventHub/replay; authenticated FastAPI SSE route; PostgreSQL integration tests.
 - Virtual Office branch `phase-3-3-sse`: fixed authenticated BFF SSE proxy; strict `Last-Event-ID` validation; bounded connection count; backpressure/disconnect cleanup; strict browser event contract; same-origin EventSource; snapshot invalidation and polling fallback; 60-second reconciliation while connected.
-- Latest Virtual Office CI run `42533498709` at `7b318ae690e0affd53778d9cfb24953bf27b6b35`: 371/371 tests passed; TypeScript check and production build passed.
-- Latest Python Backend CI run `42533488378` at `6a6d80a56030dabc8dd49f680d0c7f17097d3dbb`: 100 API/PostgreSQL tests passed; `compileall` passed; 50 core regression tests passed.
+- Latest Virtual Office CI run `42533960028` at `1f73a6990d3ec71d8d581fb4dc27af07ab52e04b`: 371/371 tests passed; TypeScript check and production build passed.
+- Latest Python Backend CI run `42534343574` at branch HEAD `e7ba6655c91b0beaad3a95276a0fbfc58ce8cca1`: 100 API/PostgreSQL tests passed; `compileall` passed; 50 core regression tests passed.
+- The latest backend run includes 100 API/PostgreSQL tests, Python API compileall and 50 core regressions. It exercises the migration's row and TRUNCATE triggers and the real Psycopg listener against disposable CI PostgreSQL.
 - Both CI runs use GitHub disposable test infrastructure, not the owner's Supabase project or local Chrome.
 - Owner acceptance remains open: confirm session-pooler supports persistent `LISTEN`; review/apply the trigger migration through approved DB-owner process; verify actual notification delivery; test same-origin EventSource/reconnect/replay/reset/fallback during API/BFF restart in Chrome; verify no bearer token reaches browser; measure resource/performance behavior.
-- No migration has been applied to the owner's Supabase database. No secrets, credentials, or tokens are recorded here.
+- No migration has been applied to the owner's Supabase database. A safe local LISTEN probe and owner acceptance runbook have been added in the backend branch. No secrets, credentials, or tokens are recorded here.
 - Preparatory future-phase design documents exist for Phase 4.1, 4.2, 4.3, 4.4 and Phases 5–6. They are planning artifacts only; none of those phases has started.
 
 ## Next
@@ -160,6 +161,6 @@ Complete Phase 3.3 owner acceptance and record any environment-specific limitati
 - Proposed delivery: one-process bounded EventHub and replay ring, process-epoch event IDs, Last-Event-ID replay where retained, explicit reset/resync when history is missing, heartbeat, bounded queues, and disconnect cleanup.
 - Proposed topology: authenticated Python SSE endpoint -> authenticated Express BFF streaming proxy -> same-origin browser EventSource. The Bearer token never enters browser code.
 - Existing polling remains the fallback and periodic snapshot reconciliation. Simulation stays isolated.
-- This is a documented design baseline, not approved implementation. Confirm Supabase session-pooler LISTEN behavior and review the database trigger migration/security before coding.
+- Phase 3.3 code and CI are in progress on isolated branches. Owner Supabase LISTEN/migration and Chrome/reconnect acceptance remain mandatory before marking the phase complete.
 - Phase 4.1–6.3 remain planned and must be completed in roadmap order. v1.0 remains unreleased.
 
