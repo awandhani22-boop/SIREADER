@@ -4,7 +4,7 @@
  * Starts the BFF and Vite as sibling loopback-only processes. If either exits,
  * the other is stopped so the application cannot be left half-running.
  */
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 
 const environment = {
   ...process.env,
@@ -16,10 +16,10 @@ const commands = [
   ['node_modules/vite/bin/vite.js'],
 ];
 
-const children: ChildProcess[] = [];
+const children = [];
 let shuttingDown = false;
 
-function stop(exitCode: number): void {
+function stop(exitCode) {
   if (shuttingDown) return;
   shuttingDown = true;
   process.exitCode = exitCode;
