@@ -102,6 +102,7 @@ function ResourceError<T>({ resource }: { resource: LiveResourceSnapshot<T> }) {
 
 export function LiveObservabilityDock() {
   const [poller] = useState<LivePoller>(() => createLivePoller(liveController));
+  const [isPollerRunning, setIsPollerRunning] = useState(false);
   const [streamStatus, setStreamStatus] = useState<LiveEventStreamStatus>('STOPPED');
   const [eventStream] = useState<LiveEventStream>(() =>
     createLiveEventStream(poller, { onStatus: setStreamStatus }),
@@ -120,20 +121,31 @@ export function LiveObservabilityDock() {
   const audit = useLiveStore((state) => state.resources['/api/v1/audit/decisions']);
 
   useEffect(() => {
-    void poller.start().catch((error: unknown) => setActionError(safeErrorMessage(error)));
+    let mounted = true;
+    void poller.start()
+      .then((started) => {
+        if (mounted) setIsPollerRunning(started && poller.isRunning());
+      })
+      .catch((error: unknown) => {
+        if (mounted) {
+          setIsPollerRunning(false);
+          setActionError(safeErrorMessage(error));
+        }
+      });
     return () => {
+      mounted = false;
       eventStream.stop();
       poller.stop();
     };
   }, [poller, eventStream]);
 
   useEffect(() => {
-    if (session === 'AUTHENTICATED' && poller.isRunning()) {
+    if (session === 'AUTHENTICATED' && isPollerRunning && poller.isRunning()) {
       eventStream.start();
     } else {
       eventStream.stop();
     }
-  }, [session, poller, eventStream]);
+  }, [session, isPollerRunning, poller, eventStream]);
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -144,7 +156,8 @@ export function LiveObservabilityDock() {
     setIsSubmitting(true);
     try {
       await liveController.login(submittedPassword);
-      await poller.start({ skipSessionBootstrap: true });
+      const started = await poller.start({ skipSessionBootstrap: true });
+      setIsPollerRunning(started && poller.isRunning());
     } catch (error) {
       setActionError(safeErrorMessage(error));
     } finally {
@@ -158,6 +171,7 @@ export function LiveObservabilityDock() {
     setIsSubmitting(true);
     eventStream.stop();
     poller.stop();
+    setIsPollerRunning(false);
     try {
       await liveController.logout();
     } catch (error) {
@@ -173,8 +187,10 @@ export function LiveObservabilityDock() {
     setIsSubmitting(true);
     eventStream.stop();
     poller.stop();
+    setIsPollerRunning(false);
     try {
-      await poller.start();
+      const started = await poller.start();
+      setIsPollerRunning(started && poller.isRunning());
     } catch (error) {
       setActionError(safeErrorMessage(error));
     } finally {
