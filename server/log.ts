@@ -30,7 +30,11 @@ export type SafeLogEvent =
   | 'MALFORMED_JSON'
   | 'SESSION_UNAUTHENTICATED'
   | 'INTERNAL_ERROR'
-  | 'REQUEST_COMPLETED';
+  | 'REQUEST_COMPLETED'
+  | 'UPSTREAM_AUTH_MISSING'
+  | 'UPSTREAM_TIMEOUT'
+  | 'UPSTREAM_REQUEST_FAILED'
+  | 'UPSTREAM_RESPONSE_REJECTED';
 
 export interface SafeLogEntry {
   readonly level: 'INFO' | 'WARN' | 'ERROR';

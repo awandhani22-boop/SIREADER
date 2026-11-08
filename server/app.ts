@@ -12,6 +12,7 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import type { Server } from 'node:http';
+import type { RequestHandler } from 'express';
 import { loadBffConfig, type BffConfig } from './config.ts';
 import {
   createHostGuard,
@@ -23,10 +24,36 @@ import {
 } from './guards.ts';
 import { sendBffError } from './errors.ts';
 import { SafeLogger } from './log.ts';
+import { createUpstreamHandlers, type UpstreamProxyOptions, type UpstreamApiPath } from './upstream.ts';
 
-export function createBffApp(configOverrides?: Partial<BffConfig>): express.Application {
+export interface BffAppDependencies extends UpstreamProxyOptions {
+  /** Test seam only. Production defaults to deny until Batch 3 session auth is installed. */
+  readonly requireOperatorSession?: RequestHandler;
+}
+
+export function createBffApp(
+  configOverrides?: Partial<BffConfig>,
+  dependencies: BffAppDependencies = {},
+): express.Application {
   const config = loadBffConfig(configOverrides);
   const app = express();
+  const upstreamHandlers = createUpstreamHandlers(dependencies);
+  const requireOperatorSession: RequestHandler =
+    dependencies.requireOperatorSession ??
+    ((_req, res) => {
+      SafeLogger.warn('SESSION_UNAUTHENTICATED', {
+        method: 'GET',
+        route: '/api/v1/system/status',
+        statusCode: 401,
+        errorCode: 'SESSION_REQUIRED',
+      });
+      sendBffError(
+        res,
+        401,
+        'SESSION_REQUIRED',
+        'Operator session is required before accessing backend observability.',
+      );
+    });
 
   // Disable Express framework signature
   app.disable('x-powered-by');
@@ -128,46 +155,19 @@ export function createBffApp(configOverrides?: Partial<BffConfig>): express.Appl
     },
   );
 
-  // Domain 2: Read-Only Backend Observability Gateway
-  app.get('/api/v1/system/status', (_req: Request, res: Response) => {
-    res.json({
-      status: 'GUARDED',
-      endpoint: '/api/v1/system/status',
-      message: 'Phase 3.2 Batch 1: Read-only system status route guarded; upstream proxy scheduled for Batch 2.',
-    });
-  });
+  // Domain 2: Read-Only Backend Observability Gateway.
+  // Until Batch 3 implements the real operator session store, access defaults to deny.
+  const upstreamRoutes: readonly UpstreamApiPath[] = [
+    '/api/v1/system/status',
+    '/api/v1/telemetry/usage',
+    '/api/v1/pipeline/active',
+    '/api/v1/market-watches/active',
+    '/api/v1/audit/decisions',
+  ];
 
-  app.get('/api/v1/telemetry/usage', (_req: Request, res: Response) => {
-    res.json({
-      status: 'GUARDED',
-      endpoint: '/api/v1/telemetry/usage',
-      message: 'Phase 3.2 Batch 1: Read-only telemetry usage route guarded; upstream proxy scheduled for Batch 2.',
-    });
-  });
-
-  app.get('/api/v1/pipeline/active', (_req: Request, res: Response) => {
-    res.json({
-      status: 'GUARDED',
-      endpoint: '/api/v1/pipeline/active',
-      message: 'Phase 3.2 Batch 1: Read-only pipeline active route guarded; upstream proxy scheduled for Batch 2.',
-    });
-  });
-
-  app.get('/api/v1/market-watches/active', (_req: Request, res: Response) => {
-    res.json({
-      status: 'GUARDED',
-      endpoint: '/api/v1/market-watches/active',
-      message: 'Phase 3.2 Batch 1: Read-only market watches route guarded; upstream proxy scheduled for Batch 2.',
-    });
-  });
-
-  app.get('/api/v1/audit/decisions', (_req: Request, res: Response) => {
-    res.json({
-      status: 'GUARDED',
-      endpoint: '/api/v1/audit/decisions',
-      message: 'Phase 3.2 Batch 1: Read-only audit decisions route guarded; upstream proxy scheduled for Batch 2.',
-    });
-  });
+  for (const path of upstreamRoutes) {
+    app.get(path, requireOperatorSession, upstreamHandlers[path]);
+  }
 
   // 8. Fallback 404 for unhandled paths (e.g. unknown static requests)
   app.use((_req: Request, res: Response) => {

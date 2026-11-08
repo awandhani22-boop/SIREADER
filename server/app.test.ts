@@ -122,7 +122,21 @@ const VALID_HEADERS = {
 };
 
 test('SIREADER Phase 3.2 BFF Test Suite — Remediated', async (t) => {
-  const app = createBffApp();
+  const app = createBffApp(undefined, {
+    tokenProvider: () => 'unit-test-server-token',
+    requireOperatorSession: (_req, _res, next) => next(),
+    fetchImpl: async () =>
+      new Response(
+        JSON.stringify({
+          api_status: 'HEALTHY',
+          database_status: 'CONNECTED',
+          server_time_utc: '2026-11-08T00:00:00Z',
+          runtime_control: null,
+          process_monitoring_note: 'Worker OS liveness is unmonitored.',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+  });
   const server = http.createServer(app);
 
   await new Promise<void>((resolve) => {
