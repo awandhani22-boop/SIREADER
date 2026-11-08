@@ -4,11 +4,11 @@
 **Phase 3.2 — IN PROGRESS: Secure BFF & Frontend Observability Integration.**
 
 - Active branch: `phase-3-2-batch-1-bff-foundation`
-- Latest verified remote HEAD: `8dfa50421f30bc888d22c880dcb5bd496f201d0e` (`fix(auth): enforce concurrent login attempt limits and correct expiry test`)
+- Latest verified remote HEAD: `e504abf3d7cd8781559275eb4243431a88df57ad` (`fix(auth): enforce concurrent login attempt limits and correct expiry test`)
 - Batch 1 — BFF Foundation & Security Guards: implementation pushed; port and security changes source-audited.
 - Batch 2 — Fixed Upstream Proxy: implementation pushed; GitHub Actions run `42482847460` passed (323/323).
 - Batch 3 — Operator Authentication & Session Lifecycle: implementation pushed; GitHub Actions run `42483616073` passed (331/331), typecheck and production build passed.
-- Next work unit: Batch 4 — Frontend API Contracts & Runtime State.
+- Next work unit: Batch 5 — Polling & Observability Presentation.
 - Phases 1, 2.1, 2.2 and 2.3 remain complete with historical evidence and documented deferrals.
 - Phase 3.1 is implemented in the separate Python Backend repo; owner-side local credential setup and authenticated five-endpoint smoke test remain unconfirmed in its runbook.
 
@@ -18,7 +18,7 @@ Durable execution hand-off: [`docs/PHASE_3_2_EXECUTION_LOG.md`](PHASE_3_2_EXECUT
 Before every substantial task, re-read the three canonical docs in order, verify current branch HEAD, then inspect only relevant code.
 
 ### Current Phase 3.2 checkpoint
-- Branch: `phase-3-2-batch-1-bff-foundation`; latest verified remote HEAD: `8dfa50421f30bc888d22c880dcb5bd496f201d0e`.
+- Branch: `phase-3-2-batch-1-bff-foundation`; latest verified remote HEAD: `e504abf3d7cd8781559275eb4243431a88df57ad`.
 - Batch 1 and Batch 2 details are recorded in the execution log below.
 - Batch 3 added `server/auth.ts`, `server/auth.test.ts`, the login/session/logout routes, error/log event updates, a masked local password-hash helper at `scripts/create-operator-password-hash.ts`, and `docs/OPERATOR_AUTH_SETUP.md`.
 - Password hash uses fixed scrypt N=16384, r=8, p=1, 16-byte salt and 64-byte derived key. No default password. Missing/malformed hash returns `503 AUTH_NOT_CONFIGURED`.
@@ -27,9 +27,11 @@ Before every substantial task, re-read the three canonical docs in order, verify
 - Cookie is `__Host-sireader_sid`, HttpOnly, Secure, SameSite=Strict, Path=/, no Domain, Max-Age=28800. Logout requires active session + constant-time CSRF check.
 - All five upstream observability routes now use the real operator session middleware in production. The upstream auth bypass dependency is documented as test-only and is used only by mock test harnesses.
 - GitHub Actions run `42483616073` on `8dfa50421f30bc888d22c880dcb5bd496f201d0e`: 331 tests passed, 0 failed; TypeScript check passed; production build passed (828 ms in run log). Frozen Bun dependency install passed.
+- Batch 4 added `src/live/live.contracts.ts`, `live.api.ts`, `live.state.ts`, `live.controller.ts`, and `live.test.ts`; `package.json` now includes the LIVE tests in the complete test command. Five API DTOs are strictly validated against the BFF/Python contract; the browser client calls fixed same-origin paths only, never sends a bearer token, stores CSRF only in a private in-memory closure, uses same-origin credentials and a 5-second timeout, and has explicit transport/auth/schema errors. LIVE data is kept in an independent Zustand store with explicit `source: LIVE`; it does not import or derive from `useOfficeStore` simulation state. Session-required and logout flows clear private LIVE data. No polling or UI presentation is included yet.
+- Batch 4 CI: first run `42485110003` — 343/343 tests passed, TypeScript check found two unsafe DTO casts, so build was skipped. Fix commit `e504abf3d7cd8781559275eb4243431a88df57ad` was followed by GitHub Actions run `42485169977`: 343/343 tests passed; TypeScript check passed; production build passed; final workflow conclusion SUCCESS.
 - The first Batch 3 CI run on `6c10ddf` failed one time-expiry assertion (401 instead of 200). The test was corrected to refresh idle time while advancing toward the absolute deadline. The login-attempt limiter was additionally hardened to reserve attempts before asynchronous scrypt. The rerun on `8dfa504` passed fully.
 - CI tests used in-process loopback servers and deterministic test hashes only; no live Python API, Supabase, paid provider, or real credentials were used.
-- Not yet verified: Windows owner-side test/build; local generated operator hash setup; browser HttpOnly cookie/login/CSRF behavior in Chrome; local Python API authenticated smoke tests; dev Vite proxy and production static serving; frontend LIVE state/presentation.
+- Not yet verified: Windows owner-side test/build; local generated operator hash setup; browser HttpOnly cookie/login/CSRF behavior in Chrome; local Python API authenticated smoke tests; dev Vite proxy and production static serving; polling freshness/reconnect behavior; visible LIVE panels/login UI. Batch 4 adapter/state code is CI-verified but not yet wired into the visible Office UI.
 - No merge to `main` has been performed.
 
 ## Implemented
@@ -125,15 +127,17 @@ Before every substantial task, re-read the three canonical docs in order, verify
 - **Phase 3.1 — Read-Only Observability API Gateway: COMPLETE (2026-11-08)** in the separate `awandhani22-boop/SIREADER-Python-Backend` repository. Supabase lockdown and dedicated `sireader_api_ro` access were verified; all five local GET endpoints returned 200; missing token returned 401; POST/PUT/PATCH/DELETE returned 405; 74 API tests and 50 core backend regression tests passed locally; API compile passed; GitHub Actions run `42397323807` succeeded. Backend remains a separate project boundary.
 
 ## Next
-Begin **Phase 3.2 Batch 2 — Fixed Upstream Proxy** on `phase-3-2-batch-1-bff-foundation`.
+Begin **Phase 3.2 Batch 5 — Polling & Observability Presentation** on `phase-3-2-batch-1-bff-foundation`.
 
 Before implementation:
-1. Read the current branch's BFF files and the separate backend contract at `awandhani22-boop/SIREADER-Python-Backend`, branch `phase-3-1-api-gateway`.
-2. Match all five response validators to `app/api/schemas.py` and the route implementations; do not invent fields.
-3. Implement only fixed loopback upstream mappings. Build upstream headers from scratch with server-only Bearer and `Accept: application/json`; never forward browser headers.
-4. Enforce a 5-second end-to-end timeout, manual redirect rejection, streaming response cap of 1 MiB, safe error mapping, and explicit schema validation.
-5. Add mock-upstream tests for all five GET routes, outbound header isolation, missing token, timeout, connection failure, redirect, HTTP error, content-type mismatch, invalid JSON/schema, and oversized streams.
-6. Run tests/typecheck/build locally where available. Record unavailable checks honestly. Commit and push only a complete, reviewed unit to this branch.
+1. Re-read the three canonical docs and verify the current remote HEAD; Batch 4 is at `e504abf3d7cd8781559275eb4243431a88df57ad`.
+2. Inspect the existing OfficeApp composition, TopBar, panels, and LIVE adapter/controller. Keep the deterministic simulation untouched and do not conflate its worker/task/token/cost values with backend data.
+3. Add one polling coordinator with exact cadence: system status, active pipeline and market watches every 10 seconds; usage and audit decisions every 30 seconds.
+4. Enforce 5-second request timeout, bounded jittered backoff capped at 60 seconds, OFFLINE after two consecutive transport failures, STALE after three expected polling intervals, and last-known data retention marked stale/offline rather than fresh.
+5. Clear private LIVE data on SESSION_REQUIRED; schema/backend errors must remain ERROR, not become SIMULATED.
+6. Add focused tests using fake timers/injected clock: cadence, no overlapping requests, backoff bounds/jitter, stale thresholds, offline threshold, recovery to LIVE, and session-required clearing.
+7. Integrate LIVE presentation into existing UI with clear LIVE/SIMULATED labels and explicit empty/loading/error states; do not replace the 3D office or infer worker liveness from pipeline PROCESSING.
+8. Run full tests/typecheck/build and update this ledger. Owner-local Chrome, cookie and live-service checks remain separate gates.
 
-Owner-side gate before real API integration: complete the remaining local steps in the Python Backend Phase 3.1 runbook, including private credential configuration and all five authenticated HTTP smoke tests. Never ask the owner to paste secrets into chat.
+Owner-side prerequisites before any real Python API connection: generate the operator hash locally with the masked helper and configure it only in ignored local environment; complete the backend Phase 3.1 authenticated HTTP smoke tests privately. Never paste secrets into chat.
 

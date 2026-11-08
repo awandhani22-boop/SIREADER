@@ -6,8 +6,8 @@
 
 - Virtual Office repository: `awandhani22-boop/SIREADER`
 - Active branch: `phase-3-2-batch-1-bff-foundation`
-- Latest verified remote HEAD: `8dfa50421f30bc888d22c880dcb5bd496f201d0e`
-- Latest verified commit: `fix(auth): enforce concurrent login attempt limits and correct expiry test`
+- Latest verified remote HEAD: `e504abf3d7cd8781559275eb4243431a88df57ad`
+- Latest verified commit: `fix(live): construct validated auth DTOs without unsafe casts`
 - Previous docs checkpoint before Batch 3: `94228186e22e548cc61f05909bc10f4cd9a79bae`
 - Python backend repository: `awandhani22-boop/SIREADER-Python-Backend`, branch `phase-3-1-api-gateway`, reviewed baseline `76b968fce399a5f591b1bd48e1501e9baa45c92a`
 - Never merge to `main` without owner approval. No destructive Git operations. Preserve untracked/local-only files.
@@ -47,7 +47,7 @@ All binds literal `127.0.0.1`; no LAN/public listening, no port fallback. Browse
 | 3.2 Batch 1 | Express BFF foundation, allowlist, guards, safe errors/logs, fixed topology ports | PUSHED; source audit complete; prior Argon local report retained | Commit `8b5c7a09ec82e83e8bd81a25a2e8034dbe16713e`; final four simultaneous-env port cases are source-audited. Included in Batch2 full CI run. |
 | 3.2 Batch 2 | Fixed upstream proxy and Pydantic schema validation | IMPLEMENTED, PUSHED, CI PASS | Commit `428a051fe18d48a64267b1dbe41b4cc42d8d76de`; fixed five-path proxy, server-only token, timeout <=5s, redirect rejection, streamed 1MiB cap, strict DTO checks, safe errors; mock tests; GitHub Actions run `42482847460` passed 323/323 tests, TypeScript check, and production build. No real backend/Supabase calls. |
 | 3.2 Batch 3 | Operator password/session/CSRF | IMPLEMENTED, PUSHED, CI PASS | Commit `6c10ddf` added scrypt login, memory sessions, secure cookie, CSRF logout, password-hash helper and tests. CI first run exposed an incorrect absolute-timeout test; follow-up commit `8dfa504` corrected the test and reserves login attempts before scrypt to prevent concurrent brute-force race. GitHub Actions run `42483616073`: 331/331 tests, TypeScript check and build passed. Real operator hash remains owner-local and not configured in repo. |
-| 3.2 Batch 4 | Frontend live API contracts/state adapter | PLANNED | Not implemented |
+| 3.2 Batch 4 | Frontend API contracts, independent LIVE Zustand state, same-origin client, session/CSRF controller | IMPLEMENTED, PUSHED, CI PASS | Commits `2e5778d` and `e504abf`; GitHub Actions run `42485169977`: 343/343 tests, TypeScript check and production build passed. First run `42485110003` caught two unsafe casts; correction is recorded in `e504abf`. UI presentation/polling are explicitly deferred to Batch 5. |
 | 3.2 Batch 5 | Polling/backoff/staleness and observability presentation | PLANNED | Not implemented |
 | 3.2 Batch 6 | Vite proxy, production static serving, local browser/security acceptance | PLANNED | Not implemented |
 | Phase 3.3 | Shared SSE through BFF | PLANNED | Must follow stable 3.2 |
@@ -59,21 +59,21 @@ All binds literal `127.0.0.1`; no LAN/public listening, no port fallback. Browse
 ## Verification truth table
 
 - Confirmed on GitHub: remote branch HEAD equals `8b5c7a09ec82e83e8bd81a25a2e8034dbe16713e`; commit changes only `server/config.ts` and `server/app.test.ts` relative to its parent.
-- Reported by Argon (not independently run by assistant): 29/29 BFF tests and 311/311 repository tests, TypeScript typecheck, npm lint script, Vite build, and diff check.
-- Verified by assistant source inspection on GitHub: strict mode-to-port mapping; independent rejection of mismatched `BFF_PORT` and `overrides.port`; four simultaneous-setting regression cases with environment restoration.
-- Not verified: GitHub Actions result (no status checks returned); local Chrome browser/session integration; local live Python API HTTP smoke tests; production launch/static serving; API secret presence in local env.
+- Historical Batch 1 report: 29/29 BFF tests and 311/311 repository tests, TypeScript typecheck, build and diff check were reported by Argon. Batch 4 verification is stronger: GitHub Actions run `42485169977` directly confirms 343/343 tests, TypeScript check and Vite production build passed.
+- Verified by assistant source inspection on GitHub: Batch 1 strict mode-to-port mapping and simultaneous-setting regression cases. Batch 4 code is present in the remote commit and its full GitHub Actions run passed.
+- Not verified: owner Windows test/build; local Chrome browser/session integration; local generated operator password hash; local live Python API HTTP smoke tests; dev Vite proxy and production static serving; visible LIVE UI/polling; API secret presence in local env.
 - No claim of Phase 3.2 or Phase 4 completion is valid yet.
 
-## Next action — Batch 4: Frontend API Contracts & Runtime State
+## Next action — Batch 5: Polling & Observability Presentation
 
-1. Re-read `docs/PRODUCT_VISION.md`, `docs/ROADMAP.md`, `docs/PROJECT_STATE.md`, this ledger and the current branch HEAD.
-2. Inspect existing frontend Zustand stores, API panels, worker/task types, React app composition, and simulation selectors. Preserve the working 3D office.
-3. Implement a separate typed LIVE API client/repository and validated DTO boundary for the five fixed BFF GET endpoints; no bearer token or password in frontend.
-4. Add independent LIVE observability state with provenance and connection states: CONNECTING, LIVE, STALE, OFFLINE, ERROR, SESSION_REQUIRED. Do not reuse or merge SIMULATED worker/task/token/cost data with LIVE results.
-5. Add frontend auth/session bootstrap: GET session; show login when SESSION_REQUIRED; POST password as same-origin JSON; store CSRF token in component/store memory only; logout posts X-CSRF-Token and clears private LIVE state.
-6. Keep 3D scheduler and SIMULATED interactions untouched. Do not map backend PROCESSING to a real worker BUSY without actual runtime/heartbeat authority.
-7. Add tests for API DTO parsing, unknown/extra fields, no-secret handling, auth bootstrap, private data clearing, and strict LIVE/SIMULATED separation. Run full CI tests/typecheck/build.
-8. Commit/push a coherent unit to `phase-3-2-batch-1-bff-foundation`, update all current-state docs and verify the remote HEAD/CI. Do not merge `main`.
+1. Re-read `docs/PRODUCT_VISION.md`, `docs/ROADMAP.md`, `docs/PROJECT_STATE.md`, this ledger and verify the branch HEAD (`e504abf3d7cd8781559275eb4243431a88df57ad`).
+2. Inspect the existing OfficeApp composition, TopBar, panels, and the Batch 4 LIVE adapter/controller. Preserve the working 3D scene and all deterministic simulation behavior.
+3. Add one polling coordinator: system status, active pipeline and market watches every 10 seconds; telemetry usage and audit decisions every 30 seconds.
+4. Enforce 5-second request timeout, bounded jittered backoff capped at 60 seconds, OFFLINE after two consecutive transport failures, STALE after three expected polling intervals, and keep last-known values visibly stale/offline rather than fresh.
+5. Clear private LIVE data on SESSION_REQUIRED; schema/backend errors must remain ERROR and never fall back to SIMULATED.
+6. Add fake-clock/fake-timer tests for cadence, overlapping-request prevention, backoff bounds, staleness thresholds, OFFLINE threshold, recovery to LIVE, and session-required clearing.
+7. Integrate panels/login into the existing UI with explicit LIVE/SIMULATED labels and loading/empty/error states. Never infer OS worker BUSY from a PROCESSING pipeline record.
+8. Run tests/typecheck/build; update this ledger with evidence. Do not connect live credentials before the owner has completed the backend API smoke checks.
 
-**Owner-side local requirements still pending:** run the masked local password hash helper, place its output only in the ignored local `.env`, complete the Python Backend Phase3.1 credential/API smoke checks privately, then verify actual HttpOnly cookie behavior and BFF/Vite/production routing in Chrome on Windows. Never paste secret values into chat.
+**Owner-side local requirements still pending:** generate operator hash locally using the masked helper and place it only in ignored local environment; complete Python Backend Phase 3.1 authenticated HTTP smoke checks privately; verify real HttpOnly cookie/CSRF behavior in Chrome and local dev/production serving on Windows. Never paste secret values into chat.
 
