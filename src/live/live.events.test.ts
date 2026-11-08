@@ -123,7 +123,7 @@ test('LIVE SSE client maps invalidations to authoritative snapshot refreshes onl
   // A sequence gap forces a complete snapshot reconciliation.
   source.emit('resources.invalidated', invalidation(['audit']), 3);
   assert.equal(refreshAll, 1);
-  assert.deepEqual(refreshes.slice(-0), []);
+  assert.equal(refreshes.length, 2);
 
   source.emit('stream.reset', reset('cursor_expired'), 4);
   assert.equal(refreshAll, 2);
