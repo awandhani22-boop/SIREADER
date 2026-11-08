@@ -16,6 +16,7 @@ import {
   selectGlobalSimulatedTotals,
   useOfficeStore,
 } from '../workers/worker.state';
+import { LiveObservabilityDock } from './LiveObservabilityDock';
 
 /**
  * TopBar Component (Single-Row Command Center Header)
@@ -255,6 +256,11 @@ export function TopBar() {
             <span>Reset</span>
           </button>
         </div>
+      </div>
+
+      {/* Independent authenticated LIVE backend observability dock. */}
+      <div className="pointer-events-none absolute right-3 top-full z-50 mt-2">
+        <LiveObservabilityDock />
       </div>
     </header>
   );

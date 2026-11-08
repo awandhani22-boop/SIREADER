@@ -22,7 +22,7 @@ export type LiveConnectionState =
   | 'SESSION_REQUIRED';
 
 export type LiveSessionState = 'UNKNOWN' | 'AUTHENTICATED' | 'UNAUTHENTICATED';
-export type LiveResourceStatus = 'IDLE' | 'LOADING' | 'LIVE' | 'ERROR';
+export type LiveResourceStatus = 'IDLE' | 'LOADING' | 'LIVE' | 'STALE' | 'ERROR';
 
 export interface LiveResourceSnapshot<T> {
   readonly status: LiveResourceStatus;
@@ -69,6 +69,8 @@ export interface LiveStoreState {
     fetchedAt?: number,
   ) => void;
   setResourceError: (path: LiveApiPath, error: LiveApiErrorCode) => void;
+  restoreResourceAfterTransportFailure: (path: LiveApiPath, previousStatus: LiveResourceStatus, error: LiveApiErrorCode) => void;
+  markResourceStale: (path: LiveApiPath, expectedFetchedAt: number) => void;
   clearPrivateLiveData: () => void;
   reset: () => void;
 }
@@ -120,6 +122,34 @@ export const useLiveStore = create<LiveStoreState>((set) => ({
       },
     } as LiveResources,
   })),
+
+  restoreResourceAfterTransportFailure: (path, previousStatus, error) => set((state) => {
+    const current = state.resources[path];
+    const restoredStatus: LiveResourceStatus = current.data === null
+      ? 'IDLE'
+      : previousStatus === 'LOADING' || previousStatus === 'IDLE'
+        ? 'LIVE'
+        : previousStatus;
+    return {
+      resources: {
+        ...state.resources,
+        [path]: { ...current, status: restoredStatus, error },
+      } as LiveResources,
+    };
+  }),
+
+  markResourceStale: (path, expectedFetchedAt) => set((state) => {
+    const current = state.resources[path];
+    if (current.data === null || current.fetchedAt !== expectedFetchedAt || current.status !== 'LIVE') {
+      return state;
+    }
+    return {
+      resources: {
+        ...state.resources,
+        [path]: { ...current, status: 'STALE' },
+      } as LiveResources,
+    };
+  }),
 
   clearPrivateLiveData: () => set({
     connection: 'SESSION_REQUIRED',

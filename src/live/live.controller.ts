@@ -25,12 +25,24 @@ export interface LiveController {
   bootstrapSession(): Promise<boolean>;
   login(password: string): Promise<void>;
   logout(): Promise<void>;
+  getResource<K extends LiveApiPath>(path: K): Promise<LiveApiResponseMap[K]>;
   loadResource<K extends LiveApiPath>(path: K): Promise<LiveApiResponseMap[K]>;
 }
 
 export function createLiveController(
   api: LiveApiClient = createLiveApiClient(),
 ): LiveController {
+  async function getResource<K extends LiveApiPath>(path: K): Promise<LiveApiResponseMap[K]> {
+    try {
+      return await api.get(path);
+    } catch (error) {
+      if (error instanceof LiveApiError && error.code === 'SESSION_REQUIRED') {
+        api.clearCsrfToken();
+      }
+      throw error;
+    }
+  }
+
   return {
     async bootstrapSession(): Promise<boolean> {
       useLiveStore.getState().setConnection('CONNECTING');
@@ -85,10 +97,12 @@ export function createLiveController(
       }
     },
 
+    getResource,
+
     async loadResource<K extends LiveApiPath>(path: K): Promise<LiveApiResponseMap[K]> {
       useLiveStore.getState().setResourceLoading(path);
       try {
-        const data = await api.get(path);
+        const data = await getResource(path);
         useLiveStore.getState().setResourceSuccess(path, data);
         useLiveStore.getState().setSession('AUTHENTICATED');
         return data;
