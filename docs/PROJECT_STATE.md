@@ -12,7 +12,7 @@
 - Batch 3 — Operator Authentication & Session Lifecycle: implementation pushed; GitHub Actions run `42483616073` passed (331/331), typecheck and production build passed.
 - Next work unit: Phase 3.3 SSE architecture and event-contract design; implementation must follow the approved contract and tests.
 - Phases 1, 2.1, 2.2 and 2.3 remain complete with historical evidence and documented deferrals.
-- Phase 3.1 is implemented in the separate Python Backend repo. Owner-provided local report confirms the dedicated read-only database/API configuration and five authenticated GET smoke checks; the backend runbook still needs its own status wording synchronized.
+- Phase 3.1 is implemented in the separate Python Backend repo. Owner-provided local report confirms the dedicated read-only database/API configuration and five authenticated GET smoke checks; a documentation-only status reconciliation remains for the backend runbook.
 
 Product mission: [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md).
 Master roadmap: [`docs/ROADMAP.md`](ROADMAP.md).
@@ -136,14 +136,15 @@ Before every substantial task, re-read the three canonical docs in order, verify
 - **Phase 3.1 — Read-Only Observability API Gateway: COMPLETE (2026-11-08)** in the separate `awandhani22-boop/SIREADER-Python-Backend` repository. Supabase lockdown and dedicated `sireader_api_ro` access were verified; all five local GET endpoints returned 200; missing token returned 401; POST/PUT/PATCH/DELETE returned 405; 74 API tests and 50 core backend regression tests passed locally; API compile passed; GitHub Actions run `42397323807` succeeded. Backend remains a separate project boundary.
 
 ## Next
-Complete **Phase 3.2 owner-side local acceptance** before starting Phase 3.3 or connecting real backend credentials.
 
-1. From the Windows Virtual Office repository root, run `bun install --frozen-lockfile`, `bun run test`, `bun run lint`, and `bun run build`.
-2. Generate the operator password hash locally with `bun run hash:operator`; put its output only in the ignored local `.env`. Never paste the password or hash into chat.
-3. Start development with `bun run dev`; open exactly `http://127.0.0.1:3000`. Confirm both loopback processes start: Vite 3000 and BFF 3001.
-4. Verify Chrome cookie attributes on successful login: `__Host-sireader_sid` is HttpOnly, Secure, SameSite=Strict, Path=/, host-only; confirm `document.cookie` cannot read it. Verify logout revokes the session and clears private LIVE data.
-5. Complete the Python Backend Phase 3.1 runbook's authenticated five-endpoint HTTP smoke tests privately. Only then configure the separate `SIREADER_API_AUTH_TOKEN` in ignored local configuration; never paste it in chat or screenshots.
-6. Run `bun run build` then `bun run start` to verify production BFF serves `dist/` on loopback port 3000. Verify API routes remain JSON and SPA routes serve the frontend.
-7. Record the local acceptance results without recording secret values. Only after the local gate passes may Phase 3.2 be marked complete and Phase 3.3 SSE planning begin.
+**Phase 3.3 — Real-Time Observability (SSE): design baseline drafted; implementation not started.**
 
-No live token, password hash, database credential, MT5 operation, or trading command is part of these checks.
+- Architecture document: [`docs/PHASE_3_3_SSE_ARCHITECTURE.md`](PHASE_3_3_SSE_ARCHITECTURE.md).
+- Proposed source: PostgreSQL LISTEN/NOTIFY from tightly scoped triggers on the existing observability source tables; Python API consumes notifications through a dedicated Psycopg 3 async listener.
+- Proposed contract: versioned `resources.invalidated` events only; no business rows or sensitive payloads. Existing snapshot GET endpoints remain authoritative.
+- Proposed delivery: one-process bounded EventHub and replay ring, process-epoch event IDs, Last-Event-ID replay where retained, explicit reset/resync when history is missing, heartbeat, bounded queues, and disconnect cleanup.
+- Proposed topology: authenticated Python SSE endpoint -> authenticated Express BFF streaming proxy -> same-origin browser EventSource. The Bearer token never enters browser code.
+- Existing polling remains the fallback and periodic snapshot reconciliation. Simulation stays isolated.
+- This is a documented design baseline, not approved implementation. Confirm Supabase session-pooler LISTEN behavior and review the database trigger migration/security before coding.
+- Phase 4.1–6.3 remain planned and must be completed in roadmap order. v1.0 remains unreleased.
+
