@@ -52,7 +52,8 @@ function request(
 
 test('Phase 3.3 BFF SSE proxy — authenticated fixed-path streaming', async (t) => {
   let received: { url: string; headers: Record<string, string | undefined>; signal?: AbortSignal } | null = null;
-  let upstreamMode: 'stream' | 'wrong-type' | 'unavailable' = 'stream';
+  let upstreamMode: 'stream' | 'wrong-type' | 'unavailable' | 'hold' = 'stream';
+  let upstreamAbortCount = 0;
 
   const fetchImpl: typeof fetch = async (input, init) => {
     const headers = new Headers(init?.headers);
@@ -81,6 +82,21 @@ test('Phase 3.3 BFF SSE proxy — authenticated fixed-path streaming', async (t)
       });
     }
     const encoder = new TextEncoder();
+    if (upstreamMode === 'hold') {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode('retry: 3000\\n\\n'));
+          init?.signal?.addEventListener('abort', () => {
+            upstreamAbortCount += 1;
+            try { controller.close(); } catch { /* Body was already cancelled. */ }
+          }, { once: true });
+        },
+      });
+      return new Response(body, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream; charset=utf-8' },
+      });
+    }
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(encoder.encode('retry: 3000\\n\\n'));
@@ -158,6 +174,66 @@ test('Phase 3.3 BFF SSE proxy — authenticated fixed-path streaming', async (t)
     assert.equal(result.json?.error?.code, 'UNREACHABLE');
     assert.equal(result.headers['retry-after'], '5');
     assert.equal(result.body.includes('{\"detail\":\"unavailable\"}'), false);
+  });
+
+  await t.test('browser disconnect aborts the upstream stream and releases the connection slot', async () => {
+    upstreamMode = 'hold';
+
+    const openAndAbort = () => new Promise<void>((resolve, reject) => {
+      const port = (server.address() as AddressInfo).port;
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port,
+        path: UPSTREAM_SSE_PATH,
+        method: 'GET',
+        headers: { ...VALID_HEADERS },
+      }, (res) => {
+        res.once('data', () => {
+          req.destroy();
+          resolve();
+        });
+        res.on('error', () => undefined);
+      });
+      req.on('error', () => resolve());
+      req.end();
+    });
+
+    const before = upstreamAbortCount;
+    await openAndAbort();
+    for (let attempt = 0; attempt < 20 && upstreamAbortCount === before; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(upstreamAbortCount, before + 1);
+  });
+
+  await t.test('BFF limits the number of simultaneous SSE connections', async () => {
+    upstreamMode = 'hold';
+    const opened: Array<{ req: http.ClientRequest; response: http.IncomingMessage }> = [];
+    const openStream = () => new Promise<void>((resolve, reject) => {
+      const port = (server.address() as AddressInfo).port;
+      const req = http.request({
+        hostname: '127.0.0.1', port, path: UPSTREAM_SSE_PATH,
+        method: 'GET', headers: { ...VALID_HEADERS },
+      }, (response) => {
+        opened.push({ req, response });
+        response.once('data', () => resolve());
+        response.on('error', () => undefined);
+      });
+      req.on('error', reject);
+      req.end();
+    });
+
+    try {
+      for (let index = 0; index < 4; index += 1) await openStream();
+      const overflow = await request(server);
+      assert.equal(overflow.status, 503);
+      assert.equal(overflow.json?.error?.code, 'UNREACHABLE');
+      assert.equal(overflow.headers['retry-after'], '5');
+    } finally {
+      for (const item of opened) item.req.destroy();
+      for (const item of opened) item.response.destroy();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
   });
 });
 
