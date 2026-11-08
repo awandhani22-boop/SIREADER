@@ -178,7 +178,7 @@ Boundary:
 - It does not enable AI inference or trading execution.
 
 ## Phase 3.2 — Secure BFF & Frontend Observability Integration
-**Status: IN PROGRESS.** Batches 1–4 are pushed to `phase-3-2-batch-1-bff-foundation` through `e504abf`. Batch 2 CI passed (323/323 tests). Batch 3 CI passed (331/331 tests), TypeScript check, and production build. Batch 4 CI passed (343/343 tests), TypeScript check, and production build. Batches 5–6 and owner-side browser/live-service checks remain.
+**Status: IN PROGRESS.** Batches 1–4 are pushed to `phase-3-2-batch-1-bff-foundation` through `f301fec`. Batch 2 CI passed (323/323 tests). Batch 3 CI passed (331/331 tests), TypeScript check, and production build. Batch 4 CI passed (343/343 tests), TypeScript check, and production build. Batches 5–6 and owner-side browser/live-service checks remain.
 
 ### Execution batches and gates
 1. **Batch 1 — BFF Foundation & Security Guards:** COMPLETE IN CODE; pushed and source-audited. Includes canonical route allowlist, fixed loopback config, strict Host/Fetch-Metadata/Origin/raw-path/method guards, scoped auth parser, safe errors/logger, and mode-specific dev/prod ports. Batch 1 was included in the later full CI run.

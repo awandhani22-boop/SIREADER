@@ -6,8 +6,8 @@
 
 - Virtual Office repository: `awandhani22-boop/SIREADER`
 - Active branch: `phase-3-2-batch-1-bff-foundation`
-- Latest verified remote HEAD: `e504abf3d7cd8781559275eb4243431a88df57ad`
-- Latest verified commit: `fix(live): construct validated auth DTOs without unsafe casts`
+- Latest verified remote HEAD: `f301fec1553254ed8fc70f8857ee7d247817bdbf`
+- Latest verified commit: `docs: record Phase 3.2 Batch 4 acceptance and Batch 5 handoff`
 - Previous docs checkpoint before Batch 3: `94228186e22e548cc61f05909bc10f4cd9a79bae`
 - Python backend repository: `awandhani22-boop/SIREADER-Python-Backend`, branch `phase-3-1-api-gateway`, reviewed baseline `76b968fce399a5f591b1bd48e1501e9baa45c92a`
 - Never merge to `main` without owner approval. No destructive Git operations. Preserve untracked/local-only files.
@@ -58,7 +58,7 @@ All binds literal `127.0.0.1`; no LAN/public listening, no port fallback. Browse
 
 ## Verification truth table
 
-- Confirmed on GitHub: remote branch HEAD equals `8b5c7a09ec82e83e8bd81a25a2e8034dbe16713e`; commit changes only `server/config.ts` and `server/app.test.ts` relative to its parent.
+- Confirmed on GitHub: remote branch HEAD equals `f301fec1553254ed8fc70f8857ee7d247817bdbf`; Batch 4 code commit `e504abf3d7cd8781559275eb4243431a88df57ad` and documentation checkpoint are present on the same branch.
 - Historical Batch 1 report: 29/29 BFF tests and 311/311 repository tests, TypeScript typecheck, build and diff check were reported by Argon. Batch 4 verification is stronger: GitHub Actions run `42485169977` directly confirms 343/343 tests, TypeScript check and Vite production build passed.
 - Verified by assistant source inspection on GitHub: Batch 1 strict mode-to-port mapping and simultaneous-setting regression cases. Batch 4 code is present in the remote commit and its full GitHub Actions run passed.
 - Not verified: owner Windows test/build; local Chrome browser/session integration; local generated operator password hash; local live Python API HTTP smoke tests; dev Vite proxy and production static serving; visible LIVE UI/polling; API secret presence in local env.
@@ -66,7 +66,7 @@ All binds literal `127.0.0.1`; no LAN/public listening, no port fallback. Browse
 
 ## Next action — Batch 5: Polling & Observability Presentation
 
-1. Re-read `docs/PRODUCT_VISION.md`, `docs/ROADMAP.md`, `docs/PROJECT_STATE.md`, this ledger and verify the branch HEAD (`e504abf3d7cd8781559275eb4243431a88df57ad`).
+1. Re-read `docs/PRODUCT_VISION.md`, `docs/ROADMAP.md`, `docs/PROJECT_STATE.md`, this ledger and verify the branch HEAD (`f301fec1553254ed8fc70f8857ee7d247817bdbf`).
 2. Inspect the existing OfficeApp composition, TopBar, panels, and the Batch 4 LIVE adapter/controller. Preserve the working 3D scene and all deterministic simulation behavior.
 3. Add one polling coordinator: system status, active pipeline and market watches every 10 seconds; telemetry usage and audit decisions every 30 seconds.
 4. Enforce 5-second request timeout, bounded jittered backoff capped at 60 seconds, OFFLINE after two consecutive transport failures, STALE after three expected polling intervals, and keep last-known values visibly stale/offline rather than fresh.

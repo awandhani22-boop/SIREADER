@@ -4,7 +4,7 @@
 **Phase 3.2 — IN PROGRESS: Secure BFF & Frontend Observability Integration.**
 
 - Active branch: `phase-3-2-batch-1-bff-foundation`
-- Latest verified remote HEAD: `e504abf3d7cd8781559275eb4243431a88df57ad` (`fix(auth): enforce concurrent login attempt limits and correct expiry test`)
+- Latest verified remote HEAD: `f301fec1553254ed8fc70f8857ee7d247817bdbf` (`docs: record Phase 3.2 Batch 4 acceptance and Batch 5 handoff`)
 - Batch 1 — BFF Foundation & Security Guards: implementation pushed; port and security changes source-audited.
 - Batch 2 — Fixed Upstream Proxy: implementation pushed; GitHub Actions run `42482847460` passed (323/323).
 - Batch 3 — Operator Authentication & Session Lifecycle: implementation pushed; GitHub Actions run `42483616073` passed (331/331), typecheck and production build passed.
@@ -18,7 +18,7 @@ Durable execution hand-off: [`docs/PHASE_3_2_EXECUTION_LOG.md`](PHASE_3_2_EXECUT
 Before every substantial task, re-read the three canonical docs in order, verify current branch HEAD, then inspect only relevant code.
 
 ### Current Phase 3.2 checkpoint
-- Branch: `phase-3-2-batch-1-bff-foundation`; latest verified remote HEAD: `e504abf3d7cd8781559275eb4243431a88df57ad`.
+- Branch: `phase-3-2-batch-1-bff-foundation`; latest verified remote HEAD: `f301fec1553254ed8fc70f8857ee7d247817bdbf`.
 - Batch 1 and Batch 2 details are recorded in the execution log below.
 - Batch 3 added `server/auth.ts`, `server/auth.test.ts`, the login/session/logout routes, error/log event updates, a masked local password-hash helper at `scripts/create-operator-password-hash.ts`, and `docs/OPERATOR_AUTH_SETUP.md`.
 - Password hash uses fixed scrypt N=16384, r=8, p=1, 16-byte salt and 64-byte derived key. No default password. Missing/malformed hash returns `503 AUTH_NOT_CONFIGURED`.
