@@ -1,16 +1,18 @@
 # SIREADER Virtual Office — Project State
 
 ## Current phase
-**Phase 3.3 — PLANNED: Real-Time Observability (SSE).**
+**Phase 3.3 — IN PROGRESS: Real-Time Observability (SSE).**
 
 - Phase 3.2 — Secure BFF & Frontend Observability Integration: **COMPLETE — owner acceptance confirmed 2026-11-09**.
 
-- Active documentation/continuation branch: `phase-3-2-closeout-phase-3-3-sse-plan` (created from the previously verified Phase 3.2 branch head).
+- Active Virtual Office implementation branch: `phase-3-3-sse` (current HEAD `7b318ae690e0affd53778d9cfb24953bf27b6b35`).
+- Active Python Backend implementation branch: `phase-3-3-sse-backend` (current HEAD `6a6d80a56030dabc8dd49f680d0c7f17097d3dbb`).
+- Phase 3.2 closeout documentation branch: `phase-3-2-closeout-phase-3-3-sse-plan`; kept separate from implementation work.
 - Latest verified implementation commit: `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5` (`fix(serving): keep cross-platform launcher valid JavaScript`). Later commits only update the current-state documentation.
 - Batch 1 — BFF Foundation & Security Guards: implementation pushed; port and security changes source-audited.
 - Batch 2 — Fixed Upstream Proxy: implementation pushed; GitHub Actions run `42482847460` passed (323/323).
 - Batch 3 — Operator Authentication & Session Lifecycle: implementation pushed; GitHub Actions run `42483616073` passed (331/331), typecheck and production build passed.
-- Next work unit: Phase 3.3 SSE architecture and event-contract design; implementation must follow the approved contract and tests.
+- Current work unit: Phase 3.3 SSE implementation batches A–D are present on isolated branches and their latest CI runs pass. Batch E owner acceptance remains open.
 - Phases 1, 2.1, 2.2 and 2.3 remain complete with historical evidence and documented deferrals.
 - Phase 3.1 is implemented in the separate Python Backend repo. Owner-provided local report confirms the dedicated read-only database/API configuration and five authenticated GET smoke checks; a documentation-only status reconciliation remains for the backend runbook.
 
@@ -20,7 +22,7 @@ Durable execution hand-off: [`docs/PHASE_3_2_EXECUTION_LOG.md`](PHASE_3_2_EXECUT
 Before every substantial task, re-read the three canonical docs in order, verify current branch HEAD, then inspect only relevant code.
 
 ### Current Phase 3.2 checkpoint
-- Documentation branch: `phase-3-2-closeout-phase-3-3-sse-plan`; latest verified implementation commit remains `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5` (documentation-only commits are not implementation commits).
+- Phase 3.2 implementation baseline: `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5`; Phase 3.3 Virtual Office branch: `7b318ae690e0affd53778d9cfb24953bf27b6b35`; Phase 3.3 Python Backend branch: `6a6d80a56030dabc8dd49f680d0c7f17097d3dbb`.
 - Batch 1 and Batch 2 details are recorded in the execution log below.
 - Batch 3 added `server/auth.ts`, `server/auth.test.ts`, the login/session/logout routes, error/log event updates, a masked local password-hash helper at `scripts/create-operator-password-hash.ts`, and `docs/OPERATOR_AUTH_SETUP.md`.
 - Password hash uses fixed scrypt N=16384, r=8, p=1, 16-byte salt and 64-byte derived key. No default password. Missing/malformed hash returns `503 AUTH_NOT_CONFIGURED`.
@@ -135,9 +137,21 @@ Before every substantial task, re-read the three canonical docs in order, verify
 ## External backend milestone
 - **Phase 3.1 — Read-Only Observability API Gateway: COMPLETE (2026-11-08)** in the separate `awandhani22-boop/SIREADER-Python-Backend` repository. Supabase lockdown and dedicated `sireader_api_ro` access were verified; all five local GET endpoints returned 200; missing token returned 401; POST/PUT/PATCH/DELETE returned 405; 74 API tests and 50 core backend regression tests passed locally; API compile passed; GitHub Actions run `42397323807` succeeded. Backend remains a separate project boundary.
 
+## Current Phase 3.3 implementation checkpoint
+
+- Design baseline: `docs/PHASE_3_3_SSE_ARCHITECTURE.md`.
+- Durable implementation ledger: `docs/PHASE_3_3_EXECUTION_LOG.md`.
+- Python Backend branch `phase-3-3-sse-backend`: static resource-key trigger migration + rollback; Psycopg 3 async LISTEN listener; bounded EventHub/replay; authenticated FastAPI SSE route; PostgreSQL integration tests.
+- Virtual Office branch `phase-3-3-sse`: fixed authenticated BFF SSE proxy; strict `Last-Event-ID` validation; bounded connection count; backpressure/disconnect cleanup; strict browser event contract; same-origin EventSource; snapshot invalidation and polling fallback; 60-second reconciliation while connected.
+- Latest Virtual Office CI run `42533498709` at `7b318ae690e0affd53778d9cfb24953bf27b6b35`: 371/371 tests passed; TypeScript check and production build passed.
+- Latest Python Backend CI run `42533488378` at `6a6d80a56030dabc8dd49f680d0c7f17097d3dbb`: 100 API/PostgreSQL tests passed; `compileall` passed; 50 core regression tests passed.
+- Both CI runs use GitHub disposable test infrastructure, not the owner's Supabase project or local Chrome.
+- Owner acceptance remains open: confirm session-pooler supports persistent `LISTEN`; review/apply the trigger migration through approved DB-owner process; verify actual notification delivery; test same-origin EventSource/reconnect/replay/reset/fallback during API/BFF restart in Chrome; verify no bearer token reaches browser; measure resource/performance behavior.
+- No migration has been applied to the owner's Supabase database. No secrets, credentials, or tokens are recorded here.
+
 ## Next
 
-**Phase 3.3 — Real-Time Observability (SSE): design baseline drafted; implementation not started.**
+Complete Phase 3.3 owner acceptance and record any environment-specific limitations. Phase 4.1–6.3 remain planned and must follow roadmap order; v1.0 remains unreleased.
 
 - Architecture document: [`docs/PHASE_3_3_SSE_ARCHITECTURE.md`](PHASE_3_3_SSE_ARCHITECTURE.md).
 - Proposed source: PostgreSQL LISTEN/NOTIFY from tightly scoped triggers on the existing observability source tables; Python API consumes notifications through a dedicated Psycopg 3 async listener.
