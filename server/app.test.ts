@@ -149,6 +149,25 @@ test('SIREADER Phase 3.2 BFF Test Suite — Remediated', async (t) => {
     server.close();
   });
 
+  await t.test('Observability routes fail closed until operator session middleware is installed', async () => {
+    const closedApp = createBffApp();
+    const closedServer = http.createServer(closedApp);
+    await new Promise<void>((resolve, reject) => {
+      closedServer.once('error', reject);
+      closedServer.listen(0, '127.0.0.1', resolve);
+    });
+    try {
+      const response = await makeRequest(closedServer, {
+        path: '/api/v1/system/status',
+        headers: { ...VALID_HEADERS },
+      });
+      assert.equal(response.status, 401);
+      assert.equal(response.json?.error?.code, 'SESSION_REQUIRED');
+    } finally {
+      await new Promise<void>((resolve) => closedServer.close(() => resolve()));
+    }
+  });
+
   // =========================================================================
   // SECTION 1: P0 — Literal Loopback Configuration & Binding Enforcement
   // =========================================================================

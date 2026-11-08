@@ -40,10 +40,10 @@ export function createBffApp(
   const upstreamHandlers = createUpstreamHandlers(dependencies);
   const requireOperatorSession: RequestHandler =
     dependencies.requireOperatorSession ??
-    ((_req, res) => {
+    ((req, res) => {
       SafeLogger.warn('SESSION_UNAUTHENTICATED', {
         method: 'GET',
-        route: '/api/v1/system/status',
+        route: req.path,
         statusCode: 401,
         errorCode: 'SESSION_REQUIRED',
       });
