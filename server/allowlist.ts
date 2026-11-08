@@ -57,6 +57,11 @@ export const CANONICAL_ROUTES: readonly CanonicalRouteDefinition[] = Object.free
     allowedMethods: Object.freeze(['GET']),
     description: 'Read-only trade and signal approval decision history',
   },
+  {
+    path: '/api/v1/events/stream',
+    allowedMethods: Object.freeze(['GET']),
+    description: 'Authenticated resource-invalidation event stream',
+  },
 ]);
 
 const CANONICAL_ROUTE_MAP = new Map<string, readonly string[]>(
