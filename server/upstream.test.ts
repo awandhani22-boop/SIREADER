@@ -85,7 +85,7 @@ function request(
       (res) => {
         let body = '';
         res.setEncoding('utf8');
-        res.on('data', (chunk: string) => { body += chunk; });
+        res.on('data', (chunk) => { body += chunk.toString(); });
         res.on('end', () => {
           let json: any = null;
           try { json = JSON.parse(body); } catch { /* handled by assertions */ }
@@ -123,6 +123,7 @@ test('SIREADER bounded upstream proxy — local mock integration', async (t) => 
     | 'wrong-content-type'
     | 'invalid-json'
     | 'invalid-schema'
+    | 'extra-schema'
     | 'oversized'
     | 'delay';
 
@@ -182,6 +183,12 @@ test('SIREADER bounded upstream proxy — local mock integration', async (t) => 
     if (mode === 'invalid-schema') {
       res.setHeader('content-type', 'application/json');
       res.end('{"unexpected":"shape"}');
+      return;
+    }
+    if (mode === 'extra-schema') {
+      const system = FIXTURES['/api/v1/system/status'] as Record<string, unknown>;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ...system, unexpected_internal_field: 'must-not-leak' }));
       return;
     }
     if (mode === 'oversized') {
@@ -302,6 +309,12 @@ test('SIREADER bounded upstream proxy — local mock integration', async (t) => 
     const schema = await request(proxy, '/api/v1/system/status');
     assert.equal(schema.status, 502);
     assert.equal(schema.json?.error?.code, 'SCHEMA_INVALID');
+
+    mode = 'extra-schema';
+    const extra = await request(proxy, '/api/v1/system/status');
+    assert.equal(extra.status, 502);
+    assert.equal(extra.json?.error?.code, 'SCHEMA_INVALID');
+    assert.equal(extra.body.includes('must-not-leak'), false);
   });
 
   await t.test('enforces streamed 1 MiB cap when content-length is absent', async () => {
