@@ -231,6 +231,12 @@ export function createLivePoller(
     }
   }
 
+  function stop(): void {
+    running = false;
+    generation += 1;
+    clearAllTimers();
+  }
+
   return {
     async start(startOptions = {}): Promise<boolean> {
       if (running) return true;
@@ -265,11 +271,7 @@ export function createLivePoller(
       return isCurrent(runGeneration);
     },
 
-    stop(): void {
-      running = false;
-      generation += 1;
-      clearAllTimers();
-    },
+    stop,
 
     async refresh(path: LiveApiPath): Promise<void> {
       if (!running) return;
