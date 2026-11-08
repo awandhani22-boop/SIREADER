@@ -3,6 +3,7 @@ import { Activity, LogOut, RefreshCw, ShieldCheck, Wifi, WifiOff } from 'lucide-
 import { LiveApiError } from '../live/live.api';
 import { liveController } from '../live/live.controller';
 import { createLivePoller, type LivePoller } from '../live/live.poller';
+import { createLiveEventStream, type LiveEventStream, type LiveEventStreamStatus } from '../live/live.events';
 import {
   useLiveStore,
   type LiveResourceSnapshot,
@@ -101,6 +102,10 @@ function ResourceError<T>({ resource }: { resource: LiveResourceSnapshot<T> }) {
 
 export function LiveObservabilityDock() {
   const [poller] = useState<LivePoller>(() => createLivePoller(liveController));
+  const [streamStatus, setStreamStatus] = useState<LiveEventStreamStatus>('STOPPED');
+  const [eventStream] = useState<LiveEventStream>(() =>
+    createLiveEventStream(poller, { onStatus: setStreamStatus }),
+  );
   const [isOpen, setIsOpen] = useState(false);
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -116,8 +121,19 @@ export function LiveObservabilityDock() {
 
   useEffect(() => {
     void poller.start().catch((error: unknown) => setActionError(safeErrorMessage(error)));
-    return () => poller.stop();
-  }, [poller]);
+    return () => {
+      eventStream.stop();
+      poller.stop();
+    };
+  }, [poller, eventStream]);
+
+  useEffect(() => {
+    if (session === 'AUTHENTICATED' && poller.isRunning()) {
+      eventStream.start();
+    } else {
+      eventStream.stop();
+    }
+  }, [session, poller, eventStream]);
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -140,6 +156,7 @@ export function LiveObservabilityDock() {
     if (isSubmitting) return;
     setActionError(null);
     setIsSubmitting(true);
+    eventStream.stop();
     poller.stop();
     try {
       await liveController.logout();
@@ -154,6 +171,7 @@ export function LiveObservabilityDock() {
     if (isSubmitting) return;
     setActionError(null);
     setIsSubmitting(true);
+    eventStream.stop();
     poller.stop();
     try {
       await poller.start();
@@ -229,6 +247,9 @@ export function LiveObservabilityDock() {
               {connectionLabel(connection)}
             </span>
             <span className="text-[10px] text-slate-500">Session: {session.toLowerCase()}</span>
+            <span className="text-[9px] text-slate-500" data-testid="live-event-stream-status">
+              Event stream: {streamStatus.toLowerCase().replaceAll('_', ' ')}
+            </span>
           </div>
 
           {actionError && (
