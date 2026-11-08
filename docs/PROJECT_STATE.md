@@ -5,8 +5,8 @@
 
 - Phase 3.2 — Secure BFF & Frontend Observability Integration: **COMPLETE — owner acceptance confirmed 2026-11-09**.
 
-- Active Virtual Office implementation branch: `phase-3-3-sse` (current HEAD `7b318ae690e0affd53778d9cfb24953bf27b6b35`).
-- Active Python Backend implementation branch: `phase-3-3-sse-backend` (current HEAD `6a6d80a56030dabc8dd49f680d0c7f17097d3dbb`).
+- Active Virtual Office implementation branch: `phase-3-3-sse` (latest Phase 3.3 code commit `1f73a6990d3ec71d8d581fb4dc27af07ab52e04b`).
+- Active Python Backend implementation branch: `phase-3-3-sse-backend` (latest Phase 3.3 code commit `c372d4540a701e3b860b297a8e4b18710b47e90f`).
 - Phase 3.2 closeout documentation branch: `phase-3-2-closeout-phase-3-3-sse-plan`; kept separate from implementation work.
 - Latest verified implementation commit: `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5` (`fix(serving): keep cross-platform launcher valid JavaScript`). Later commits only update the current-state documentation.
 - Batch 1 — BFF Foundation & Security Guards: implementation pushed; port and security changes source-audited.
@@ -148,6 +148,7 @@ Before every substantial task, re-read the three canonical docs in order, verify
 - Both CI runs use GitHub disposable test infrastructure, not the owner's Supabase project or local Chrome.
 - Owner acceptance remains open: confirm session-pooler supports persistent `LISTEN`; review/apply the trigger migration through approved DB-owner process; verify actual notification delivery; test same-origin EventSource/reconnect/replay/reset/fallback during API/BFF restart in Chrome; verify no bearer token reaches browser; measure resource/performance behavior.
 - No migration has been applied to the owner's Supabase database. No secrets, credentials, or tokens are recorded here.
+- Preparatory future-phase design documents exist for Phase 4.1, 4.2, 4.3, 4.4 and Phases 5–6. They are planning artifacts only; none of those phases has started.
 
 ## Next
 
