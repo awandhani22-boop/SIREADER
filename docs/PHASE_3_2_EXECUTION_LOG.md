@@ -6,8 +6,9 @@
 
 - Virtual Office repository: `awandhani22-boop/SIREADER`
 - Active branch: `phase-3-2-batch-1-bff-foundation`
-- Last verified remote HEAD at ledger creation: `8b5c7a09ec82e83e8bd81a25a2e8034dbe16713e`
-- Last verified commit: `fix(bff): enforce mode-specific port topology`
+- Latest verified remote HEAD: `428a051fe18d48a64267b1dbe41b4cc42d8d76de`
+- Latest verified commit: `fix(bff): inject configured bearer token into upstream request`
+- Previous docs checkpoint: `94228186e22e548cc61f05909bc10f4cd9a79bae`
 - Python backend repository: `awandhani22-boop/SIREADER-Python-Backend`, branch `phase-3-1-api-gateway`, reviewed baseline `76b968fce399a5f591b1bd48e1501e9baa45c92a`
 - Never merge to `main` without owner approval. No destructive Git operations. Preserve untracked/local-only files.
 
@@ -43,8 +44,8 @@ All binds literal `127.0.0.1`; no LAN/public listening, no port fallback. Browse
 | Phase 1 | Existing 3D office foundation | COMPLETE | Prior project-state and phase audit docs |
 | Phase 2.1–2.3 | Worker intelligence, deterministic scheduler, browser QA | COMPLETE WITH DOCUMENTED DEFERRED ITEMS | `docs/PROJECT_STATE.md`, Phase 2.3 audit |
 | Phase 3.1 | Python read-only API | CODE/DB work recorded complete by roadmap; owner local credential + HTTP smoke step remains pending in backend runbook | Backend runbook and Phase 3.1 contract |
-| 3.2 Batch 1 | Express BFF foundation, allowlist, guards, safe errors/logs, fixed topology ports | PUSHED; owner/local verification remains part of acceptance | Commit `8b5c7a09ec82e83e8bd81a25a2e8034dbe16713e`; Argon report: 29 BFF + 311 total tests after final additions; assistant source-audited port mapping and four simultaneous-env regression assertions; no CI status returned |
-| 3.2 Batch 2 | Fixed upstream proxy and Pydantic schema validation | NEXT | Not implemented |
+| 3.2 Batch 1 | Express BFF foundation, allowlist, guards, safe errors/logs, fixed topology ports | PUSHED; source audit complete; prior Argon local report retained | Commit `8b5c7a09ec82e83e8bd81a25a2e8034dbe16713e`; final four simultaneous-env port cases are source-audited. Included in Batch2 full CI run. |
+| 3.2 Batch 2 | Fixed upstream proxy and Pydantic schema validation | IMPLEMENTED, PUSHED, CI PASS | Commit `428a051fe18d48a64267b1dbe41b4cc42d8d76de`; fixed five-path proxy, server-only token, timeout <=5s, redirect rejection, streamed 1MiB cap, strict DTO checks, safe errors; mock tests; GitHub Actions run `42482847460` passed 323/323 tests, TypeScript check, and production build. No real backend/Supabase calls. |
 | 3.2 Batch 3 | Operator password/session/CSRF | PLANNED | Not implemented |
 | 3.2 Batch 4 | Frontend live API contracts/state adapter | PLANNED | Not implemented |
 | 3.2 Batch 5 | Polling/backoff/staleness and observability presentation | PLANNED | Not implemented |
@@ -63,12 +64,18 @@ All binds literal `127.0.0.1`; no LAN/public listening, no port fallback. Browse
 - Not verified: GitHub Actions result (no status checks returned); local Chrome browser/session integration; local live Python API HTTP smoke tests; production launch/static serving; API secret presence in local env.
 - No claim of Phase 3.2 or Phase 4 completion is valid yet.
 
-## Next action — Batch 2
+## Next action — Batch 3: Operator Authentication & Session Lifecycle
 
-1. Re-read the three canonical project docs and this ledger.
-2. Re-read BFF `server/app.ts`, `allowlist.ts`, `errors.ts`, `guards.ts`, `log.ts`, `config.ts`, package scripts/lockfile.
-3. Read the separate backend Pydantic schemas and five route handlers on `SIREADER-Python-Backend/phase-3-1-api-gateway`.
-4. Implement only the fixed upstream transport in the Virtual Office repo; mock upstream server in tests. No credential values and no real Supabase/API calls.
-5. Run tests/typecheck/build if local tool access is available; state exact outcomes. Add test output or owner-run verification evidence to the ledger.
-6. Commit/push the complete unit to `phase-3-2-batch-1-bff-foundation`, update this ledger and `docs/PROJECT_STATE.md`, then verify the remote branch HEAD and file contents.
+1. Read current branch HEAD; re-read PRODUCT_VISION, ROADMAP, PROJECT_STATE, this ledger, relevant AI rules, and security/testing skills.
+2. Inspect current `server/app.ts`, `guards.ts`, `errors.ts`, `log.ts`, `config.ts`, package scripts/dependencies, and Batch2 tests before changing auth.
+3. Implement one-operator password verification using Node `scrypt` and a validated encoded hash format; fail closed when auth configuration is missing/invalid; constant-time credential comparison.
+4. Implement server-memory sessions with cryptographically random session IDs, session rotation, idle expiry 1 hour, absolute expiry 8 hours, bounded login rate limiting, cleanup behavior, and explicit restart invalidation.
+5. Implement `__Host-sireader_sid` HttpOnly Secure SameSite=Strict Path=/ cookie with no Domain and Max-Age=28800; never log or expose session IDs or password hashes.
+6. Return a per-session CSRF token only on authenticated same-origin login/session responses, keep it out of browser storage/URL/logs, and validate protected state changes with constant-time comparison.
+7. Add tests for missing/invalid hash, valid/invalid password, timing-safe comparisons, rate limits, session rotation, idle/absolute expiry, cookie flags, logout invalidation, CSRF missing/mismatch/valid, restart semantics, and secret-free logging.
+8. Keep all five observability routes fail-closed behind the new session middleware. Never bypass existing Host/Fetch Metadata/Origin/raw path/method guards.
+9. Run complete CI test/typecheck/build; record actual outcomes; commit/push this coherent unit to `phase-3-2-batch-1-bff-foundation`. Do not merge `main`.
+10. Do not ask the owner to paste secrets. Add only variable names and a safe local configuration recipe; local credential setup is performed by the owner on their machine.
+
+**Owner-side integration gate retained:** Before Batch6 live end-to-end API integration, the owner must complete the remaining local Phase3.1 backend runbook steps privately (credential setup and authenticated five-endpoint smoke test). No `.env` secret values in chat or GitHub.
 

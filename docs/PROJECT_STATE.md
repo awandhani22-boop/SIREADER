@@ -4,22 +4,29 @@
 **Phase 3.2 — IN PROGRESS: Secure BFF & Frontend Observability Integration.**
 
 - Active branch: `phase-3-2-batch-1-bff-foundation`
-- Latest verified remote HEAD: `8b5c7a09ec82e83e8bd81a25a2e8034dbe16713e` (`fix(bff): enforce mode-specific port topology`)
-- Latest unit: Batch 1 BFF Foundation & Security Guards, implemented and pushed.
-- Batch 2 Fixed Upstream Proxy is next.
-- Phases 1, 2.1, 2.2 and 2.3 remain completed as recorded below. Phase 2.3 retains its documented FAILED live-browser trigger and final GLB avatar deferrals.
-- Phase 3.1 code and database privilege work are recorded in the separate Python Backend repository. Its runbook still lists local API credential setup and five-endpoint HTTP smoke testing as owner-side steps; do not claim those local live API checks have passed until evidence is recorded.
+- Latest verified remote HEAD: `428a051fe18d48a64267b1dbe41b4cc42d8d76de` (`fix(bff): inject configured bearer token into upstream request`)
+- Batch 1 — BFF Foundation & Security Guards: implementation pushed; port and security changes source-audited.
+- Batch 2 — Fixed Upstream Proxy: implementation pushed; GitHub Actions run `42482847460` passed.
+- Next work unit: Batch 3 — Operator Authentication & Session Lifecycle.
+- Phases 1, 2.1, 2.2 and 2.3 remain complete with their historical evidence and documented deferrals.
+- Phase 3.1 work exists in the separate Python Backend repo. Its runbook still lists owner-side local API credentials and five-endpoint HTTP smoke checks; these have not been confirmed in this ledger.
 
 Product mission: [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md) — canonical product purpose.
 Master roadmap: [`docs/ROADMAP.md`](ROADMAP.md) — authoritative phase order and acceptance gates.
-This file is the durable current-state ledger. Before each task, read the canonical three documents in order, then inspect only relevant code and current branch HEAD.
+Durable execution hand-off: [`docs/PHASE_3_2_EXECUTION_LOG.md`](PHASE_3_2_EXECUTION_LOG.md).
+Before every substantial task, read the canonical three documents in order, verify current branch HEAD, then inspect the relevant files.
 
-### Current branch checkpoint
+### Current Phase 3.2 checkpoint
+- Virtual Office repo: `awandhani22-boop/SIREADER`
 - Branch: `phase-3-2-batch-1-bff-foundation`
-- Remote commit: `8b5c7a09ec82e83e8bd81a25a2e8034dbe16713e`
-- Batch 1 files: `server/config.ts`, `server/app.test.ts` and the seven BFF foundation files introduced in the prior commit.
-- Last Argon-reported local checks before the final port regression assertions: 29/29 BFF tests, 311/311 repository tests, TypeScript typecheck, lint script, production build, and `git diff --check` passed. Four additional simultaneous `BFF_PORT` + `overrides.port` assertions were subsequently added and committed; they are within the existing P0-3 test, so the count remains 29. The assistant verified their source on GitHub but did not execute local commands.
-- GitHub Actions status for `8b5c7a09ec82e83e8bd81a25a2e8034dbe16713e`: no status checks were returned at the time this ledger was written.
+- Latest remote HEAD: `428a051fe18d48a64267b1dbe41b4cc42d8d76de`
+- Batch 2 implementation files: `server/upstream.ts`, `server/upstream.test.ts`, `server/app.ts`, `server/app.test.ts`, `server/log.ts`, `package.json`, and `.github/workflows/ci.yml`.
+- Upstream transport is fixed to `http://127.0.0.1:8000` and exactly five static GET paths. It creates only server-side Bearer Authorization and Accept application headers; redirects are rejected; timeout is capped at 5 seconds; streamed response is capped at 1 MiB; response DTOs are exact-key validated against the Python Pydantic schema; errors and logs are sanitized.
+- Observability endpoints remain fail-closed with HTTP 401 until Batch 3 installs actual operator session validation. Test-only middleware injection is used exclusively by mock tests.
+- GitHub Actions run `42482847460` on commit `428a051`: 323 tests passed, 0 failed; TypeScript check passed; production Vite build passed (747 ms in run log). Dependency install with frozen Bun lock passed.
+- The first CI run on `137c341` failed at the outbound Authorization assertion because the code sent the literal string `Bearer ${token}`. The implementation was corrected to concatenate the server token, committed as `428a051`, and the subsequent full CI run passed. This failure and correction are recorded to preserve the actual audit trail.
+- CI used local mock HTTP servers only; it did not contact the real Python API or Supabase.
+- Not yet verified: Windows owner-side test/build rerun; Chrome/local browser HttpOnly cookie checks; local live Python API credential and five-endpoint smoke checks; production serving on local Windows. Do not claim these passed.
 - No merge to `main` has been performed.
 
 ## Implemented

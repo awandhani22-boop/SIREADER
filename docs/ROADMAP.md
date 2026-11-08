@@ -178,11 +178,11 @@ Boundary:
 - It does not enable AI inference or trading execution.
 
 ## Phase 3.2 — Secure BFF & Frontend Observability Integration
-**Status: IN PROGRESS.** Batch 1 foundation is on branch `phase-3-2-batch-1-bff-foundation` at `8b5c7a0`; do not infer full Phase 3.2 acceptance from this baseline.
+**Status: IN PROGRESS.** Batch 1 foundation and Batch 2 fixed upstream proxy are pushed to `phase-3-2-batch-1-bff-foundation` through `428a051`. Batch 2 GitHub Actions passed (323/323 tests, typecheck, production build); later Phase 3.2 batches and owner-side browser/live-service checks remain.
 
 ### Execution batches and gates
-1. **Batch 1 — BFF Foundation & Security Guards:** canonical route allowlist, loopback configuration, strict Host/Fetch-Metadata/Origin/raw-path/method guards, scoped auth-body parser, safe error envelope/logger. Latest remote commit: `8b5c7a09ec82e83e8bd81a25a2e8034dbe16713e`. Local Argon report: 29 BFF tests and 311 repository tests passed; typecheck/lint/build reported pass before the final simultaneous-port regression assertions. The current commit includes the final port tests, but no GitHub CI status or independent owner-run test evidence is recorded here.
-2. **Batch 2 — Fixed Upstream Proxy:** server-only bearer injection; five fixed GET mappings; no arbitrary URL/path forwarding; upstream headers created from scratch; 5-second timeout; redirect rejection; 1 MiB streamed body cap; safe error mapping; strict response-schema validation against the Python API Pydantic contract. Mock HTTP tests only; no live Supabase/API calls.
+1. **Batch 1 — BFF Foundation & Security Guards:** COMPLETE IN CODE; pushed and source-audited. Includes canonical route allowlist, fixed loopback config, strict Host/Fetch-Metadata/Origin/raw-path/method guards, scoped auth parser, safe errors/logger, and mode-specific dev/prod ports. Batch 1 was included in the later full CI run.
+2. **Batch 2 — Fixed Upstream Proxy:** COMPLETE IN CODE AND CI. Server-only bearer injection; five fixed GET mappings; no arbitrary URL/path forwarding; outbound headers constructed from scratch; 5-second timeout; redirect rejection; streamed 1 MiB cap; safe error mapping; exact DTO validation against Python API Pydantic schemas. Mock HTTP tests only; no live Supabase/API calls. Latest fix: `428a051fe18d48a64267b1dbe41b4cc42d8d76de`. GitHub Actions run `42482847460`: 323/323 tests, typecheck, and production build all passed.
 3. **Batch 3 — Operator Authentication & Session Lifecycle:** scrypt password verification; single-user operator login; server-memory sessions; random session identifiers and CSRF tokens; rotation; idle 1-hour and absolute 8-hour expiry; rate limiting; constant-time CSRF validation; HttpOnly Secure SameSite=Strict host cookie; logout revocation. Auth configuration is presence-checked without printing secret values. Session-store restart invalidation must be documented.
 4. **Batch 4 — Frontend API Contracts & Runtime State:** typed validated DTOs and separate LIVE state/store/repository; no simulation fallback or state mixing; login/session state and safe CSRF handling; clear transport/auth/schema states.
 5. **Batch 5 — Polling & Observability Presentation:** system/pipeline/market polling every 10 seconds; usage/audit every 30 seconds; 5-second request timeout; STALE after 3 intervals; OFFLINE after 2 transport failures; bounded jittered backoff capped at 60 seconds; retain last-known LIVE values while marking stale/offline; clear private data on SESSION_REQUIRED.
@@ -190,7 +190,7 @@ Boundary:
 
 Batch acceptance is sequential. A later batch may be developed behind an explicit test seam, but production integration and phase acceptance must not silently assume an earlier batch passed. Do not connect to live backend credentials until the owner confirms the local Phase 3.1 API runbook checks.
 
-**Status: NEXT — after Phase 2.3 sign-off.**
+**Status: IN PROGRESS — Batch 1 and Batch 2 code are pushed; Batch 2 CI has passed.**
 
 Goal: connect the existing Three.js frontend to the five Phase 3.1 GET endpoints without exposing the API Bearer Token.
 
