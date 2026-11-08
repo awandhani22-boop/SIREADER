@@ -27,7 +27,7 @@ Python Backend:
 ### 3.3-B — Python listener and SSE route
 
 - Added app/api/event_stream.py with one dedicated Psycopg 3 async LISTEN connection using the existing read-only database URL.
-- Listener connection explicitly sets default_transaction_read_only=on, search_path=public, application name, a 5-second connect timeout, and TCP keepalive.
+- Listener connection explicitly sets default_transaction_read_only=on, search_path=public, application name, a 5-second connect timeout, and TCP keepalive. It verifies six row triggers, six TRUNCATE triggers, zero SECURITY DEFINER functions, and fixed search_path=pg_catalog before marking stream ready; without the migration the route stays 503 and snapshot polling is not demoted.
 - Listener reconnect uses bounded exponential backoff and jitter. Snapshot API startup and GET routes remain independent of listener readiness.
 - Added an in-memory EventHub: 512-event replay ring, 64-item per-subscriber queue, max four subscribers, 100ms coalescing, 15-second heartbeat, process epoch + monotonic sequence IDs.
 - Cursor validation handles malformed, foreign-epoch, future, and expired cursors with reset/resnapshot semantics.
@@ -72,8 +72,7 @@ Virtual Office:
 
 ## Owner acceptance still required
 
-1. Verify the latest Python Backend CI result on the exact branch HEAD.
-2. Review and apply the migration through the Supabase/database-owner process. The sireader_api_ro role must remain read-only.
+1. Review and apply the migration through the Supabase/database-owner process. The sireader_api_ro role must remain read-only.
 3. Restart the local Python API and Virtual Office; confirm the EventHub listener becomes ready with the configured Session pooler connection.
 4. In Chrome, confirm same-origin GET /api/v1/events/stream returns 200 and text/event-stream; browser request must contain no bearer token.
 5. Verify a harmless controlled test notification refreshes only the mapped snapshot, and verify the trigger mapping in staging/disposable PostgreSQL.

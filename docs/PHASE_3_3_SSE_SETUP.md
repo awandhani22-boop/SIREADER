@@ -23,6 +23,7 @@ References:
 4. Verify the twelve intended triggers (six row-level and six statement-level TRUNCATE triggers) and one trigger function exist. approval_decisions is INSERT-only at row level, plus TRUNCATE.
 5. Confirm the function is not SECURITY DEFINER and uses a fixed search path. The NOTIFY payload must be one of the fixed keys: system, telemetry, pipeline, market_watches, or audit.
 6. Do not alter or broaden the read-only role grants. The listener sets default_transaction_read_only=on and only issues LISTEN.
+7. At startup, the listener verifies all six row triggers, all six TRUNCATE triggers, zero SECURITY DEFINER functions, and the fixed search_path=pg_catalog. Until these checks pass, it does not mark SSE ready; the endpoint remains 503 and the frontend retains normal snapshot polling.
 
 Example verification query (run as database owner, not copied into app code):
 

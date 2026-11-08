@@ -72,11 +72,10 @@ All binds literal `127.0.0.1`; no LAN/public listening, no port fallback. Browse
 
 Phase 3.2 is **COMPLETE — OWNER ACCEPTANCE PASSED (2026-11-09)**. Phase 3.3 implementation is isolated on `phase-3-3-sse-implementation` in both repositories; neither branch has been merged to `main`.
 
-The event design and code are recorded in [`docs/PHASE_3_3_SSE_ARCHITECTURE.md`](PHASE_3_3_SSE_ARCHITECTURE.md) and [`docs/PHASE_3_3_SSE_EXECUTION_LOG.md`](PHASE_3_3_SSE_EXECUTION_LOG.md). The Virtual Office CI run `42534082388` passed 367/367 tests, TypeScript check, and production build. The backend's latest migration/keepalive hardening run must be rechecked in its repository before status promotion.
+The event design and code are recorded in [`docs/PHASE_3_3_SSE_ARCHITECTURE.md`](PHASE_3_3_SSE_ARCHITECTURE.md) and [`docs/PHASE_3_3_SSE_EXECUTION_LOG.md`](PHASE_3_3_SSE_EXECUTION_LOG.md). The Virtual Office CI run `42534082388` passed 367/367 tests, TypeScript check, and production build. Python Backend run `42534573937` passed on exact commit `9c76a804eb6bb1c7c6838bc5ba0dcb8f7d677fb1` (98 API tests, compileall, 50 core regression tests).
 
 Remaining work:
-1. Confirm the latest Python Backend CI run passes, including PostgreSQL trigger migration/idempotency/rollback and read-only LISTEN tests.
-2. Have the owner/DBA review and apply `migrations/2026_11_09_observability_events.sql` to Supabase; do not run it as `sireader_api_ro`.
+1. Have the owner/DBA review and apply `migrations/2026_11_09_observability_events.sql` to Supabase; do not run it as `sireader_api_ro`.
 3. Restart Python API and Virtual Office on the owner's local machine; verify the listener becomes ready without changing read-only grants.
 4. Verify Chrome same-origin EventSource, event payload contains only allowlisted invalidation metadata, and the snapshot GET endpoint refreshes the intended resource.
 5. Test disconnect, reconnect, replay gap, process restart, SSE unavailable fallback, logout/session expiry cleanup, and ensure the Simulation store is unchanged.

@@ -9,12 +9,12 @@
 - Active Python Backend implementation branch: `phase-3-3-sse-implementation` (isolated from `phase-3-1-api-gateway`).
 - Phase 3.2 implementation baseline remains `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5`; Phase 3.3 code is isolated in the two branches above.
 - Virtual Office Phase 3.3 code commit: `57e3f2d1d1eb3a616eb6792f69294f0d3072e261`; GitHub Actions run `42534082388` passed 367/367 tests, TypeScript check, and production build.
-- Python Backend Phase 3.3 code commit: `cead3a4ce2aa70371d29d72c56f36df1193fcf45`; latest PostgreSQL trigger/keepalive hardening CI must be checked before treating it as final.
+- Python Backend Phase 3.3 code commit: `9c76a804eb6bb1c7c6838bc5ba0dcb8f7d677fb1`; GitHub Actions run `42534573937` passed 98 API tests, compileall, and 50 core regression tests, including migration inventory/read-only LISTEN validation.
 - Phase 3.3 work covers backend event hub/listener/route/migration, BFF streaming proxy, and frontend EventSource invalidation/fallback. Supabase migration and local owner end-to-end acceptance remain pending.
 - Batch 1 — BFF Foundation & Security Guards: implementation pushed; port and security changes source-audited.
 - Batch 2 — Fixed Upstream Proxy: implementation pushed; GitHub Actions run `42482847460` passed (323/323).
 - Batch 3 — Operator Authentication & Session Lifecycle: implementation pushed; GitHub Actions run `42483616073` passed (331/331), typecheck and production build passed.
-- Next work unit: verify final Phase 3.3 backend CI, then owner-controlled Supabase migration and local end-to-end acceptance. Do not start Phase 4 until Phase 3.3 gates pass.
+- Next work unit: owner-controlled Supabase migration and local end-to-end acceptance for Phase 3.3. Do not start Phase 4 until Phase 3.3 gates pass.
 - Phases 1, 2.1, 2.2 and 2.3 remain complete with historical evidence and documented deferrals.
 - Phase 3.1 is implemented in the separate Python Backend repo. Owner-provided local report confirms the dedicated read-only database/API configuration and five authenticated GET smoke checks; a documentation-only status reconciliation remains for the backend runbook.
 

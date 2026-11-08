@@ -263,8 +263,8 @@ For a valid `resources.invalidated` event, queue a targeted refresh through the 
 
 | Batch | Scope | Exit evidence |
 |---|---|---|
-| 3.3-A | Event contract + migration + PostgreSQL trigger tests in Python Backend | IMPLEMENTED on backend branch; final hardening CI tracked in execution log |
-| 3.3-B | Psycopg listener + bounded EventHub + FastAPI SSE route | IMPLEMENTED on backend branch; final hardening CI tracked in execution log |
+| 3.3-A | Event contract + migration + PostgreSQL trigger tests in Python Backend | IMPLEMENTED; Python Backend CI run `42534573937` passed |
+| 3.3-B | Psycopg listener + bounded EventHub + FastAPI SSE route | IMPLEMENTED; Python Backend CI run `42534573937` passed |
 | 3.3-C | Authenticated bounded SSE proxy in Express BFF | IMPLEMENTED; Virtual Office CI passed |
 | 3.3-D | EventSource client + invalidation coordinator + polling fallback | IMPLEMENTED; Virtual Office CI passed |
 | 3.3-E | End-to-end reliability and owner acceptance | PENDING: Supabase migration, local Windows/API/Chrome tests, performance evidence |
