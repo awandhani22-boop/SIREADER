@@ -1,8 +1,9 @@
 # SIREADER Phase 3.3 — Real-Time Observability (SSE) Architecture
 
-**Document status:** DESIGN BASELINE — implementation not started  
+**Document status:** IMPLEMENTATION IN PROGRESS — code and CI are present on isolated branches; owner acceptance remains  
 **Repository:** `awandhani22-boop/SIREADER` (BFF/frontend) and `awandhani22-boop/SIREADER-Python-Backend` (authoritative event source)  
-**Continuation branch:** `phase-3-2-closeout-phase-3-3-sse-plan`  
+**Virtual Office branch:** `phase-3-3-sse`  
+**Python Backend branch:** `phase-3-3-sse-backend`  
 **Prerequisite:** Phase 3.2 owner acceptance recorded on 2026-11-09  
 **Purpose:** Define a bounded, authenticated, recoverable server-sent event stream without weakening the Phase 3.1 read-only database boundary or the Phase 3.2 BFF security model.
 
@@ -57,7 +58,7 @@ The deterministic 3D SIMULATED state remains independent.
 - Phase 3.2 BFF has a fixed route/method allowlist, operator-session middleware, a server-only upstream bearer token, strict Host/Origin/Fetch-Metadata guards, and a same-origin frontend API client.
 - Existing frontend polling already has timeout, no-overlap, retry/backoff, STALE/OFFLINE handling, session clearing, and late-response guards.
 
-These are constraints for the next implementation, not evidence that SSE has been implemented.
+Implementation status: backend, BFF, and frontend SSE code plus automated tests are present on the two branches. Latest CI evidence is recorded in `docs/PHASE_3_3_EXECUTION_LOG.md`. The owner's Supabase project has not been migrated, and the owner's Chrome/network acceptance has not yet been performed.
 
 ## 3. Event source and PostgreSQL boundary
 
