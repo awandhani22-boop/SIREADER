@@ -5,7 +5,7 @@
 
 - Phase 3.2 — Secure BFF & Frontend Observability Integration: **COMPLETE — owner acceptance confirmed 2026-11-09**.
 
-- Active Virtual Office implementation branch: `phase-3-3-sse` (branch HEAD `39df24187b6ff1b0a06cccee6f966942f5109fc4`; latest SSE code commit `1f73a6990d3ec71d8d581fb4dc27af07ab52e04b`).
+- Active Virtual Office implementation branch: `phase-3-3-sse` (branch HEAD `5f556003c2840c874e6aa12ce14e963d75741936`; latest SSE code commit `1f73a6990d3ec71d8d581fb4dc27af07ab52e04b`).
 - Active Python Backend implementation branch: `phase-3-3-sse-backend` (branch HEAD `e7ba6655c91b0beaad3a95276a0fbfc58ce8cca1`; latest listener code commit `6d928cc037666a14096c2b2d9f4020d0198b01b8`).
 - Phase 3.2 closeout documentation branch: `phase-3-2-closeout-phase-3-3-sse-plan`; kept separate from implementation work.
 - Latest verified implementation commit: `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5` (`fix(serving): keep cross-platform launcher valid JavaScript`). Later commits only update the current-state documentation.
