@@ -3,7 +3,7 @@
 **Document status:** ROADMAP LOCKED — source of truth for phase order, scope, and acceptance gates  
 **Repository:** `awandhani22-boop/SIREADER`  
 **Current documentation/continuation branch:** `phase-3-2-closeout-phase-3-3-sse-plan` (isolated from the Phase 3.2 implementation branch).  
-**Last roadmap review:** 2026-11-08
+**Last roadmap review:** 2026-11-09
 
 This document governs the SIREADER Virtual Office project from the existing 3D frontend through the final v1.0 release. **The canonical product mission and meaning of the final product are in [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md); read that before every task.** Keep this roadmap and `docs/PROJECT_STATE.md` aligned after every milestone. Do not create a replacement frontend or restart completed phases.
 
@@ -221,7 +221,9 @@ Exit gate:
 - Frontend typecheck, tests, build, security checks, and manual browser acceptance pass.
 
 ## Phase 3.3 — Real-Time Observability (SSE)
-**Status: PLANNED — only after Phase 3.2 is stable.**
+**Status: PLANNED — architecture baseline drafted; implementation not started.**
+
+Design reference: [`docs/PHASE_3_3_SSE_ARCHITECTURE.md`](PHASE_3_3_SSE_ARCHITECTURE.md). The proposed design uses PostgreSQL LISTEN/NOTIFY as a bounded invalidation signal, a Python API EventHub, an authenticated BFF stream, and browser EventSource. Existing snapshot GET endpoints remain authoritative. The design still requires review and empirical confirmation that the configured Supabase session-pooler supports a persistent LISTEN connection.
 
 Goal: replace frequent client polling with bounded, server-mediated event updates where they add meaningful value.
 
