@@ -37,6 +37,10 @@ type Validator = (value: unknown) => boolean;
 function isObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
+function hasExactKeys(value: JsonObject, keys: readonly string[]): boolean {
+  const actual = Object.keys(value);
+  return actual.length === keys.length && keys.every((key) => Object.prototype.hasOwnProperty.call(value, key));
+}
 function isString(value: unknown): value is string {
   return typeof value === 'string';
 }
@@ -69,6 +73,7 @@ function hasCurrency(value: unknown): value is 'IDR' | 'USD' {
 function validTokenBreakdown(value: unknown): boolean {
   return (
     isObject(value) &&
+    hasExactKeys(value, ['input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_write_tokens', 'thinking_tokens']) &&
     isInteger(value.input_tokens) &&
     isInteger(value.output_tokens) &&
     isInteger(value.cache_read_tokens) &&
@@ -80,6 +85,7 @@ function validRuntimeControl(value: unknown): boolean {
   if (value === null) return true;
   return (
     isObject(value) &&
+    hasExactKeys(value, ['execution_mode', 'trading_mode', 'auto_execution_enabled', 'auto_paused', 'updated_at']) &&
     isString(value.execution_mode) &&
     isString(value.trading_mode) &&
     isBoolean(value.auto_execution_enabled) &&
@@ -90,6 +96,7 @@ function validRuntimeControl(value: unknown): boolean {
 
 const validateSystemStatus: Validator = (value) =>
   isObject(value) &&
+  hasExactKeys(value, ['api_status', 'database_status', 'server_time_utc', 'runtime_control', 'process_monitoring_note']) &&
   (value.api_status === 'HEALTHY' || value.api_status === 'DEGRADED') &&
   (value.database_status === 'CONNECTED' || value.database_status === 'DISCONNECTED') &&
   isIsoDateTime(value.server_time_utc) &&
@@ -97,7 +104,7 @@ const validateSystemStatus: Validator = (value) =>
   isString(value.process_monitoring_note);
 
 function validCurrencyTelemetry(value: unknown): boolean {
-  if (!isObject(value) || !hasCurrency(value.currency)) return false;
+  if (!isObject(value) || !hasExactKeys(value, ['currency', 'total_cost', 'total_reserved', 'total_projected', 'total_requests', 'tokens', 'status_counts']) || !hasCurrency(value.currency)) return false;
   return (
     isDecimal(value.total_cost) &&
     isDecimal(value.total_reserved) &&
@@ -111,6 +118,7 @@ function validCurrencyTelemetry(value: unknown): boolean {
 function validModelTelemetry(value: unknown): boolean {
   return (
     isObject(value) &&
+    hasExactKeys(value, ['model', 'tier', 'currency', 'requests', 'cost', 'reserved', 'projected', 'tokens']) &&
     isString(value.model) &&
     isString(value.tier) &&
     hasCurrency(value.currency) &&
@@ -123,6 +131,7 @@ function validModelTelemetry(value: unknown): boolean {
 }
 const validateTelemetryUsage: Validator = (value) =>
   isObject(value) &&
+  hasExactKeys(value, ['period_start', 'period_end', 'period_days', 'currencies', 'models']) &&
   isIsoDate(value.period_start) &&
   isIsoDate(value.period_end) &&
   isInteger(value.period_days, 1) &&
@@ -134,6 +143,7 @@ const validateTelemetryUsage: Validator = (value) =>
 function validInFlightTask(value: unknown): boolean {
   return (
     isObject(value) &&
+    hasExactKeys(value, ['task_id', 'status', 'liveness_status', 'created_at', 'elapsed_seconds']) &&
     isInteger(value.task_id, 1) &&
     value.status === 'PROCESSING' &&
     value.liveness_status === 'IN_FLIGHT_UNCONFIRMED' &&
@@ -144,6 +154,7 @@ function validInFlightTask(value: unknown): boolean {
 function validQueuedMessage(value: unknown): boolean {
   return (
     isObject(value) &&
+    hasExactKeys(value, ['queue_item_id', 'status', 'queue_reason', 'attempts', 'claimed_at', 'created_at', 'updated_at']) &&
     isInteger(value.queue_item_id, 1) &&
     (value.status === 'PENDING' || value.status === 'CLAIMED') &&
     (value.queue_reason === 'BLOCKED_HARD_BUDGET' ||
@@ -157,6 +168,7 @@ function validQueuedMessage(value: unknown): boolean {
 }
 const validateActivePipeline: Validator = (value) =>
   isObject(value) &&
+  hasExactKeys(value, ['server_time_utc', 'total_in_flight', 'total_queued', 'in_flight_tasks', 'queued_messages']) &&
   isIsoDateTime(value.server_time_utc) &&
   isInteger(value.total_in_flight) &&
   isInteger(value.total_queued) &&
@@ -168,6 +180,7 @@ const validateActivePipeline: Validator = (value) =>
 function validMarketWatch(value: unknown): boolean {
   return (
     isObject(value) &&
+    hasExactKeys(value, ['watch_id', 'symbol', 'status', 'spread_pips', 'maximum_spread_pips', 'last_bid', 'last_ask', 'check_count', 'last_checked_at', 'next_check_at', 'created_at']) &&
     isInteger(value.watch_id, 1) &&
     isString(value.symbol) &&
     (value.status === 'WAITING_FOR_SPREAD' || value.status === 'RECHECKING') &&
@@ -183,6 +196,7 @@ function validMarketWatch(value: unknown): boolean {
 }
 const validateActiveMarketWatches: Validator = (value) =>
   isObject(value) &&
+  hasExactKeys(value, ['server_time_utc', 'total_active_watches', 'watches']) &&
   isIsoDateTime(value.server_time_utc) &&
   isInteger(value.total_active_watches) &&
   Array.isArray(value.watches) &&
@@ -191,6 +205,7 @@ const validateActiveMarketWatches: Validator = (value) =>
 function validAuditDecision(value: unknown): boolean {
   return (
     isObject(value) &&
+    hasExactKeys(value, ['audit_id', 'decision', 'previous_status', 'new_status', 'reviewer_role', 'decided_at']) &&
     isInteger(value.audit_id, 1) &&
     (value.decision === 'APPROVED' || value.decision === 'REJECTED') &&
     isString(value.previous_status) &&
@@ -201,6 +216,7 @@ function validAuditDecision(value: unknown): boolean {
 }
 const validateAuditDecisions: Validator = (value) =>
   isObject(value) &&
+  hasExactKeys(value, ['server_time_utc', 'total_returned', 'offset', 'decisions']) &&
   isIsoDateTime(value.server_time_utc) &&
   isInteger(value.total_returned) &&
   isInteger(value.offset) &&
@@ -351,7 +367,7 @@ export function createUpstreamHandlers(
           return;
         }
 
-        if (!upstream.ok) {
+        if (upstream.status !== 200) {
           const authFailure = upstream.status === 401 || upstream.status === 403;
           await cancelBody(upstream);
           SafeLogger.warn('UPSTREAM_REQUEST_FAILED', {

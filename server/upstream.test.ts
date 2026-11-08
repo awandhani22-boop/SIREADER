@@ -108,7 +108,7 @@ function createProxyServer(
   const app = createBffApp(undefined, {
     baseUrl,
     timeoutMs: options.timeoutMs,
-    tokenProvider: () => options.token ?? 'test-server-bearer-token',
+    tokenProvider: () => Object.prototype.hasOwnProperty.call(options, 'token') ? options.token : 'test-server-bearer-token',
     requireOperatorSession: (_req, _res, next) => next(),
   });
   return http.createServer(app);
