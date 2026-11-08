@@ -6,8 +6,8 @@
 
 - Virtual Office repository: `awandhani22-boop/SIREADER`
 - Active branch: `phase-3-2-batch-1-bff-foundation`
-- Latest verified remote HEAD: `f301fec1553254ed8fc70f8857ee7d247817bdbf`
-- Latest verified commit: `docs: record Phase 3.2 Batch 4 acceptance and Batch 5 handoff`
+- Latest verified remote HEAD: `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5`
+- Latest verified commit: `fix(serving): keep cross-platform launcher valid JavaScript`
 - Previous docs checkpoint before Batch 3: `94228186e22e548cc61f05909bc10f4cd9a79bae`
 - Python backend repository: `awandhani22-boop/SIREADER-Python-Backend`, branch `phase-3-1-api-gateway`, reviewed baseline `76b968fce399a5f591b1bd48e1501e9baa45c92a`
 - Never merge to `main` without owner approval. No destructive Git operations. Preserve untracked/local-only files.
@@ -47,9 +47,9 @@ All binds literal `127.0.0.1`; no LAN/public listening, no port fallback. Browse
 | 3.2 Batch 1 | Express BFF foundation, allowlist, guards, safe errors/logs, fixed topology ports | PUSHED; source audit complete; prior Argon local report retained | Commit `8b5c7a09ec82e83e8bd81a25a2e8034dbe16713e`; final four simultaneous-env port cases are source-audited. Included in Batch2 full CI run. |
 | 3.2 Batch 2 | Fixed upstream proxy and Pydantic schema validation | IMPLEMENTED, PUSHED, CI PASS | Commit `428a051fe18d48a64267b1dbe41b4cc42d8d76de`; fixed five-path proxy, server-only token, timeout <=5s, redirect rejection, streamed 1MiB cap, strict DTO checks, safe errors; mock tests; GitHub Actions run `42482847460` passed 323/323 tests, TypeScript check, and production build. No real backend/Supabase calls. |
 | 3.2 Batch 3 | Operator password/session/CSRF | IMPLEMENTED, PUSHED, CI PASS | Commit `6c10ddf` added scrypt login, memory sessions, secure cookie, CSRF logout, password-hash helper and tests. CI first run exposed an incorrect absolute-timeout test; follow-up commit `8dfa504` corrected the test and reserves login attempts before scrypt to prevent concurrent brute-force race. GitHub Actions run `42483616073`: 331/331 tests, TypeScript check and build passed. Real operator hash remains owner-local and not configured in repo. |
-| 3.2 Batch 4 | Frontend API contracts, independent LIVE Zustand state, same-origin client, session/CSRF controller | IMPLEMENTED, PUSHED, CI PASS | Commits `2e5778d` and `e504abf`; GitHub Actions run `42485169977`: 343/343 tests, TypeScript check and production build passed. First run `42485110003` caught two unsafe casts; correction is recorded in `e504abf`. UI presentation/polling are explicitly deferred to Batch 5. |
-| 3.2 Batch 5 | Polling/backoff/staleness and observability presentation | PLANNED | Not implemented |
-| 3.2 Batch 6 | Vite proxy, production static serving, local browser/security acceptance | PLANNED | Not implemented |
+| 3.2 Batch 4 | Frontend API contracts, independent LIVE Zustand state, same-origin client, session/CSRF controller | IMPLEMENTED, PUSHED, CI PASS | Commits `2e5778d` and `e504abf`; GitHub Actions run `42485169977`: 343/343 tests, TypeScript check and production build passed. First run `42485110003` caught two unsafe casts; correction is recorded in `e504abf`. |
+| 3.2 Batch 5 | Polling/backoff/staleness and LIVE observability dock presentation | IMPLEMENTED, PUSHED, CI PASS | Commits `c25cf29`, `482397c`, `95bbe461`, `f15f7430`; GitHub Actions run `42486162630`: 353/353 tests, TypeScript check and production build passed. Includes cadence, no-overlap, bounded jitter, OFFLINE/STALE, session clear/late-response guards and TopBar dock. |
+| 3.2 Batch 6 | Vite loopback proxy, dotenv-first BFF entrypoint, cross-platform dev launcher, production static/SPA serving, local runbook | IMPLEMENTED, PUSHED, CI PASS; OWNER LOCAL ACCEPTANCE PENDING | Commits `f24a59a` and `9641d18`; GitHub Actions run `42486731963`: 358/358 tests, TypeScript check, production build passed. First run `42486677113` passed 358 tests but typecheck caught TS syntax in `.mjs`; fixed in `9641d18`. |
 | Phase 3.3 | Shared SSE through BFF | PLANNED | Must follow stable 3.2 |
 | Phase 4.1 | Worker runtime contract/registry/health | PLANNED | Backend-authoritative |
 | Phase 4.2 | AI provider execution/routing/cost guard | PLANNED | Server-only credentials; budget approval required |
@@ -58,22 +58,28 @@ All binds literal `127.0.0.1`; no LAN/public listening, no port fallback. Browse
 
 ## Verification truth table
 
-- Confirmed on GitHub: remote branch HEAD equals `f301fec1553254ed8fc70f8857ee7d247817bdbf`; Batch 4 code commit `e504abf3d7cd8781559275eb4243431a88df57ad` and documentation checkpoint are present on the same branch.
-- Historical Batch 1 report: 29/29 BFF tests and 311/311 repository tests, TypeScript typecheck, build and diff check were reported by Argon. Batch 4 verification is stronger: GitHub Actions run `42485169977` directly confirms 343/343 tests, TypeScript check and Vite production build passed.
-- Verified by assistant source inspection on GitHub: Batch 1 strict mode-to-port mapping and simultaneous-setting regression cases. Batch 4 code is present in the remote commit and its full GitHub Actions run passed.
-- Not verified: owner Windows test/build; local Chrome browser/session integration; local generated operator password hash; local live Python API HTTP smoke tests; dev Vite proxy and production static serving; visible LIVE UI/polling; API secret presence in local env.
+- Confirmed on GitHub: remote branch HEAD equals `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5`; Batch 5 and Batch 6 code, tests and local runbook are present on the same branch.
+- GitHub Actions Batch 4 run `42485169977`: 343/343 tests, TypeScript check and production build passed. Batch 5 run `42486162630`: 353/353 tests, TypeScript check and production build passed. Batch 6 run `42486731963`: 358/358 tests, TypeScript check and production build passed (Vite build completed in 653 ms).
+- Verified on remote source: Vite loopback bind and exact regex `/api` proxy with Host preserved (`changeOrigin: false`); BFF static serving uses the same Host/Fetch/Origin guards, never serves API paths from SPA fallback, denies dotfiles, uses no-store for HTML and immutable caching only for content-hashed assets. CI integration tests cover root/SPA/assets, hidden files, unknown API paths, missing dist, and Vite topology config.
+- Not verified locally by owner: Windows start/stop of `bun run dev`; production `bun run start` against the real built `dist/`; actual Chrome HttpOnly/Secure/SameSite cookie and CSRF/logout behavior; locally generated operator hash; privately configured `SIREADER_API_AUTH_TOKEN`; Python Backend authenticated five-endpoint smoke tests; real end-to-end LIVE data session. CI does not prove local credentials, user machine behavior, Chrome cookie semantics, or live Supabase connectivity.
 - No claim of Phase 3.2 or Phase 4 completion is valid yet.
 
-## Next action — Batch 5: Polling & Observability Presentation
+## Next action — owner-side Phase 3.2 local acceptance
 
-1. Re-read `docs/PRODUCT_VISION.md`, `docs/ROADMAP.md`, `docs/PROJECT_STATE.md`, this ledger and verify the branch HEAD (`f301fec1553254ed8fc70f8857ee7d247817bdbf`).
-2. Inspect the existing OfficeApp composition, TopBar, panels, and the Batch 4 LIVE adapter/controller. Preserve the working 3D scene and all deterministic simulation behavior.
-3. Add one polling coordinator: system status, active pipeline and market watches every 10 seconds; telemetry usage and audit decisions every 30 seconds.
-4. Enforce 5-second request timeout, bounded jittered backoff capped at 60 seconds, OFFLINE after two consecutive transport failures, STALE after three expected polling intervals, and keep last-known values visibly stale/offline rather than fresh.
-5. Clear private LIVE data on SESSION_REQUIRED; schema/backend errors must remain ERROR and never fall back to SIMULATED.
-6. Add fake-clock/fake-timer tests for cadence, overlapping-request prevention, backoff bounds, staleness thresholds, OFFLINE threshold, recovery to LIVE, and session-required clearing.
-7. Integrate panels/login into the existing UI with explicit LIVE/SIMULATED labels and loading/empty/error states. Never infer OS worker BUSY from a PROCESSING pipeline record.
-8. Run tests/typecheck/build; update this ledger with evidence. Do not connect live credentials before the owner has completed the backend API smoke checks.
+Implementation Batches 1–6 are pushed and CI-passed. **Do not start Phase 3.3 SSE until these local acceptance gates are completed.**
 
-**Owner-side local requirements still pending:** generate operator hash locally using the masked helper and place it only in ignored local environment; complete Python Backend Phase 3.1 authenticated HTTP smoke checks privately; verify real HttpOnly cookie/CSRF behavior in Chrome and local dev/production serving on Windows. Never paste secret values into chat.
+1. On Windows, from the Virtual Office repository root, run:
+   ```powershell
+   bun install --frozen-lockfile
+   bun run test
+   bun run lint
+   bun run build
+   ```
+2. Generate the operator password hash only in the local terminal with `bun run hash:operator`. Store the resulting `OPERATOR_PASSWORD_HASH` line in the ignored local `.env`; never share the value in chat, screenshots, or Git.
+3. Start both local development processes using `bun run dev`; open exactly `http://127.0.0.1:3000`. Confirm Vite is on loopback port 3000 and BFF on loopback port 3001. Confirm a port conflict fails rather than selecting another port.
+4. Verify successful login sets `__Host-sireader_sid` as HttpOnly, Secure, SameSite=Strict, Path=/, host-only/no Domain. Confirm it is not readable through `document.cookie`. Verify logout revokes it and clears all private LIVE state.
+5. Complete Python Backend Phase 3.1's authenticated five-endpoint HTTP smoke checks privately. Only after they pass, configure the separate `SIREADER_API_AUTH_TOKEN` in ignored local configuration. Never paste the token into chat.
+6. Build and test the production BFF with `bun run build` followed by `bun run start`. Confirm the existing `dist/` is served from loopback port 3000 and API routes remain JSON while browser SPA routes return the frontend.
+7. Record pass/fail results without secret values. After this gate passes, update the project state to close Phase 3.2 and only then plan Phase 3.3 SSE.
 
+No trading, MT5 order, approval or write API is introduced by Phase 3.2.

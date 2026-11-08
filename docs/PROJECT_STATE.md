@@ -4,11 +4,11 @@
 **Phase 3.2 — IN PROGRESS: Secure BFF & Frontend Observability Integration.**
 
 - Active branch: `phase-3-2-batch-1-bff-foundation`
-- Latest verified remote HEAD: `f301fec1553254ed8fc70f8857ee7d247817bdbf` (`docs: record Phase 3.2 Batch 4 acceptance and Batch 5 handoff`)
+- Latest verified remote HEAD: `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5` (`fix(serving): keep cross-platform launcher valid JavaScript`)
 - Batch 1 — BFF Foundation & Security Guards: implementation pushed; port and security changes source-audited.
 - Batch 2 — Fixed Upstream Proxy: implementation pushed; GitHub Actions run `42482847460` passed (323/323).
 - Batch 3 — Operator Authentication & Session Lifecycle: implementation pushed; GitHub Actions run `42483616073` passed (331/331), typecheck and production build passed.
-- Next work unit: Batch 5 — Polling & Observability Presentation.
+- Next work unit: Owner-side Phase 3.2 local acceptance (Windows, Chrome, operator session, and private Python API smoke checks).
 - Phases 1, 2.1, 2.2 and 2.3 remain complete with historical evidence and documented deferrals.
 - Phase 3.1 is implemented in the separate Python Backend repo; owner-side local credential setup and authenticated five-endpoint smoke test remain unconfirmed in its runbook.
 
@@ -18,7 +18,7 @@ Durable execution hand-off: [`docs/PHASE_3_2_EXECUTION_LOG.md`](PHASE_3_2_EXECUT
 Before every substantial task, re-read the three canonical docs in order, verify current branch HEAD, then inspect only relevant code.
 
 ### Current Phase 3.2 checkpoint
-- Branch: `phase-3-2-batch-1-bff-foundation`; latest verified remote HEAD: `f301fec1553254ed8fc70f8857ee7d247817bdbf`.
+- Branch: `phase-3-2-batch-1-bff-foundation`; latest verified remote HEAD: `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5`.
 - Batch 1 and Batch 2 details are recorded in the execution log below.
 - Batch 3 added `server/auth.ts`, `server/auth.test.ts`, the login/session/logout routes, error/log event updates, a masked local password-hash helper at `scripts/create-operator-password-hash.ts`, and `docs/OPERATOR_AUTH_SETUP.md`.
 - Password hash uses fixed scrypt N=16384, r=8, p=1, 16-byte salt and 64-byte derived key. No default password. Missing/malformed hash returns `503 AUTH_NOT_CONFIGURED`.
@@ -29,9 +29,13 @@ Before every substantial task, re-read the three canonical docs in order, verify
 - GitHub Actions run `42483616073` on `8dfa50421f30bc888d22c880dcb5bd496f201d0e`: 331 tests passed, 0 failed; TypeScript check passed; production build passed (828 ms in run log). Frozen Bun dependency install passed.
 - Batch 4 added `src/live/live.contracts.ts`, `live.api.ts`, `live.state.ts`, `live.controller.ts`, and `live.test.ts`; `package.json` now includes the LIVE tests in the complete test command. Five API DTOs are strictly validated against the BFF/Python contract; the browser client calls fixed same-origin paths only, never sends a bearer token, stores CSRF only in a private in-memory closure, uses same-origin credentials and a 5-second timeout, and has explicit transport/auth/schema errors. LIVE data is kept in an independent Zustand store with explicit `source: LIVE`; it does not import or derive from `useOfficeStore` simulation state. Session-required and logout flows clear private LIVE data. No polling or UI presentation is included yet.
 - Batch 4 CI: first run `42485110003` — 343/343 tests passed, TypeScript check found two unsafe DTO casts, so build was skipped. Fix commit `e504abf3d7cd8781559275eb4243431a88df57ad` was followed by GitHub Actions run `42485169977`: 343/343 tests passed; TypeScript check passed; production build passed; final workflow conclusion SUCCESS.
+- Batch 5 added `src/live/live.poller.ts`, deterministic fake-clock tests in `src/live/live.poller.test.ts`, and `src/ui/LiveObservabilityDock.tsx` wired into the existing `TopBar`. System/pipeline/market watches poll every 10 seconds; usage/audit poll every 30 seconds. The poller prevents same-path overlap, uses bounded jittered backoff (maximum 60 seconds), records OFFLINE after two consecutive transport failures, marks retained snapshots STALE after three intervals, clears private LIVE data on SESSION_REQUIRED, and ignores late responses after stop/logout. Global connection reaches LIVE only after all five endpoint snapshots validate. Existing simulation and 3D scene remain separate and intact.
+- Batch 5 CI: initial run `42485909696` found the missing internal `stop()` helper; follow-up run `42485983354` fixed it but exposed two test generic typing errors. Final commit `f15f7430e871c032b3b7f4f457f43c26f820db4b`, GitHub Actions run `42486162630`: 353/353 tests passed; TypeScript check passed; production build passed; workflow SUCCESS.
+- Batch 6 added loopback-only Vite configuration, exact `/api` namespace regex proxy to the BFF with `changeOrigin: false`, cross-platform dual-process dev launcher, dotenv-first BFF entrypoint, production Express static hosting of `dist/`, SPA navigation fallback excluding `/api`, safe asset/index cache headers, and local setup runbook `docs/PHASE_3_2_LOCAL_SETUP.md`. Production startup selects port 3000 and fails closed if `dist/index.html` is missing; development starts Vite at 3000 and BFF at 3001. Static files and proxy behavior have automated integration/configuration tests.
+- Batch 6 CI: first run `42486677113` passed 358/358 tests but typecheck flagged TypeScript-only syntax in the `.mjs` launcher. Commit `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5` corrected it. GitHub Actions run `42486731963`: 358/358 tests passed, 0 failed/skipped; TypeScript check passed; production build passed (653 ms); workflow SUCCESS.
 - The first Batch 3 CI run on `6c10ddf` failed one time-expiry assertion (401 instead of 200). The test was corrected to refresh idle time while advancing toward the absolute deadline. The login-attempt limiter was additionally hardened to reserve attempts before asynchronous scrypt. The rerun on `8dfa504` passed fully.
 - CI tests used in-process loopback servers and deterministic test hashes only; no live Python API, Supabase, paid provider, or real credentials were used.
-- Not yet verified: Windows owner-side test/build; local generated operator hash setup; browser HttpOnly cookie/login/CSRF behavior in Chrome; local Python API authenticated smoke tests; dev Vite proxy and production static serving; polling freshness/reconnect behavior; visible LIVE panels/login UI. Batch 4 adapter/state code is CI-verified but not yet wired into the visible Office UI.
+- Not yet verified locally by the owner: Windows `bun run dev` and production `bun run start`; actual browser login/HttpOnly cookie/CSRF/logout in Chrome; locally generated operator password hash; private Python API authenticated five-endpoint smoke tests; presence-only local `SIREADER_API_AUTH_TOKEN` configuration; a real end-to-end LIVE data session. GitHub CI verifies the code, unit/integration tests, typecheck and build, but does not prove the owner machine's local secrets, backend service, browser cookie behavior, or real Supabase connectivity.
 - No merge to `main` has been performed.
 
 ## Implemented
@@ -127,17 +131,14 @@ Before every substantial task, re-read the three canonical docs in order, verify
 - **Phase 3.1 — Read-Only Observability API Gateway: COMPLETE (2026-11-08)** in the separate `awandhani22-boop/SIREADER-Python-Backend` repository. Supabase lockdown and dedicated `sireader_api_ro` access were verified; all five local GET endpoints returned 200; missing token returned 401; POST/PUT/PATCH/DELETE returned 405; 74 API tests and 50 core backend regression tests passed locally; API compile passed; GitHub Actions run `42397323807` succeeded. Backend remains a separate project boundary.
 
 ## Next
-Begin **Phase 3.2 Batch 5 — Polling & Observability Presentation** on `phase-3-2-batch-1-bff-foundation`.
+Complete **Phase 3.2 owner-side local acceptance** before starting Phase 3.3 or connecting real backend credentials.
 
-Before implementation:
-1. Re-read the three canonical docs and verify the current remote HEAD; Batch 4 is at `e504abf3d7cd8781559275eb4243431a88df57ad`.
-2. Inspect the existing OfficeApp composition, TopBar, panels, and LIVE adapter/controller. Keep the deterministic simulation untouched and do not conflate its worker/task/token/cost values with backend data.
-3. Add one polling coordinator with exact cadence: system status, active pipeline and market watches every 10 seconds; usage and audit decisions every 30 seconds.
-4. Enforce 5-second request timeout, bounded jittered backoff capped at 60 seconds, OFFLINE after two consecutive transport failures, STALE after three expected polling intervals, and last-known data retention marked stale/offline rather than fresh.
-5. Clear private LIVE data on SESSION_REQUIRED; schema/backend errors must remain ERROR, not become SIMULATED.
-6. Add focused tests using fake timers/injected clock: cadence, no overlapping requests, backoff bounds/jitter, stale thresholds, offline threshold, recovery to LIVE, and session-required clearing.
-7. Integrate LIVE presentation into existing UI with clear LIVE/SIMULATED labels and explicit empty/loading/error states; do not replace the 3D office or infer worker liveness from pipeline PROCESSING.
-8. Run full tests/typecheck/build and update this ledger. Owner-local Chrome, cookie and live-service checks remain separate gates.
+1. From the Windows Virtual Office repository root, run `bun install --frozen-lockfile`, `bun run test`, `bun run lint`, and `bun run build`.
+2. Generate the operator password hash locally with `bun run hash:operator`; put its output only in the ignored local `.env`. Never paste the password or hash into chat.
+3. Start development with `bun run dev`; open exactly `http://127.0.0.1:3000`. Confirm both loopback processes start: Vite 3000 and BFF 3001.
+4. Verify Chrome cookie attributes on successful login: `__Host-sireader_sid` is HttpOnly, Secure, SameSite=Strict, Path=/, host-only; confirm `document.cookie` cannot read it. Verify logout revokes the session and clears private LIVE data.
+5. Complete the Python Backend Phase 3.1 runbook's authenticated five-endpoint HTTP smoke tests privately. Only then configure the separate `SIREADER_API_AUTH_TOKEN` in ignored local configuration; never paste it in chat or screenshots.
+6. Run `bun run build` then `bun run start` to verify production BFF serves `dist/` on loopback port 3000. Verify API routes remain JSON and SPA routes serve the frontend.
+7. Record the local acceptance results without recording secret values. Only after the local gate passes may Phase 3.2 be marked complete and Phase 3.3 SSE planning begin.
 
-Owner-side prerequisites before any real Python API connection: generate the operator hash locally with the masked helper and configure it only in ignored local environment; complete the backend Phase 3.1 authenticated HTTP smoke tests privately. Never paste secrets into chat.
-
+No live token, password hash, database credential, MT5 operation, or trading command is part of these checks.
