@@ -1,0 +1,284 @@
+﻿diff --git a/src/scheduler/scheduler.state.ts b/src/scheduler/scheduler.state.ts
+index 44e224e..204fb1a 100644
+--- a/src/scheduler/scheduler.state.ts
++++ b/src/scheduler/scheduler.state.ts
+@@ -243,12 +243,24 @@ export function normalizeSimulationSnapshot(
+   const normalizedScheduler = normalizeSchedulerState(snapshot.scheduler);
+   const schedulerChanged = normalizedScheduler !== snapshot.scheduler;
+ 
+-  if (!workersChanged && !schedulerChanged) {
++  const rawAcc = snapshot.accumulatorMs;
++  const hasValidAccumulator =
++    typeof rawAcc === 'number' &&
++    Number.isFinite(rawAcc) &&
++    rawAcc >= 0;
++  const normalizedAccumulatorMs = hasValidAccumulator
++    ? Number(rawAcc.toFixed(3))
++    : 0;
++  const accumulatorChanged =
++    !hasValidAccumulator || rawAcc !== normalizedAccumulatorMs;
++
++  if (!workersChanged && !schedulerChanged && !accumulatorChanged) {
+     return snapshot;
+   }
+ 
+   return {
+     ...snapshot,
++    accumulatorMs: normalizedAccumulatorMs,
+     workers: workersChanged ? nextWorkers : snapshot.workers,
+     scheduler: normalizedScheduler,
+   };
+diff --git a/src/workers/simulation.engine.ts b/src/workers/simulation.engine.ts
+index f1c66f3..dc3ec2a 100644
+--- a/src/workers/simulation.engine.ts
++++ b/src/workers/simulation.engine.ts
+@@ -141,12 +141,13 @@ export class SimulationEngine {
+     nowWallTimeMs: number,
+     isRealtimeLoopActive: boolean,
+   ): void {
++    const committedSimMs = snapshot.simTimeMs + (snapshot.accumulatorMs ?? 0);
+     clockAnchor.baseSimTimeMs = snapshot.simTimeMs;
+     clockAnchor.anchorWallTimeMs = nowWallTimeMs;
+     clockAnchor.isRealtimeLoopActive = isRealtimeLoopActive && !snapshot.isGlobalPaused;
+     clockAnchor.highWaterSimTimeMs = Math.max(
+       clockAnchor.highWaterSimTimeMs,
+-      snapshot.simTimeMs,
++      committedSimMs,
+     );
+   }
+ 
+@@ -177,16 +178,14 @@ export class SimulationEngine {
+     snapshot: SimulationSnapshot,
+     nowWallTimeMs?: number,
+   ): number {
+-    if (snapshot.simTimeMs === 0 && snapshot.tickCount === 0) {
+-      return 0;
+-    }
++    const committedSimMs = snapshot.simTimeMs + (snapshot.accumulatorMs ?? 0);
+ 
+     if (
+       snapshot.isGlobalPaused ||
+       !clockAnchor.isRealtimeLoopActive ||
+       nowWallTimeMs === undefined
+     ) {
+-      return Math.max(snapshot.simTimeMs, clockAnchor.highWaterSimTimeMs);
++      return Math.max(committedSimMs, clockAnchor.highWaterSimTimeMs);
+     }
+ 
+     const elapsedWallMs = Math.max(
+@@ -194,11 +193,11 @@ export class SimulationEngine {
+       Math.min(nowWallTimeMs - clockAnchor.anchorWallTimeMs, FIXED_TICK_SIM_MS),
+     );
+     const interpolatedSimMs =
+-      snapshot.simTimeMs + elapsedWallMs * snapshot.simSpeedMultiplier;
++      committedSimMs + elapsedWallMs * snapshot.simSpeedMultiplier;
+ 
+     clockAnchor.highWaterSimTimeMs = Math.max(
+       clockAnchor.highWaterSimTimeMs,
+-      snapshot.simTimeMs,
++      committedSimMs,
+       interpolatedSimMs,
+     );
+     return clockAnchor.highWaterSimTimeMs;
+@@ -222,6 +221,7 @@ export class SimulationEngine {
+       prngState: seed,
+       simTimeMs: 0,
+       tickCount: 0,
++      accumulatorMs: 0,
+       isGlobalPaused: false,
+       simSpeedMultiplier: 1,
+       workers,
+@@ -283,31 +283,30 @@ export class SimulationEngine {
+       return { snapshot };
+     }
+ 
+-    // Clamp wall-clock delta to MAX_DELTA_CLAMP_MS before applying speed multiplier
++    const currentNormalized = normalizeSimulationSnapshot(snapshot);
+     const clampedBaseMs = Math.max(0, Math.min(rawElapsedMs, MAX_DELTA_CLAMP_MS));
+-    const totalSimMsToAdvance = clampedBaseMs * snapshot.simSpeedMultiplier;
++    const addedSimMs = Number((clampedBaseMs * currentNormalized.simSpeedMultiplier).toFixed(3));
++    let accumulator = Number(((currentNormalized.accumulatorMs ?? 0) + addedSimMs).toFixed(3));
+ 
+-    let current = normalizeSimulationSnapshot(snapshot);
+-    let remainingMs = totalSimMsToAdvance;
++    let current = currentNormalized;
+     let lastDispatchResult: DispatchPassResult<SimulationSnapshot> | undefined;
+ 
+-    while (remainingMs >= FIXED_TICK_SIM_MS) {
++    while (accumulator >= FIXED_TICK_SIM_MS) {
+       const tickResult = this.stepSimulationTickWithDiagnostics(current, FIXED_TICK_SIM_MS);
+       current = tickResult.snapshot;
+       lastDispatchResult = tickResult.dispatchResult;
+-      remainingMs -= FIXED_TICK_SIM_MS;
++      accumulator = Number((accumulator - FIXED_TICK_SIM_MS).toFixed(3));
+     }
+ 
+-    if (remainingMs > 0) {
+-      const tickResult = this.stepSimulationTickWithDiagnostics(current, remainingMs);
+-      current = tickResult.snapshot;
+-      lastDispatchResult = tickResult.dispatchResult;
+-    }
++    current = {
++      ...current,
++      accumulatorMs: Math.max(0, accumulator),
++    };
+ 
+     clockAnchor.baseSimTimeMs = current.simTimeMs;
+     clockAnchor.highWaterSimTimeMs = Math.max(
+       clockAnchor.highWaterSimTimeMs,
+-      current.simTimeMs,
++      current.simTimeMs + (current.accumulatorMs ?? 0),
+     );
+     return {
+       snapshot: current,
+@@ -330,25 +329,31 @@ export class SimulationEngine {
+     snapshot: SimulationSnapshot,
+     stepSimMs: number = FIXED_TICK_SIM_MS,
+   ): SimulationTickResult {
+-    if (snapshot.isGlobalPaused || stepSimMs <= 0) {
++    if (stepSimMs !== FIXED_TICK_SIM_MS) {
++      throw new RangeError(
++        `stepSimulationTick only accepts exact ${FIXED_TICK_SIM_MS} ms ticks, received: ${stepSimMs}`,
++      );
++    }
++
++    if (snapshot.isGlobalPaused) {
+       return { snapshot };
+     }
+ 
+     const normalizedSnapshot = normalizeSimulationSnapshot(snapshot);
+ 
+     // 1. Advance simulation clock (bounded so stage transitions are never skipped)
+-    const boundedStepMs = Math.min(stepSimMs, MAX_DELTA_CLAMP_MS);
+     let nextSnapshot: SimulationSnapshot = {
+       ...normalizedSnapshot,
+-      simTimeMs: Number((normalizedSnapshot.simTimeMs + boundedStepMs).toFixed(3)),
++      simTimeMs: Number((normalizedSnapshot.simTimeMs + FIXED_TICK_SIM_MS).toFixed(3)),
+       tickCount: normalizedSnapshot.tickCount + 1,
++      accumulatorMs: normalizedSnapshot.accumulatorMs,
+       workers: { ...normalizedSnapshot.workers },
+       tasks: { ...normalizedSnapshot.tasks },
+     };
+ 
+     // 2. Step all workers and their active tasks in canonical workerOrder
+     for (const workerId of nextSnapshot.workerOrder) {
+-      nextSnapshot = this.stepSingleWorker(nextSnapshot, workerId, boundedStepMs);
++      nextSnapshot = this.stepSingleWorker(nextSnapshot, workerId, FIXED_TICK_SIM_MS);
+     }
+ 
+     // 3. Deterministic demo task generator: every 12 ticks, if queue cap permits,
+@@ -382,7 +387,7 @@ export class SimulationEngine {
+     clockAnchor.baseSimTimeMs = nextSnapshot.simTimeMs;
+     clockAnchor.highWaterSimTimeMs = Math.max(
+       clockAnchor.highWaterSimTimeMs,
+-      nextSnapshot.simTimeMs,
++      nextSnapshot.simTimeMs + (nextSnapshot.accumulatorMs ?? 0),
+     );
+     return {
+       snapshot: nextSnapshot,
+diff --git a/src/workers/worker.state.test.ts b/src/workers/worker.state.test.ts
+index a0ba987..e10b73f 100644
+--- a/src/workers/worker.state.test.ts
++++ b/src/workers/worker.state.test.ts
+@@ -366,14 +366,15 @@ test('13. Diagnostic propagation during pending wall-clock flush before global p
+ 
+   try {
+     SimulationEngine.syncRealtimeClockAnchor(useOfficeStore.getState(), mockTime, true);
+-    mockTime += 600; // 600ms pending
++    mockTime += 600; // 600ms pending: 500ms full tick + 100ms in accumulator
+ 
+     useOfficeStore.getState().setGlobalPaused(true);
+ 
+     const state = useOfficeStore.getState();
+     assert.equal(state.isGlobalPaused, true);
+-    assert.equal(state.simTimeMs, 600); // 500ms full tick + 100ms fractional tick
+-    assert.equal(state.lastDispatchDiagnosticsAtSimMs, 600);
++    assert.equal(state.simTimeMs, 500); // 1 full tick committed
++    assert.equal(state.accumulatorMs, 100); // 100ms preserved in accumulator
++    assert.equal(state.lastDispatchDiagnosticsAtSimMs, 500);
+   } finally {
+     performance.now = origNow;
+   }
+@@ -385,9 +386,19 @@ test('14. Fractional pending delta below 500 ms causes expected tick and diagnos
+   const current = useOfficeStore.getState();
+   const advanceRes = SimulationEngine.advanceByWallClockDeltaWithDiagnostics(current, 250);
+ 
+-  assert.equal(advanceRes.snapshot.simTimeMs, 250);
+-  assert.ok(advanceRes.lastDispatchResult);
+-  assert.equal(advanceRes.lastDispatchResult.snapshot.simTimeMs, 250);
++  // Delta < 500ms does NOT advance simTimeMs or tickCount; only accumulates
++  assert.equal(advanceRes.snapshot.simTimeMs, 0);
++  assert.equal(advanceRes.snapshot.tickCount, 0);
++  assert.equal(advanceRes.snapshot.accumulatorMs, 250);
++  assert.equal(advanceRes.lastDispatchResult, undefined);
++
++  // Advancing another 250ms reaches 500ms: triggers exactly 1 full tick
++  const advanceRes2 = SimulationEngine.advanceByWallClockDeltaWithDiagnostics(advanceRes.snapshot, 250);
++  assert.equal(advanceRes2.snapshot.simTimeMs, 500);
++  assert.equal(advanceRes2.snapshot.tickCount, 1);
++  assert.equal(advanceRes2.snapshot.accumulatorMs, 0);
++  assert.ok(advanceRes2.lastDispatchResult);
++  assert.equal(advanceRes2.lastDispatchResult.snapshot.simTimeMs, 500);
+ });
+ 
+ test('15. Global Resume does not dispatch immediately', () => {
+diff --git a/src/workers/worker.state.ts b/src/workers/worker.state.ts
+index 5a98c68..4d9f2e9 100644
+--- a/src/workers/worker.state.ts
++++ b/src/workers/worker.state.ts
+@@ -108,6 +108,7 @@ function applySnapshotPatch(
+   | 'prngState'
+   | 'simTimeMs'
+   | 'tickCount'
++  | 'accumulatorMs'
+   | 'isGlobalPaused'
+   | 'simSpeedMultiplier'
+   | 'workers'
+@@ -121,6 +122,7 @@ function applySnapshotPatch(
+     prngState: snapshot.prngState,
+     simTimeMs: snapshot.simTimeMs,
+     tickCount: snapshot.tickCount,
++    accumulatorMs: snapshot.accumulatorMs,
+     isGlobalPaused: snapshot.isGlobalPaused,
+     simSpeedMultiplier: snapshot.simSpeedMultiplier,
+     workers: snapshot.workers,
+@@ -368,12 +370,12 @@ export const useOfficeStore = create<OfficeStoreState>((set, get) => ({
+           const advanceRes = SimulationEngine.advanceByWallClockDeltaWithDiagnostics(current, pendingWallMs);
+           current = advanceRes.snapshot;
+           latestDispatch = advanceRes.lastDispatchResult;
+-          SimulationEngine.syncRealtimeClockAnchor(
+-            { ...current, simSpeedMultiplier: speed },
+-            now,
+-            true,
+-          );
+         }
++        SimulationEngine.syncRealtimeClockAnchor(
++          { ...current, simSpeedMultiplier: speed },
++          now,
++          true,
++        );
+       }
+       const diagPatch = syncDiagnostics(state, current, latestDispatch);
+       return {
+diff --git a/src/workers/worker.types.ts b/src/workers/worker.types.ts
+index 42603de..27b88d3 100644
+--- a/src/workers/worker.types.ts
++++ b/src/workers/worker.types.ts
+@@ -42,6 +42,9 @@ import type {
+   SchedulerSnapshotState,
+ } from '../scheduler/scheduler.types';
+ 
++export const FIXED_TICK_SIM_MS = 500;
++export const MAX_DELTA_CLAMP_MS = 1000;
++
+ export {
+   PERMANENT_WORKER_IDS,
+   TASK_CATEGORIES,
+@@ -301,6 +304,7 @@ export interface SimulationSnapshot {
+   prngState: number;
+   simTimeMs: number;
+   tickCount: number;
++  accumulatorMs?: number;
+   isGlobalPaused: boolean;
+   simSpeedMultiplier: 1 | 2 | 4;
+   workers: Record<WorkerId, WorkerEntity>;
