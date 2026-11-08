@@ -86,11 +86,11 @@ Do not include primary keys, message text, symbol prices, costs, token counts, a
 Add a separate, reviewed migration in the Python Backend repository. It must:
 
 - Be applied by the database migration owner/DBA, never by the runtime API role.
-- Add narrowly scoped AFTER INSERT/UPDATE/DELETE triggers only to the six source tables listed above (use the operation scope actually needed by each table; audit decisions are append-only and should notify on INSERT).
+- Add narrowly scoped row-level AFTER INSERT/UPDATE/DELETE triggers to the six source tables as needed (approval_decisions is append-only and notifies only on INSERT), plus statement-level AFTER TRUNCATE invalidation triggers on each of the six sources. This covers bulk-retention/truncate operations without emitting one event per deleted row.
 - Use a fixed channel and constant payloads. No dynamic SQL and no user-controlled channel or payload.
 - Use a non-SECURITY-DEFINER trigger function unless a later security review proves it necessary. Fix the function search path and ownership explicitly.
 - Avoid changing the grants of `sireader_api_ro`. It remains read-only and receives no INSERT/UPDATE/DELETE/TRIGGER rights.
-- Avoid sending notifications for no-op updates when a safe OLD/NEW comparison is practical.
+- Avoid sending notifications for no-op updates. Compare only the columns used by the corresponding public snapshot; never serialize whole rows (some source rows include large/private message or error text).
 - Be idempotent and include safe rollback SQL.
 - Include migration tests and a live Supabase verification procedure.
 
@@ -98,7 +98,7 @@ The runtime listener uses the already-configured read-only connection only to `L
 
 ### 3.3 Delivery semantics and database limitations
 
-PostgreSQL NOTIFY is delivered after the notifying transaction commits; payloads are limited (under 8 KB in the default configuration), and notifications are not a durable replay log. Keep payloads to one short resource key. The listener must stay in autocommit mode and continuously consume notifications so that the PostgreSQL notification queue can be reclaimed. Do not put a long-running transaction around LISTEN.
+PostgreSQL NOTIFY is delivered after the notifying transaction commits; payloads are limited (under 8 KB in the default configuration), and notifications are not a durable replay log. Keep payloads to one short resource key. The listener must stay in autocommit mode and continuously consume notifications so that the PostgreSQL notification queue can be reclaimed. Do not put a long-running transaction around LISTEN. TCP keepalive is configured (idle 30s, interval 10s, count 3) to help detect dead network paths; verify these settings are supported by the actual pooler/network route.
 
 The deployment connection must support session-level `LISTEN`. Verify the actual Supabase connection-pooler mode; a transaction-pooling connection must not be assumed to preserve LISTEN session state. Use a dedicated listener connection, separate from the two-connection SQLAlchemy snapshot pool. If listener connection setup fails, snapshot GET routes continue operating and the SSE route reports an unavailable/degraded stream; the app falls back to polling.
 
