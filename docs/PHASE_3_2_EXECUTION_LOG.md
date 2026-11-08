@@ -57,7 +57,7 @@ All binds literal `127.0.0.1`; no LAN/public listening, no port fallback. Browse
 
 ## Verification truth table
 
-- Confirmed on GitHub: remote branch HEAD equals `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5`; Batch 5 and Batch 6 code, tests and local runbook are present on the same branch.
+- Confirmed on GitHub: implementation commit `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5`, Batch 5/6 tests and local runbook are present on the active branch. The exact current branch HEAD must be re-read from GitHub before starting the next task.
 - GitHub Actions Batch 4 run `42485169977`: 343/343 tests, TypeScript check and production build passed. Batch 5 run `42486162630`: 353/353 tests, TypeScript check and production build passed. Batch 6 run `42486731963`: 358/358 tests, TypeScript check and production build passed (Vite build completed in 653 ms).
 - Verified on remote source: Vite loopback bind and exact regex `/api` proxy with Host preserved (`changeOrigin: false`); BFF static serving uses the same Host/Fetch/Origin guards, never serves API paths from SPA fallback, denies dotfiles, uses no-store for HTML and immutable caching only for content-hashed assets. CI integration tests cover root/SPA/assets, hidden files, unknown API paths, missing dist, and Vite topology config.
 - Not verified locally by owner: Windows start/stop of `bun run dev`; production `bun run start` against the real built `dist/`; actual Chrome HttpOnly/Secure/SameSite cookie and CSRF/logout behavior; locally generated operator hash; privately configured `SIREADER_API_AUTH_TOKEN`; Python Backend authenticated five-endpoint smoke tests; real end-to-end LIVE data session. CI does not prove local credentials, user machine behavior, Chrome cookie semantics, or live Supabase connectivity.
