@@ -8,8 +8,8 @@
 
 | Repository | Branch | Latest verified HEAD |
 |---|---|---|
-| Virtual Office | `phase-3-3-sse` | `1f73a6990d3ec71d8d581fb4dc27af07ab52e04b` |
-| Python Backend | `phase-3-3-sse-backend` | `c372d4540a701e3b860b297a8e4b18710b47e90f` |
+| Virtual Office | `phase-3-3-sse` | branch HEAD `39df24187b6ff1b0a06cccee6f966942f5109fc4`; latest SSE code commit `1f73a6990d3ec71d8d581fb4dc27af07ab52e04b` |
+| Python Backend | `phase-3-3-sse-backend` | branch HEAD `e7ba6655c91b0beaad3a95276a0fbfc58ce8cca1`; latest listener/migration code commit `6d928cc037666a14096c2b2d9f4020d0198b01b8` |
 
 Both branches are isolated from `main`. The Phase 3.2 implementation branch and the documentation closeout branch have not been overwritten or merged. No migration has been applied to the owner's Supabase project.
 
@@ -27,8 +27,8 @@ Both branches are isolated from `main`. The Phase 3.2 implementation branch and 
 
 ### Virtual Office / BFF / frontend
 
-- Latest run: [GitHub Actions 42533960028](https://github.com/awandhani22-boop/SIREADER/actions/runs/42533498709)
-- Commit: `7b318ae690e0affd53778d9cfb24953bf27b6b35`
+- Latest run: [GitHub Actions 42533960028](https://github.com/awandhani22-boop/SIREADER/actions/runs/42533960028)
+- Code commit: `1f73a6990d3ec71d8d581fb4dc27af07ab52e04b`
 - Result: **SUCCESS**
 - Automated tests: **371 passed, 0 failed**
 - TypeScript check: PASS
@@ -37,14 +37,15 @@ Both branches are isolated from `main`. The Phase 3.2 implementation branch and 
 
 ### Python Backend
 
-- Latest run: [GitHub Actions 42533818697](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42533488378)
-- Commit: `6a6d80a56030dabc8dd49f680d0c7f17097d3dbb`
+- Latest run: [GitHub Actions 42534343574](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42534343574)
+- Branch HEAD: `e7ba6655c91b0beaad3a95276a0fbfc58ce8cca1`
+- Latest listener code commit: `6d928cc037666a14096c2b2d9f4020d0198b01b8`
 - Result: **SUCCESS**
 - API/PostgreSQL tests: **100 passed**
 - Python API compileall: PASS
 - Existing core decision/service regression tests: **50 passed**
 - PostgreSQL integration used the disposable CI PostgreSQL service, not the owner's Supabase project.
-- Integration covers migration idempotency, six resource notifications, static payload allowlist, no-op update suppression, append-only audit behavior, no notification on rollback, async Psycopg LISTEN receipt, stream shutdown cleanup, replay, cursor reset, subscriber bounds and authentication.
+- Integration covers migration idempotency, six resource notifications, static payload allowlist, no-op update suppression, append-only audit behavior, statement-level TRUNCATE invalidation, no notification on rollback, async Psycopg LISTEN receipt, stream shutdown cleanup, replay, cursor reset, subscriber bounds and authentication. TCP keepalive is configured for the long-lived listener. A safe owner-side LISTEN probe is available at `app/api/event_listener_probe.py`.
 
 ## Important implementation semantics
 
@@ -55,12 +56,14 @@ Both branches are isolated from `main`. The Phase 3.2 implementation branch and 
 5. The browser connects only to the same-origin BFF using EventSource session cookies. The existing polling remains the fallback and snapshot reconciliation remains enabled.
 6. SIMULATED state and the 3D render loop are not written by SSE events.
 
+Owner acceptance runbook in the Python Backend repository: [`docs/PHASE_3_3_SSE_OWNER_ACCEPTANCE_RUNBOOK.md`](https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-3-3-sse-backend/docs/PHASE_3_3_SSE_OWNER_ACCEPTANCE_RUNBOOK.md).
+
 ## Owner acceptance still required
 
 The following must be performed in the owner's local environment before Phase 3.3 can be marked COMPLETE:
 
 - Verify the actual Supabase Session Pooler connection mode supports a persistent session-level `LISTEN` connection. The owner previously reported use of the Session Pooler on port 5432; empirical support for this long-lived listener is still to be confirmed.
-- Review and apply `migrations/2026_11_09_phase_3_3_observability_notify.sql` through the approved database migration owner process. Never run it using the runtime `sireader_api_ro` login. Verify exactly the intended triggers exist and use the rollback script if needed.
+- Review and apply `migrations/2026_11_09_phase_3_3_observability_notify.sql` through the approved database migration owner process. Never run it using the runtime `sireader_api_ro` login. Verify the intended 12 triggers (6 row-level and 6 TRUNCATE statement-level) exist and use the rollback script if needed.
 - Verify a real application write produces a committed resource invalidation from the owner's Supabase project, while rolled-back writes do not. Do not create artificial trading or approval actions to test this.
 - Run Python API and BFF against the owner database and inspect Chrome Network: only same-origin `/api/v1/events/stream`, no Bearer token in browser headers/URL/bundle/storage/logs.
 - Verify reconnect, Last-Event-ID replay, replay-gap reset, listener/API restart, BFF restart, browser disconnect, stream cap, and polling fallback.
