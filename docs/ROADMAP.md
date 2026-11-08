@@ -227,12 +227,12 @@ Execution record: [\`docs/PHASE_3_3_EXECUTION_LOG.md\`](PHASE_3_3_EXECUTION_LOG.
 
 Current evidence (2026-11-09): Virtual Office branch \`phase-3-3-sse\` has BFF proxy, browser EventSource, strict event contract, invalidation coordinator, polling reconciliation/fallback, and 371/371 CI tests plus TypeScript/build PASS (run \`42533498709\`). Python Backend branch \`phase-3-3-sse-backend\` has notification migration/rollback, async LISTEN/EventHub, authenticated SSE route, 100 API/PostgreSQL tests, compileall PASS, and 50 core regressions (run \`42533488378\`). No owner Supabase migration has been applied.
 
-Design reference: [`docs/PHASE_3_3_SSE_ARCHITECTURE.md`](PHASE_3_3_SSE_ARCHITECTURE.md). The proposed design uses PostgreSQL LISTEN/NOTIFY as a bounded invalidation signal, a Python API EventHub, an authenticated BFF stream, and browser EventSource. Existing snapshot GET endpoints remain authoritative. The design still requires review and empirical confirmation that the configured Supabase session-pooler supports a persistent LISTEN connection.
+The architecture and implementation are recorded in [`docs/PHASE_3_3_SSE_ARCHITECTURE.md`](PHASE_3_3_SSE_ARCHITECTURE.md) and [`docs/PHASE_3_3_EXECUTION_LOG.md`](PHASE_3_3_EXECUTION_LOG.md). PostgreSQL LISTEN/NOTIFY is a bounded invalidation signal; snapshot GET endpoints remain authoritative. The owner's Supabase session-pooler support for persistent LISTEN and end-to-end Chrome acceptance remain open.
 
 Goal: replace frequent client polling with bounded, server-mediated event updates where they add meaningful value.
 
 Requirements:
-- Define and version an event contract before implementation.
+- Define and version an event contract before implementation. The v1 envelope and allowlisted resources are implemented on the current branch and require owner acceptance.
 - SSE must pass through the server-side BFF; never expose the Bearer Token to EventSource/browser code.
 - Include heartbeat, event IDs/reconnect behavior, bounded buffering, backoff, stale detection, and graceful fallback to snapshot GET.
 - Do not use WebSocket unless a documented requirement cannot be met by SSE.
