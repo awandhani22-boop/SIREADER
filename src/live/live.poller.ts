@@ -229,12 +229,14 @@ export function createLivePoller(
     } finally {
       if (inFlight.get(path) === runGeneration) inFlight.delete(path);
 
-      // If a new session/polling generation began while this request was in flight,
-      // immediately service the path that the new generation safely skipped.
-      if (running && !inFlight.has(path) && !nextTimers.has(path)) {
-        if (dirtyPaths.delete(path) || generation !== runGeneration) {
-          scheduleNext(path, 0, generation);
-        }
+      // An invalidation that arrives during a request must force one follow-up
+      // snapshot even though the just-finished request scheduled its normal timer.
+      if (running && !inFlight.has(path) && dirtyPaths.delete(path)) {
+        clearTimer(nextTimers, path);
+        scheduleNext(path, 0, generation);
+      } else if (running && !inFlight.has(path) &&
+          generation !== runGeneration && !nextTimers.has(path)) {
+        scheduleNext(path, 0, generation);
       }
     }
   }
