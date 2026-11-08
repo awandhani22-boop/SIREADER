@@ -13,6 +13,8 @@
 import express, { Request, Response, NextFunction } from 'express';
 import type { Server } from 'node:http';
 import type { RequestHandler } from 'express';
+import { existsSync, statSync } from 'node:fs';
+import { basename, relative, resolve, sep } from 'node:path';
 import { loadBffConfig, type BffConfig } from './config.ts';
 import {
   createHostGuard,
@@ -21,6 +23,7 @@ import {
   rawPathGuard,
   routeAndMethodGuard,
   stripCorsHeaders,
+  isApiTarget,
 } from './guards.ts';
 import { sendBffError } from './errors.ts';
 import { SafeLogger } from './log.ts';
@@ -31,6 +34,63 @@ export interface BffAppDependencies extends UpstreamProxyOptions {
   /** Test seam for upstream-only fixtures; never set in the production entrypoint. */
   readonly requireOperatorSession?: RequestHandler;
   readonly authOptions?: OperatorAuthOptions;
+  /** Fixed dist root in production; injectable temp root for static integration tests. */
+  readonly staticRoot?: string;
+}
+
+function installStaticFrontend(app: express.Application, staticRoot: string): void {
+  const root = resolve(staticRoot);
+  const indexPath = resolve(root, 'index.html');
+  if (!existsSync(indexPath) || !statSync(indexPath).isFile()) {
+    throw new Error('Static frontend is unavailable: dist/index.html is missing.');
+  }
+
+  app.use(express.static(root, {
+    dotfiles: 'deny',
+    etag: true,
+    fallthrough: true,
+    index: false,
+    maxAge: 0,
+    redirect: false,
+    setHeaders(res, filePath) {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+      const relativePath = relative(root, filePath).split(sep).join('/');
+      const fileName = basename(filePath);
+      const hasContentHash = /-[A-Za-z0-9_-]{8,}\./.test(fileName);
+
+      if (relativePath === 'index.html') {
+        res.setHeader('Cache-Control', 'no-store, max-age=0');
+      } else if (relativePath.startsWith('assets/') && hasContentHash) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    },
+  }));
+
+  // SPA history fallback only applies to explicit browser HTML navigations.
+  app.get('*', (req: Request, res: Response, next: NextFunction) => {
+    const rawUrl = req.originalUrl || req.url || '';
+    const acceptHeader = req.headers.accept ?? '';
+    const explicitlyAcceptsHtml = acceptHeader.split(',').some((entry) => {
+      const mediaType = entry.split(';', 1)[0].trim().toLowerCase();
+      return mediaType === 'text/html' || mediaType === 'application/xhtml+xml';
+    });
+
+    if (isApiTarget(rawUrl, req.path) || !explicitlyAcceptsHtml) {
+      next();
+      return;
+    }
+
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.sendFile(indexPath, (error) => {
+      if (error) next(error);
+    });
+  });
 }
 
 export function createBffApp(
@@ -196,12 +256,17 @@ export function createBffApp(
     app.get(path, requireOperatorSession, upstreamHandlers[path]);
   }
 
-  // 8. Fallback 404 for unhandled paths (e.g. unknown static requests)
+  // 8. Production static frontend (never handles the /api namespace).
+  if (dependencies.staticRoot) {
+    installStaticFrontend(app, dependencies.staticRoot);
+  }
+
+  // 9. Fallback 404 for unhandled API/static paths
   app.use((_req: Request, res: Response) => {
     sendBffError(res, 404, 'NOT_FOUND', 'Resource not found.');
   });
 
-  // 9. Global error handler
+  // 10. Global error handler
   app.use((_err: any, req: Request, res: Response, _next: NextFunction) => {
     SafeLogger.error('INTERNAL_ERROR', {
       method: req.method,
@@ -218,9 +283,10 @@ export function createBffApp(
 export function startBffServer(
   configOverrides?: Partial<BffConfig>,
   onListening?: (server: Server) => void,
+  dependencies: BffAppDependencies = {},
 ): Server {
   const config = loadBffConfig(configOverrides);
-  const app = createBffApp(configOverrides);
+  const app = createBffApp(configOverrides, dependencies);
 
   if (config.host !== '127.0.0.1') {
     throw new Error('CRITICAL SECURITY VIOLATION: BFF host must be exactly 127.0.0.1');

@@ -14,7 +14,7 @@ The helper reads the password through a masked interactive terminal prompt. Use 
 
 ## 2. Configure the local environment
 
-Create or update the ignored local `.env` file and paste the generated `OPERATOR_PASSWORD_HASH=...` line there. Do not paste the password itself or its hash into this chat. The BFF entrypoint and dotenv loading are wired in the later serving batch; until then, the variable must be supplied to the Node process by the local launcher.
+Create or update the ignored local `.env` file and paste the generated `OPERATOR_PASSWORD_HASH=...` line there. Do not paste the password itself or its hash into this chat. The BFF entrypoint `server/main.ts` loads the ignored local `.env` file before importing and validating BFF configuration.
 
 The server-to-server `SIREADER_API_AUTH_TOKEN` is separate from the operator password hash. Configure it locally only after the Python Backend Phase 3.1 runbook's private credential and endpoint smoke checks are completed.
 
