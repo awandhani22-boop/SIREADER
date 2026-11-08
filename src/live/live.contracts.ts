@@ -436,23 +436,24 @@ export function parseLiveApiResponse<K extends LiveApiPath>(
 }
 
 export function parseAuthenticatedSession(value: unknown): AuthenticatedSessionDto {
+  if (!isObject(value)) throw new LiveContractError();
+  const authenticated = value.authenticated;
+  const csrfToken = value.csrfToken;
   if (
-    !isObject(value) ||
     !hasExactKeys(value, ['authenticated', 'csrfToken']) ||
-    value.authenticated !== true ||
-    !isString(value.csrfToken) ||
-    !/^[A-Za-z0-9_-]{43}$/.test(value.csrfToken)
+    authenticated !== true ||
+    !isString(csrfToken) ||
+    !/^[A-Za-z0-9_-]{43}$/.test(csrfToken)
   ) throw new LiveContractError();
-  return value as AuthenticatedSessionDto;
+  return { authenticated: true, csrfToken };
 }
 
 export function parseLoggedOut(value: unknown): LoggedOutDto {
-  if (
-    !isObject(value) ||
-    !hasExactKeys(value, ['authenticated']) ||
-    value.authenticated !== false
-  ) throw new LiveContractError();
-  return value as LoggedOutDto;
+  if (!isObject(value)) throw new LiveContractError();
+  if (!hasExactKeys(value, ['authenticated']) || value.authenticated !== false) {
+    throw new LiveContractError();
+  }
+  return { authenticated: false };
 }
 
 export function parseBffErrorCode(value: unknown): BffErrorCode | null {
