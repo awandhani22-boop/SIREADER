@@ -3,7 +3,7 @@ import test from 'node:test';
 import http from 'node:http';
 import type { AddressInfo, Server } from 'node:net';
 import { createBffApp } from './app.ts';
-import { createEventStreamProxyHandler, SSE_UPSTREAM_PATH } from './sse.ts';
+import { SSE_UPSTREAM_PATH } from './sse.ts';
 
 const HEADERS = {
   host: '127.0.0.1:3000',
@@ -20,6 +20,30 @@ function listen(server: Server): Promise<void> {
 
 function close(server: Server): Promise<void> {
   return new Promise((resolve) => server.close(() => resolve()));
+}
+
+function request(server: Server, path: string, headers: Record<string, string> = {}): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }> {
+  return new Promise((resolve, reject) => {
+    const port = (server.address() as AddressInfo).port;
+    const req = http.request({
+      hostname: '127.0.0.1',
+      port,
+      path,
+      method: 'GET',
+      headers: { ...HEADERS, ...headers },
+    }, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { body += chunk.toString(); });
+      res.on('end', () => resolve({
+        status: res.statusCode || 0,
+        headers: res.headers,
+        body,
+      }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
 }
 
 test('SSE BFF proxy uses a fixed authenticated stream and preserves stream bytes', async (t) => {
@@ -42,22 +66,18 @@ test('SSE BFF proxy uses a fixed authenticated stream and preserves stream bytes
   const proxy = http.createServer(app);
   await listen(proxy);
   t.after(async () => close(proxy));
-  const port = (proxy.address() as AddressInfo).port;
-  const response = await fetch('http://127.0.0.1:' + port + SSE_UPSTREAM_PATH, {
-    headers: {
-      ...HEADERS,
-      accept: 'text/event-stream',
-      cookie: 'operator-session=browser-only',
-      authorization: 'Bearer browser-only',
-      'last-event-id': '123e4567-e89b-12d3-a456-426614174000:7',
-    },
+  const response = await request(proxy, SSE_UPSTREAM_PATH, {
+    accept: 'text/event-stream',
+    cookie: 'operator-session=browser-only',
+    authorization: 'Bearer browser-only',
+    'last-event-id': '123e4567-e89b-12d3-a456-426614174000:7',
   });
 
   assert.equal(response.status, 200);
-  assert.equal(response.headers.get('content-type'), 'text/event-stream; charset=utf-8');
-  assert.equal(response.headers.get('cache-control'), 'no-cache, no-transform');
-  assert.equal(response.headers.get('x-accel-buffering'), 'no');
-  assert.equal(await response.text(), payload);
+  assert.equal(response.headers['content-type'], 'text/event-stream; charset=utf-8');
+  assert.equal(response.headers['cache-control'], 'no-cache, no-transform');
+  assert.equal(response.headers['x-accel-buffering'], 'no');
+  assert.equal(response.body, payload);
   assert.equal(received.length, 1);
   assert.equal(received[0].url.endsWith(SSE_UPSTREAM_PATH), true);
   assert.equal(received[0].headers.get('authorization'), 'Bearer server-only-test-token');
@@ -82,10 +102,7 @@ test('SSE BFF rejects invalid cursors before contacting Python', async (t) => {
   const proxy = http.createServer(app);
   await listen(proxy);
   t.after(async () => close(proxy));
-  const port = (proxy.address() as AddressInfo).port;
-  const response = await fetch('http://127.0.0.1:' + port + SSE_UPSTREAM_PATH, {
-    headers: { ...HEADERS, 'last-event-id': 'not-valid' },
-  });
+  const response = await request(proxy, SSE_UPSTREAM_PATH, { 'last-event-id': 'not-valid' });
   assert.equal(response.status, 400);
   assert.equal(fetchCount, 0);
 });
@@ -103,7 +120,7 @@ test('SSE BFF fails closed for wrong content type and missing server token', asy
   });
   const wrongServer = http.createServer(wrongType);
   await listen(wrongServer);
-  const wrongPort = (wrongServer.address() as AddressInfo).port;
+
 
   const missingToken = createBffApp(undefined, {
     requireOperatorSession: (_req, _res, next) => next(),
@@ -111,18 +128,18 @@ test('SSE BFF fails closed for wrong content type and missing server token', asy
   });
   const missingServer = http.createServer(missingToken);
   await listen(missingServer);
-  const missingPort = (missingServer.address() as AddressInfo).port;
+
 
   t.after(async () => {
     await close(wrongServer);
     await close(missingServer);
   });
 
-  const wrong = await fetch('http://127.0.0.1:' + wrongPort + SSE_UPSTREAM_PATH, { headers: HEADERS });
+  const wrong = await request(wrongServer, SSE_UPSTREAM_PATH);
   assert.equal(wrong.status, 503);
-  assert.equal((await wrong.json() as { error: { code: string } }).error.code, 'BACKEND_ERROR');
+  assert.equal(JSON.parse(wrong.body).error.code, 'BACKEND_ERROR');
 
-  const missing = await fetch('http://127.0.0.1:' + missingPort + SSE_UPSTREAM_PATH, { headers: HEADERS });
+  const missing = await request(missingServer, SSE_UPSTREAM_PATH);
   assert.equal(missing.status, 503);
-  assert.equal((await missing.json() as { error: { code: string } }).error.code, 'UPSTREAM_AUTH_FAILED');
+  assert.equal(JSON.parse(missing.body).error.code, 'UPSTREAM_AUTH_FAILED');
 });
