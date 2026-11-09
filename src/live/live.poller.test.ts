@@ -375,7 +375,8 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
     assert.ok(useLiveStore.getState().resources['/api/v1/system/status'].data);
 
     sessionExpired = true;
-    await clock.advanceBy(10_000);
+    // Healthy SSE moves snapshot reconciliation to 60 seconds.
+    await clock.advanceBy(LIVE_SSE_RECONCILIATION_INTERVAL_MS);
 
     assert.equal(poller.isRunning(), false);
     assert.equal(sources[0].closed, true);
