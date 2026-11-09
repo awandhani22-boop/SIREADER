@@ -14,6 +14,7 @@ import type {
   LiveApiPath,
   LiveApiResponseMap,
   WorkforceAttemptsResponseDto,
+  WorkforceTasksResponseDto,
 } from './live.contracts';
 import { useLiveStore } from './live.state';
 
@@ -31,6 +32,7 @@ export interface LiveController {
   logout(): Promise<void>;
   getResource<K extends LiveApiPath>(path: K): Promise<LiveApiResponseMap[K]>;
   getWorkforceAttempts(taskId: string): Promise<WorkforceAttemptsResponseDto>;
+  getWorkforceTasks(limit?: number, offset?: number): Promise<WorkforceTasksResponseDto>;
   loadResource<K extends LiveApiPath>(path: K): Promise<LiveApiResponseMap[K]>;
 }
 
@@ -103,6 +105,18 @@ export function createLiveController(
     },
 
     getResource,
+
+    async getWorkforceTasks(limit = 50, offset = 0): Promise<WorkforceTasksResponseDto> {
+      try {
+        return await api.getWorkforceTasks(limit, offset);
+      } catch (error) {
+        if (error instanceof LiveApiError && error.code === 'SESSION_REQUIRED') {
+          api.clearCsrfToken();
+          applySessionRequired();
+        }
+        throw error;
+      }
+    },
 
     async getWorkforceAttempts(taskId: string): Promise<WorkforceAttemptsResponseDto> {
       try {
