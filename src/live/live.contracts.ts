@@ -883,6 +883,97 @@ export function parseWorkforceTaskTimelineResponse(
   return value;
 }
 
+export type WorkforceReviewStatus = 'PENDING' | 'APPROVED' | 'EDITED' | 'REJECTED' | 'EXPIRED';
+
+export interface WorkforceTaskReviewSummaryDto {
+  readonly review_id: string;
+  readonly task_id: string;
+  readonly attempt_id: string;
+  readonly status: WorkforceReviewStatus;
+  readonly original_output_sha256: string;
+  readonly adjusted_output_sha256: string | null;
+  readonly adjudicated_by: string | null;
+  readonly adjudicated_at: string | null;
+  readonly reason_code: string | null;
+  readonly notes: string | null;
+  readonly review_expires_at: string;
+  readonly created_at: string;
+  readonly updated_at: string;
+  readonly payload_purged_at: string | null;
+}
+export interface WorkforceTaskReviewDetailDto extends WorkforceTaskReviewSummaryDto {
+  readonly original_output: Readonly<Record<string, unknown>> | null;
+  readonly adjusted_output: Readonly<Record<string, unknown>> | null;
+}
+export interface WorkforceTaskReviewsResponseDto {
+  readonly server_time_utc: string;
+  readonly total_count: number;
+  readonly limit: number;
+  readonly offset: number;
+  readonly reviews: readonly WorkforceTaskReviewSummaryDto[];
+}
+
+function validWorkforceReviewSummary(value: unknown): value is WorkforceTaskReviewSummaryDto {
+  return isObject(value) && hasExactKeys(value, [
+    'review_id', 'task_id', 'attempt_id', 'status', 'original_output_sha256',
+    'adjusted_output_sha256', 'adjudicated_by', 'adjudicated_at', 'reason_code',
+    'notes', 'review_expires_at', 'created_at', 'updated_at', 'payload_purged_at',
+  ]) &&
+    isString(value.review_id) && /^rev_[A-Za-z0-9_-]{8,60}$/.test(value.review_id) &&
+    isString(value.task_id) && value.task_id.length >= 8 && value.task_id.length <= 64 &&
+    isString(value.attempt_id) && value.attempt_id.length >= 8 && value.attempt_id.length <= 64 &&
+    ['PENDING', 'APPROVED', 'EDITED', 'REJECTED', 'EXPIRED'].includes(String(value.status)) &&
+    isString(value.original_output_sha256) && /^[0-9a-f]{64}$/.test(value.original_output_sha256) &&
+    (value.adjusted_output_sha256 === null || (isString(value.adjusted_output_sha256) && /^[0-9a-f]{64}$/.test(value.adjusted_output_sha256))) &&
+    (value.adjudicated_by === null || isString(value.adjudicated_by)) &&
+    (value.adjudicated_at === null || isIsoDateTime(value.adjudicated_at)) &&
+    (value.reason_code === null || isString(value.reason_code)) &&
+    (value.notes === null || isString(value.notes)) &&
+    isIsoDateTime(value.review_expires_at) && isIsoDateTime(value.created_at) &&
+    isIsoDateTime(value.updated_at) &&
+    (value.payload_purged_at === null || isIsoDateTime(value.payload_purged_at));
+}
+
+export function validWorkforceReviewsResponse(value: unknown): value is WorkforceTaskReviewsResponseDto {
+  return isObject(value) && hasExactKeys(value, ['server_time_utc', 'total_count', 'limit', 'offset', 'reviews']) &&
+    isIsoDateTime(value.server_time_utc) && isInteger(value.total_count, 0) &&
+    isInteger(value.limit, 1) && value.limit <= 100 && isInteger(value.offset, 0) &&
+    Array.isArray(value.reviews) && value.reviews.length <= 100 &&
+    value.reviews.every(validWorkforceReviewSummary);
+}
+
+export function parseWorkforceReviewsResponse(value: unknown): WorkforceTaskReviewsResponseDto {
+  if (!validWorkforceReviewsResponse(value)) throw new LiveContractError();
+  return value;
+}
+
+export function parseWorkforceReviewDetail(value: unknown, expectedReviewId: string): WorkforceTaskReviewDetailDto {
+  if (!isObject(value) || !hasExactKeys(value, [
+    'review_id', 'task_id', 'attempt_id', 'status', 'original_output_sha256',
+    'adjusted_output_sha256', 'adjudicated_by', 'adjudicated_at', 'reason_code',
+    'notes', 'review_expires_at', 'created_at', 'updated_at', 'payload_purged_at',
+    'original_output', 'adjusted_output',
+  ]) || value.review_id !== expectedReviewId) throw new LiveContractError();
+  const summary = Object.fromEntries(Object.entries(value).filter(([key]) =>
+    key !== 'original_output' && key !== 'adjusted_output',
+  ));
+  if (!validWorkforceReviewSummary(summary) ||
+      !(value.original_output === null || isObject(value.original_output)) ||
+      !(value.adjusted_output === null || isObject(value.adjusted_output))) {
+    throw new LiveContractError();
+  }
+  return value as unknown as WorkforceTaskReviewDetailDto;
+}
+
+export interface AdjudicateWorkforceReviewRequest {
+  readonly review_id: string;
+  readonly decision: 'APPROVED' | 'EDITED' | 'REJECTED';
+  readonly expected_original_sha256: string;
+  readonly adjusted_output: Readonly<Record<string, unknown>> | null;
+  readonly reason_code: string | null;
+  readonly notes: string | null;
+}
+
 export function parseWorkforceAttemptsResponse(
   value: unknown,
   expectedTaskId: string,
@@ -963,7 +1054,8 @@ export type WorkforceCommandPath =
   | '/api/v1/commands/tasks/enqueue'
   | '/api/v1/commands/tasks/cancel'
   | '/api/v1/commands/tasks/retry'
-  | '/api/v1/commands/workers/scheduling';
+  | '/api/v1/commands/workers/scheduling'
+  | '/api/v1/commands/reviews/adjudicate';
 
 export interface EnqueueWorkforceTaskRequest {
   readonly task_type: string;
@@ -985,12 +1077,13 @@ export interface WorkerSchedulingRequest {
 export type WorkforceCommandRequest =
   | EnqueueWorkforceTaskRequest
   | TaskCommandRequest
-  | WorkerSchedulingRequest;
+  | WorkerSchedulingRequest
+  | AdjudicateWorkforceReviewRequest;
 
 export interface WorkforceCommandResponseDto {
   readonly command_id: string;
   readonly actor_id: 'local_operator';
-  readonly command_type: 'TASK_ENQUEUE' | 'TASK_CANCEL' | 'TASK_RETRY' | 'WORKER_SCHEDULING_SET';
+  readonly command_type: 'TASK_ENQUEUE' | 'TASK_CANCEL' | 'TASK_RETRY' | 'WORKER_SCHEDULING_SET' | 'REVIEW_ADJUDICATE';
   readonly target_id: string;
   readonly correlation_id: string;
   readonly outcome: Readonly<Record<string, unknown>>;
@@ -1010,12 +1103,15 @@ export function parseWorkforceCommandResponse(
   const expectedCommand = path === '/api/v1/commands/tasks/enqueue' ? 'TASK_ENQUEUE'
     : path === '/api/v1/commands/tasks/cancel' ? 'TASK_CANCEL'
     : path === '/api/v1/commands/tasks/retry' ? 'TASK_RETRY'
+    : path === '/api/v1/commands/reviews/adjudicate' ? 'REVIEW_ADJUDICATE'
     : 'WORKER_SCHEDULING_SET';
   const expectedTarget = path === '/api/v1/commands/workers/scheduling'
     ? (request as WorkerSchedulingRequest).worker_id
-    : (path === '/api/v1/commands/tasks/enqueue' || path === '/api/v1/commands/tasks/retry')
-      ? value.target_id
-      : (request as TaskCommandRequest).task_id;
+    : path === '/api/v1/commands/reviews/adjudicate'
+      ? (request as AdjudicateWorkforceReviewRequest).review_id
+      : (path === '/api/v1/commands/tasks/enqueue' || path === '/api/v1/commands/tasks/retry')
+        ? value.target_id
+        : (request as TaskCommandRequest).task_id;
   if (
     !isString(value.command_id) || value.command_id.length < 8 || value.command_id.length > 64 ||
     value.actor_id !== 'local_operator' || value.command_type !== expectedCommand ||
@@ -1040,12 +1136,23 @@ export function parseWorkforceCommandResponse(
         outcome.accepted !== true || outcome.created !== true || outcome.status !== 'QUEUED' ||
         outcome.task_id !== value.target_id ||
         outcome.retry_of_task_id !== (request as TaskCommandRequest).task_id) throw new LiveContractError();
-  } else {
+  } else if (path === '/api/v1/commands/workers/scheduling') {
     const scheduling = request as WorkerSchedulingRequest;
     if (!hasExactKeys(outcome, ['accepted', 'worker_id', 'accepting_tasks', 'schedule_state']) ||
         outcome.accepted !== true || outcome.worker_id !== scheduling.worker_id ||
         outcome.accepting_tasks !== scheduling.accepting_tasks ||
         outcome.schedule_state !== (scheduling.accepting_tasks ? 'ACCEPTING' : 'PAUSED')) throw new LiveContractError();
+  } else {
+    const review = request as AdjudicateWorkforceReviewRequest;
+    if (!hasExactKeys(outcome, [
+      'accepted', 'review_id', 'task_id', 'decision',
+      'adjudicated_by', 'adjudicated_at', 'task_status',
+    ]) || outcome.accepted !== true || outcome.review_id !== review.review_id ||
+        !isString(outcome.task_id) || outcome.task_id.length < 8 || outcome.task_id.length > 64 ||
+        outcome.decision !== review.decision || outcome.adjudicated_by !== 'local_operator' ||
+        !isIsoDateTime(outcome.adjudicated_at) || outcome.task_status !== 'COMPLETED') {
+      throw new LiveContractError();
+    }
   }
   return value as unknown as WorkforceCommandResponseDto;
 }

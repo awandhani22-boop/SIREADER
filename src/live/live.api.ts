@@ -15,13 +15,18 @@ import {
   parseWorkforceAttemptsResponse,
   parseWorkforceCommandResponse,
   parseWorkforceTaskTimelineResponse,
+  parseWorkforceReviewsResponse,
+  parseWorkforceReviewDetail,
   type WorkforceTaskTimelineResponseDto,
   type WorkforceCommandPath,
   type WorkforceCommandRequest,
   type WorkforceCommandResponseDto,
+  type AdjudicateWorkforceReviewRequest,
   type AuthenticatedSessionDto,
   type WorkforceAttemptsResponseDto,
   type WorkforceTasksResponseDto,
+  type WorkforceTaskReviewsResponseDto,
+  type WorkforceTaskReviewDetailDto,
   type BffErrorCode,
   type LiveApiPath,
   type LiveApiResponseMap,
@@ -53,6 +58,8 @@ export interface LiveApiClient {
   getWorkforceAttempts(taskId: string): Promise<WorkforceAttemptsResponseDto>;
   getTaskTimeline(taskId: string, limit?: number, offset?: number): Promise<WorkforceTaskTimelineResponseDto>;
   getWorkforceTasks(limit?: number, offset?: number): Promise<WorkforceTasksResponseDto>;
+  getPendingWorkforceReviews(limit?: number, offset?: number): Promise<WorkforceTaskReviewsResponseDto>;
+  getWorkforceReview(reviewId: string): Promise<WorkforceTaskReviewDetailDto>;
   sendWorkforceCommand(path: WorkforceCommandPath, request: WorkforceCommandRequest): Promise<WorkforceCommandResponseDto>;
   clearCsrfToken(): void;
 }
@@ -254,6 +261,51 @@ export function createLiveApiClient(options: LiveApiClientOptions = {}): LiveApi
       }
     },
 
+    async getPendingWorkforceReviews(limit = 50, offset = 0): Promise<WorkforceTaskReviewsResponseDto> {
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
+          !Number.isSafeInteger(offset) || offset < 0 || offset > 100_000) {
+        throw new LiveApiError('BAD_REQUEST');
+      }
+      try {
+        const response = await request(
+          '/api/v1/workforce/reviews/pending?limit=' + limit + '&offset=' + offset,
+          { method: 'GET', headers: { Accept: 'application/json' } },
+        );
+        await requireSuccess(response);
+        const payload = await readSuccessfulJson(response);
+        try {
+          return parseWorkforceReviewsResponse(payload);
+        } catch {
+          throw new LiveApiError('SCHEMA_INVALID');
+        }
+      } catch (error) {
+        if (error instanceof LiveApiError && error.code === 'SESSION_REQUIRED') csrfToken = null;
+        throw error;
+      }
+    },
+
+    async getWorkforceReview(reviewId: string): Promise<WorkforceTaskReviewDetailDto> {
+      if (typeof reviewId !== 'string' || !/^rev_[A-Za-z0-9_-]{8,60}$/.test(reviewId)) {
+        throw new LiveApiError('BAD_REQUEST');
+      }
+      try {
+        const response = await request(
+          '/api/v1/workforce/reviews/' + encodeURIComponent(reviewId),
+          { method: 'GET', headers: { Accept: 'application/json' } },
+        );
+        await requireSuccess(response);
+        const payload = await readSuccessfulJson(response);
+        try {
+          return parseWorkforceReviewDetail(payload, reviewId);
+        } catch {
+          throw new LiveApiError('SCHEMA_INVALID');
+        }
+      } catch (error) {
+        if (error instanceof LiveApiError && error.code === 'SESSION_REQUIRED') csrfToken = null;
+        throw error;
+      }
+    },
+
     async getWorkforceTasks(limit = 50, offset = 0): Promise<WorkforceTasksResponseDto> {
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
           !Number.isSafeInteger(offset) || offset < 0 || offset > 100_000) {
@@ -298,6 +350,7 @@ export function createLiveApiClient(options: LiveApiClientOptions = {}): LiveApi
         '/api/v1/commands/tasks/cancel',
         '/api/v1/commands/tasks/retry',
         '/api/v1/commands/workers/scheduling',
+        '/api/v1/commands/reviews/adjudicate',
       ].includes(path)) throw new LiveApiError('NOT_FOUND');
       try {
         const response = await request(path, {

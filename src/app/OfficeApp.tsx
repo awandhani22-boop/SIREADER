@@ -14,6 +14,7 @@ import { ActivityFeed } from '../ui/ActivityFeed';
 import { TopBar } from '../ui/TopBar';
 import { WorkerPanel } from '../ui/WorkerPanel';
 import { GlobalQueuePanel } from '../ui/GlobalQueuePanel';
+import { ReviewInbox } from '../ui/ReviewInbox';
 import { recordWorkerComponentRender } from '../utils/renderProfiler';
 import {
   FIXED_TICK_SIM_MS,
@@ -214,6 +215,9 @@ export function OfficeApp() {
       <main className="relative flex-1 min-h-0 w-full overflow-hidden">
         {/* Central 3D Isometric Office Viewport */}
         <OfficeScene />
+
+        {/* Human review controls are available only in authenticated LIVE mode. */}
+        {displayMode === 'LIVE' && <ReviewInbox />}
 
         {/* Top-Center Floating Isometric Camera & Graphics Dock */}
         <div

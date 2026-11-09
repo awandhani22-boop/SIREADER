@@ -15,6 +15,8 @@ import type {
   LiveApiResponseMap,
   WorkforceAttemptsResponseDto,
   WorkforceTasksResponseDto,
+  WorkforceTaskReviewsResponseDto,
+  WorkforceTaskReviewDetailDto,
   WorkforceCommandPath,
   WorkforceCommandRequest,
   WorkforceCommandResponseDto,
@@ -36,6 +38,8 @@ export interface LiveController {
   getResource<K extends LiveApiPath>(path: K): Promise<LiveApiResponseMap[K]>;
   getWorkforceAttempts(taskId: string): Promise<WorkforceAttemptsResponseDto>;
   getWorkforceTasks(limit?: number, offset?: number): Promise<WorkforceTasksResponseDto>;
+  getPendingWorkforceReviews(limit?: number, offset?: number): Promise<WorkforceTaskReviewsResponseDto>;
+  getWorkforceReview(reviewId: string): Promise<WorkforceTaskReviewDetailDto>;
   sendWorkforceCommand(path: WorkforceCommandPath, request: WorkforceCommandRequest): Promise<WorkforceCommandResponseDto>;
   loadResource<K extends LiveApiPath>(path: K): Promise<LiveApiResponseMap[K]>;
 }
@@ -122,6 +126,30 @@ export function createLiveController(
       }
     },
 
+
+    async getPendingWorkforceReviews(limit = 50, offset = 0): Promise<WorkforceTaskReviewsResponseDto> {
+      try {
+        return await api.getPendingWorkforceReviews(limit, offset);
+      } catch (error) {
+        if (error instanceof LiveApiError && error.code === 'SESSION_REQUIRED') {
+          api.clearCsrfToken();
+          applySessionRequired();
+        }
+        throw error;
+      }
+    },
+
+    async getWorkforceReview(reviewId: string): Promise<WorkforceTaskReviewDetailDto> {
+      try {
+        return await api.getWorkforceReview(reviewId);
+      } catch (error) {
+        if (error instanceof LiveApiError && error.code === 'SESSION_REQUIRED') {
+          api.clearCsrfToken();
+          applySessionRequired();
+        }
+        throw error;
+      }
+    },
 
     async sendWorkforceCommand(
       path: WorkforceCommandPath,
