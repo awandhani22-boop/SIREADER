@@ -9,6 +9,10 @@ import {
 } from '../workers/worker.registry';
 import { useOfficeStore } from '../workers/worker.state';
 import { RoomDefinition } from '../workers/worker.types';
+import { useWorkerDisplayModeStore } from '../workers/worker.display-mode';
+import { createDemoWorkerDisplayRepository, createLiveWorkerDisplayRepository } from '../workers/worker.live-repository';
+import { useLiveStore } from '../live/live.state';
+import type { WorkforceRuntimeResponseDto } from '../live/live.contracts';
 import { OfficeBuilding } from './OfficeBuilding';
 import { Room } from './Room';
 import {
@@ -153,9 +157,16 @@ const RoomSceneItem = React.memo(function RoomSceneItem({
 }: {
   room: RoomDefinition;
 }) {
-  const workerStatus = useOfficeStore(
-    (s) => s.workers[room.primaryWorkerId]?.status ?? 'IDLE',
-  );
+  const worker = useOfficeStore((state) => state.workers[room.primaryWorkerId]);
+  const displayMode = useWorkerDisplayModeStore((state) => state.mode);
+  const liveResource = useLiveStore((state) => state.resources['/api/v1/workforce/runtime']);
+  const liveSession = useLiveStore((state) => state.session);
+  const liveSnapshot = liveResource.data as WorkforceRuntimeResponseDto | null;
+  const liveRepository = createLiveWorkerDisplayRepository(liveSnapshot, liveResource.status, liveSession);
+  const demoRepository = createDemoWorkerDisplayRepository(worker ? [worker] : []);
+  const workerStatus = displayMode === 'LIVE'
+    ? liveRepository.getWorker(room.primaryWorkerId).visualStatus
+    : demoRepository.getWorker(room.primaryWorkerId).visualStatus;
   const isSelected = useOfficeStore(
     (s) =>
       s.selectedRoomId === room.id || s.selectedWorkerId === room.primaryWorkerId,
