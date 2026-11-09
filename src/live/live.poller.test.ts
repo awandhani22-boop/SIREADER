@@ -11,6 +11,9 @@ import {
   type SystemStatusDto,
   type TelemetryUsageDto,
   type WorkforceTasksResponseDto,
+  type WorkforceCommandPath,
+  type WorkforceCommandRequest,
+  type WorkforceCommandResponseDto,
 } from './live.contracts';
 import { LiveApiError, type LiveApiClient } from './live.api';
 import { createLiveController } from './live.controller';
@@ -183,6 +186,12 @@ function createApi(
       ...(await get('/api/v1/workforce/tasks') as WorkforceTasksResponseDto),
       limit,
       offset,
+    }),
+    sendWorkforceCommand: async (_path: WorkforceCommandPath, _request: WorkforceCommandRequest): Promise<WorkforceCommandResponseDto> => ({
+      command_id: 'cmd_12345678', actor_id: 'local_operator', command_type: 'WORKER_SCHEDULING_SET',
+      target_id: 'haiku', correlation_id: 'corr_12345678',
+      outcome: { accepted: true, worker_id: 'haiku', accepting_tasks: false, schedule_state: 'PAUSED' },
+      created_at: '2026-11-09T10:00:00Z', replayed: false,
     }),
     clearCsrfToken: () => undefined,
   };
@@ -446,6 +455,12 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
         limit,
         offset,
       }),
+    sendWorkforceCommand: async (_path: WorkforceCommandPath, _request: WorkforceCommandRequest): Promise<WorkforceCommandResponseDto> => ({
+      command_id: 'cmd_12345678', actor_id: 'local_operator', command_type: 'WORKER_SCHEDULING_SET',
+      target_id: 'haiku', correlation_id: 'corr_12345678',
+      outcome: { accepted: true, worker_id: 'haiku', accepting_tasks: false, schedule_state: 'PAUSED' },
+      created_at: '2026-11-09T10:00:00Z', replayed: false,
+    }),
       clearCsrfToken: () => undefined,
     };
     const controller = createLiveController(api);

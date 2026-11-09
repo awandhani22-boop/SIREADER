@@ -1,5 +1,5 @@
 /** Fixed, server-only proxy for the isolated workforce command API. */
-import type { Request, RequestHandler, Response } from 'express';
+import type { RequestHandler, Response as ExpressResponse } from 'express';
 import { sendBffError } from './errors.ts';
 import { SafeLogger } from './log.ts';
 
@@ -212,7 +212,7 @@ function readCommandToken(): string | undefined {
   return token && /^[A-Za-z0-9._~+/-]{32,256}$/.test(token) ? token : undefined;
 }
 
-function sendSafeError(res: Response, status: number, code: Parameters<typeof sendBffError>[2], message: string): void {
+function sendSafeError(res: ExpressResponse, status: number, code: Parameters<typeof sendBffError>[2], message: string): void {
   sendBffError(res, status, code, message);
 }
 
@@ -241,6 +241,7 @@ export function createWorkforceCommandHandlers(
         sendSafeError(res, 400, 'BAD_REQUEST', 'Workforce command payload is invalid or outside the non-trading allowlist.');
         return;
       }
+      const bodyRecord = body as Record<string, unknown>;
       const idempotencyKey = req.headers['idempotency-key'];
       if (typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9._~-]{8,128}$/.test(idempotencyKey)) {
         sendSafeError(res, 400, 'BAD_REQUEST', 'A valid Idempotency-Key header is required.');
@@ -263,7 +264,7 @@ export function createWorkforceCommandHandlers(
             'Content-Type': 'application/json',
             'Idempotency-Key': idempotencyKey,
           },
-          body: JSON.stringify(body),
+          body: JSON.stringify(bodyRecord),
           redirect: 'manual',
           signal: controller.signal,
         });
@@ -299,7 +300,7 @@ export function createWorkforceCommandHandlers(
           sendSafeError(res, 502, code, 'Workforce command response was invalid.');
           return;
         }
-        if (!validCommandResponse(path, body, payload)) {
+        if (!validCommandResponse(path, bodyRecord, payload)) {
           SafeLogger.warn('UPSTREAM_RESPONSE_REJECTED', {
             method: 'POST', route: path, statusCode: 502, errorCode: 'SCHEMA_INVALID',
           });
