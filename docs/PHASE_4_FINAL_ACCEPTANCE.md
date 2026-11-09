@@ -43,7 +43,7 @@ git -C $front status --short --branch
 git -C $back status --short --branch
 ```
 
-Expected current branch heads: Virtual Office `b3e950d`; Python Backend `55a0cb7`. If switching or fast-forwarding is blocked by a local file, stop and report the exact message. Do not reset, clean, stash, rebase, or overwrite local work to force it.
+To record the exact remote heads before syncing, run `git -C $front ls-remote origin refs/heads/phase-4-implementation` and `git -C $back ls-remote origin refs/heads/phase-4-implementation`. Compare the resulting SHAs with the local `rev-parse --short HEAD` after switching. If switching or fast-forwarding is blocked by a local file, stop and report the exact message. Do not reset, clean, stash, rebase, or overwrite local work to force it.
 
 ## 2. Automated validation
 
