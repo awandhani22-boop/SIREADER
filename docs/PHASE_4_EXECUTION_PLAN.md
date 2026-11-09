@@ -1,3 +1,15 @@
+## Execution update — 2026-11-09
+
+The Phase 4.4 implementation now includes an explicit DEMO/LIVE source switch, read-only worker repository adapters, LIVE worker roster/scene mapping, DEMO simulation-clock isolation, and bounded task pagination through the same-origin BFF. Session loss clears task-page state and invalidates late responses.
+
+The 50-worker fixture is supported by the dynamic LIVE roster/read model; the 100-worker contract fixture remains an API/repository validation target. The floor plan still has seven authored 3D station positions, so no additional avatar coordinates are invented for unknown backend workers.
+
+**Phase 4 is still NOT COMPLETE.** The full frontend/BFF/Python/PostgreSQL validation and local Windows/Chrome acceptance must pass and be recorded before closure. No live Supabase migration or real provider canary has been performed.
+
+Detailed evidence and gates: [PHASE_4_EXECUTION_LOG.md](./PHASE_4_EXECUTION_LOG.md).
+
+---
+
 # SIREADER Virtual Office — Phase 4 Execution Plan
 
 **Branch:** phase-4-implementation in both repositories.
