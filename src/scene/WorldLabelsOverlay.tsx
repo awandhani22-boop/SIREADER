@@ -4,7 +4,7 @@ import { ROOM_LIST } from '../workers/worker.registry';
 import { useOfficeStore } from '../workers/worker.state';
 import { RoomDefinition, RoomId, WorkerId } from '../workers/worker.types';
 import { useWorkerDisplayModeStore } from '../workers/worker.display-mode';
-import { createDemoWorkerRepository, createLiveWorkerRepository } from '../workers/worker.live-repository';
+import { createDemoWorkerDisplayRepository, createLiveWorkerDisplayRepository } from '../workers/worker.live-repository';
 import { useLiveStore } from '../live/live.state';
 import type { WorkforceRuntimeResponseDto } from '../live/live.contracts';
 
@@ -86,8 +86,8 @@ export const WorldWorkerBadgeItem = React.memo(function WorldWorkerBadgeItem({
 
   if (!worker) return null;
 
-  const liveRepository = createLiveWorkerRepository(liveSnapshot, liveResource.status, liveSession);
-  const demoRepository = createDemoWorkerRepository([worker]);
+  const liveRepository = createLiveWorkerDisplayRepository(liveSnapshot, liveResource.status, liveSession);
+  const demoRepository = createDemoWorkerDisplayRepository([worker]);
   const view = displayMode === 'LIVE'
     ? liveRepository.getWorker(workerId)
     : demoRepository.getWorker(workerId);
