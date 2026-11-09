@@ -8,6 +8,7 @@
 import { config as loadDotEnv } from 'dotenv';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { shutdownHttpServer } from './shutdown.ts';
 
 loadDotEnv({ quiet: true });
 
@@ -34,7 +35,7 @@ let shuttingDown = false;
 function shutdown(): void {
   if (shuttingDown) return;
   shuttingDown = true;
-  server.close(() => {
+  shutdownHttpServer(server, () => {
     process.exitCode = 0;
   });
 }
