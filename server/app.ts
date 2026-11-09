@@ -254,6 +254,10 @@ export function createBffApp(
     '/api/v1/pipeline/active',
     '/api/v1/market-watches/active',
     '/api/v1/audit/decisions',
+    '/api/v1/workforce/runtime',
+    '/api/v1/workforce/tasks',
+    '/api/v1/workforce/attempts',
+    '/api/v1/workforce/activity',
   ];
 
   for (const path of upstreamRoutes) {
