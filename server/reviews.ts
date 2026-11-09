@@ -182,18 +182,18 @@ export function createReviewReadHandlers(options: ReviewReadProxyOptions = {}) {
       sendBffError(res, 400, 'BAD_REQUEST', 'Only bounded limit and offset parameters are permitted.');
       return;
     }
-    req.url = req.url.split('?')[0];
     req.params.reviewQuery = backendBase + '?limit=' + limit + '&offset=' + offset;
     proxy((request) => request.params.reviewQuery, validateWorkforceReviewsResponse)(req, res, next);
   };
 
-  const detail = (backendBase: string): RequestHandler => proxy((req) => {
+  const detail = (backendBase: string): RequestHandler => (req, res, next) => {
     const reviewId = req.params.reviewId;
     if (typeof reviewId !== 'string' || !/^rev_[A-Za-z0-9_-]{8,60}$/.test(reviewId)) {
-      throw new Error('INVALID_REVIEW_ID');
+      sendBffError(res, 400, 'BAD_REQUEST', 'A valid review_id path parameter is required.');
+      return;
     }
-    return backendBase + '/' + encodeURIComponent(reviewId);
-  }, validateWorkforceReviewDetail);
+    proxy(() => backendBase + '/' + encodeURIComponent(reviewId), validateWorkforceReviewDetail)(req, res, next);
+  };
 
   return Object.freeze({
     workforcePending: pending('/api/v1/workforce/reviews/pending'),

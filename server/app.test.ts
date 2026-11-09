@@ -817,25 +817,28 @@ test('SIREADER Phase 3.2 BFF Test Suite — Remediated', async (t) => {
     }
   });
 
-  await t.test('Canonical route completeness check: exactly 18 routes declared', () => {
-    assert.equal(CANONICAL_ROUTES.length, 18);
+  await t.test('Canonical route completeness check: exactly 21 routes declared', () => {
+    assert.equal(CANONICAL_ROUTES.length, 21);
     const paths = CANONICAL_ROUTES.map((r) => r.path);
     assert.deepEqual(paths.sort(), [
       '/api/auth/login',
       '/api/auth/logout',
       '/api/auth/session',
       '/api/v1/audit/decisions',
+      '/api/v1/commands/reviews/adjudicate',
       '/api/v1/commands/tasks/cancel',
       '/api/v1/commands/tasks/enqueue',
       '/api/v1/commands/tasks/retry',
       '/api/v1/commands/workers/scheduling',
       '/api/v1/events/stream',
+      '/api/v1/governance/reviews/pending',
       '/api/v1/market-watches/active',
       '/api/v1/pipeline/active',
       '/api/v1/system/status',
       '/api/v1/telemetry/usage',
       '/api/v1/workforce/activity',
       '/api/v1/workforce/attempts',
+      '/api/v1/workforce/reviews/pending',
       '/api/v1/workforce/runtime',
       '/api/v1/workforce/tasks',
       '/api/v1/workforce/tasks/:taskId/timeline',

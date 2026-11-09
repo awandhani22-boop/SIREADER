@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Check, ClipboardCheck, RefreshCw, X } from 'lucide-react';
-import { LiveApiError, type LiveApiErrorCode } from '../live/live.api';
+import { LiveApiError } from '../live/live.api';
 import { liveController } from '../live/live.controller';
 import { useLiveStore } from '../live/live.state';
 import type {
@@ -42,7 +42,7 @@ export function ReviewInbox() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const load = useCallback(async (nextOffset = offset, preferredId: string | null = selectedId) => {
+  const load = useCallback(async (nextOffset = 0, preferredId: string | null = null) => {
     if (session !== 'AUTHENTICATED') return;
     setLoading(true);
     setError(null);
@@ -69,7 +69,7 @@ export function ReviewInbox() {
     } finally {
       setLoading(false);
     }
-  }, [offset, selectedId, session]);
+  }, [session]);
 
   useEffect(() => {
     if (session !== 'AUTHENTICATED') {
@@ -82,7 +82,7 @@ export function ReviewInbox() {
   }, [session]);
 
   useEffect(() => {
-    if (open && session === 'AUTHENTICATED') void load();
+    if (open && session === 'AUTHENTICATED') void load(0, null);
   }, [open, session, load]);
 
   async function selectReview(reviewId: string) {
@@ -163,7 +163,7 @@ export function ReviewInbox() {
               <p className="text-[10px] text-slate-400">{total} review record · hanya status PENDING yang dapat diproses</p>
             </div>
             <div className="flex items-center gap-2">
-              <button type="button" data-testid="review-inbox-refresh" onClick={() => void load(offset)} disabled={loading || submitting}
+              <button type="button" data-testid="review-inbox-refresh" onClick={() => void load(offset, selectedId)} disabled={loading || submitting}
                 className="rounded border border-slate-700 p-2 text-slate-300 disabled:opacity-40" aria-label="Refresh reviews">
                 <RefreshCw className={'h-3.5 w-3.5 ' + (loading ? 'animate-spin' : '')} />
               </button>

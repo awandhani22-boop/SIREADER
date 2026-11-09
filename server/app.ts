@@ -302,7 +302,7 @@ export function createBffApp(
     if (!error) { next(); return; }
     if ((error as { type?: string }).type === 'entity.too.large') {
       SafeLogger.warn('PAYLOAD_TOO_LARGE', { method: req.method, route: req.path, statusCode: 413, errorCode: 'TOO_LARGE' });
-      sendBffError(res, 413, 'TOO_LARGE', 'Workforce command payload exceeds the 20 KiB limit.');
+      sendBffError(res, 413, 'TOO_LARGE', 'Workforce command payload exceeds the 80 KiB limit.');
       return;
     }
     if (error instanceof SyntaxError || (error as { type?: string }).type === 'entity.parse.failed') {
