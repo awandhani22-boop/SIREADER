@@ -85,7 +85,8 @@ The following results were reported and shown by the owner during local Windows/
   | BFF | 18588 | 0.00% | 0.02% | 65.33 → 65.85 MB | 66.92 MB | 73.61 MB |
   | Vite | 25304 | 0.00% | 0.04% | 178.55 → 176.78 MB | 178.77 MB | 249.73 MB |
 - Interpretation is limited to this owner-run sample: process CPU was very low and sampled Working Set stayed nearly flat. These are OS process metrics, not Chrome JavaScript heap or browser scene performance measurements; no formal numeric resource budget has yet been approved.
-- The earlier general five-minute stability observation was also reported as safe, but no performance trace, browser heap time series, or heartbeat comment-frame capture was supplied.
+- Owner subsequently reported the five-minute browser resource observation as safe with no visible issue. Exact Performance Monitor values (CPU, JS heap, DOM nodes, JS event listeners) were not supplied, so this is qualitative evidence only and not a numeric browser-performance acceptance result.
+- The earlier general five-minute stability observation was also reported as safe, but no browser performance trace or heartbeat comment-frame capture was supplied.
 
 ## Remaining acceptance gates
 
