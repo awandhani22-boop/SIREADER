@@ -41,3 +41,50 @@ un 42615872014).
 4. Full evidence and test records are documented in [PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md](./PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md).
 
 **Phase 5.2 (Review, Audit, Budgets & Governance) is now unblocked and active.**
+
+
+---
+
+# Phase 5.2 — Review, Budget Governance & Workforce Policy (2026-11-10)
+
+## 5.2.2-E — Human Review Inbox
+
+Frontend implementation head: `9919ef90a9464cc0e093e288353634884b6d3992`.
+
+- Added fixed read-only BFF routes for workforce/governance review pending lists and detail.
+- Added BFF adjudication command routing. It requires operator session + CSRF, an exact adjudication DTO, expected original-output SHA-256, and an idempotency key.
+- Backend operator identity is injected server-side as `local_operator`; browser-supplied identity/auth/cookie headers are not forwarded. This reflects the current single-operator auth contract; it is not a multi-operator identity mapping.
+- Added Review Inbox UI in authenticated LIVE mode with pagination, detail, expiry, original hash, APPROVE, EDIT, REJECT, and session cleanup.
+- Added strict DTO/BFF tests for response size, exact keys, hashes, invalid IDs, bounded pagination, and trusted header behavior.
+- [Frontend CI run 42666577263 PASS](https://github.com/awandhani22-boop/SIREADER/actions/runs/42666577263) and [integrated frontend run 42667733078 PASS](https://github.com/awandhani22-boop/SIREADER/actions/runs/42667733078). The latter reports 415 tests passed, TypeScript passed, and production build passed.
+
+## 5.2.3 — Budget Governance & Cost Guard Observability
+
+- Kept `app/ai/cost_guard.py` as the single usage/reservation ledger.
+- Added read-only `v_api_workforce_ai_usage` projection joining provider request/usage records to workforce task attempts.
+- Added budget DTOs and telemetry aggregation for daily IDR target/hard limit, rolling 30-day IDR, monthly Anthropic USD, FAST/REASONING/ESCALATION IDR allocations, usage status counts, and per-worker/per-task attribution.
+- Preserved reserved and UNKNOWN amounts in projected usage. IDR and USD are never summed or converted.
+- [Backend CI run 42667794174 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42667794174): 177 API tests and 75 core tests passed.
+- [Frontend CI run 42667733078 PASS](https://github.com/awandhani22-boop/SIREADER/actions/runs/42667733078): 415 tests, TypeScript, production build.
+
+## 5.2.4 — Model Escalation & Sensitive Task Policy
+
+- Added backend-owned capability/task validation and deterministic tier selection.
+- FAST/REASONING/ESCALATION is selected before provider dispatch and must match the worker's registered model-tier ceiling.
+- Credentials are scrubbed before provider dispatch. Personal identifiers are redacted and force the existing atomic human-output quarantine.
+- Explicit trade/order/private-key signals, unknown capabilities, capability/task mismatches, trading-adjacent capabilities, and excluded worker identities fail closed.
+- No automatic provider re-invocation or tier escalation occurs after an UNKNOWN outcome. This is intentional because one attempt/request ID is reserved once and an uncertain result must be reconciled, not replayed.
+- Default runtime/provider gates remain MOCK/OFF.
+
+## 5.2.5 — Operations Finalization
+
+- Added `python -m app.workers.maintenance` as a one-shot transactional maintenance entry point. It does not instantiate a provider.
+- Added `scripts/run_workforce_maintenance.ps1` for Windows Task Scheduler.
+- Added test coverage for the expiry-before-purge call order and disposable PostgreSQL review/budget migration rollback-forward cycle.
+- Updated the PostgreSQL lifecycle fixture to create an explicit quarantined review, verify PENDING review protection, expire it, then verify parent task and review payload purge after the database retention boundary.
+- The schedule wrapper is not registered on the owner's OS/deployment; that remains a deployment operator task.
+- Final policy hardening commit is pending its CI run at the time of this log update.
+
+## Remaining Phase 5 release gate
+
+A single comprehensive owner-run Chrome/Windows acceptance remains required after automated validation is green. The CI and this source log do not claim that the local browser, local command/read API environment, or local maintenance schedule has been operated in this session. No Supabase LIVE migration, paid provider call, MT5/HFM action, trading execution, or main merge was performed.

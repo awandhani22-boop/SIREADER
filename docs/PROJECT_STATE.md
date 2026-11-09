@@ -1,3 +1,23 @@
+## Current status override — 2026-11-10 (Phase 5 remaining implementation)
+
+This section supersedes older status statements below where they conflict with the current branch state. Historical snapshots are retained as historical evidence.
+
+- **Phase 5.1 — COMPLETE:** Owner acceptance was recorded on 2026-11-09 in `PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md`.
+- **Phase 5.2.1 — COMPLETE:** Lifecycle audit ledger and timeline API/BFF were implemented and verified.
+- **Phase 5.2.2-A — COMPLETE:** Review architecture proposal revision 1.1.1 was accepted as the implementation baseline.
+- **Phase 5.2.2-B — IMPLEMENTED:** Review metadata/payload quarantine, database guards, minimum privileges, and PostgreSQL test coverage are present. The review-view owner has only the required column-level SELECT grants; `sireader_api_ro` remains denied direct SELECT on the two base review tables.
+- **Phase 5.2.2-C — IMPLEMENTED:** The adjudication command API uses row locking, expected original-output SHA-256, audited idempotent command execution, and distinct operator identity header validation.
+- **Phase 5.2.2-D — IMPLEMENTED:** Read API and security-barrier review view are available. The frontend BFF uses fixed loopback upstreams, server-side tokens, response validation, bounded response parsing, and operator-session protection.
+- **Phase 5.2.2-E — IMPLEMENTED; FRONTEND CI PASS:** Review Inbox UI supports pending review list/detail and APPROVE, EDIT, REJECT actions. Frontend head: `9919ef90a9464cc0e093e288353634884b6d3992`; [CI run 42667733078 PASS](https://github.com/awandhani22-boop/SIREADER/actions/runs/42667733078): 415 tests passed, `tsc --noEmit` passed, and Vite production build passed. Build emits an existing/remaining large-chunk warning; it is not a build failure.
+- **5.2.3 — IMPLEMENTED; FRONTEND AND BACKEND CI PASS:** Existing Cost Guard remains the only reservation/billing ledger. Read-only cost attribution uses a security-barrier view joining usage records to task attempts. Budget API/dashboard reports daily IDR, rolling 30-day IDR, Anthropic USD, tier allocations, worker/task attribution, and reserved versus actual usage. Frontend CI: [42667733078 PASS](https://github.com/awandhani22-boop/SIREADER/actions/runs/42667733078). Backend 5.2.3 CI: [42667794174 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42667794174) — 177 API tests and 75 core tests passed.
+- **5.2.4 — IMPLEMENTED; FINAL HARDENING CI PENDING:** Backend-owned capability-to-tier routing and ALLOW/REDACT/REVIEW/REJECT sensitive-task policy are added. Credential and personal-data redaction happens before provider dispatch. Trading/execution capabilities and Decision Engineer/Market Monitor are barred from general-purpose LIVE provider routing. Model tier is fixed before the provider call; UNKNOWN outcomes are not automatically replayed or escalated to another provider request.
+- **5.2.5 — IMPLEMENTED; FINAL HARDENING CI PENDING:** One-shot retention/expiry maintenance command, Windows Task Scheduler wrapper, operations runbook, migration-cycle and maintenance-order tests are added. The scheduler wrapper is provided but has not been registered on the owner's machine/deployment.
+- **Current frontend branch HEAD:** `9919ef90a9464cc0e093e288353634884b6d3992`.
+- **Current backend branch HEAD at this snapshot:** `1568435e092fc3b59bb271a9eef9d24981daa8e8`; final workflow run `42671067597` is pending.
+- **Final Phase 5 gate remains OPEN** until the latest backend policy/security tests are green and one comprehensive owner-run Windows/Chrome browser acceptance is recorded. Do not merge to `main`, deploy migrations to Supabase LIVE, enable paid providers, or alter trading/MT5/HFM paths as part of this closeout.
+
+---
+
 ## Current status override — 2026-11-09 (Phase 5.2.1 Closeout)
 
 - **Phase 5.1 — COMPLETE (owner acceptance recorded 2026-11-09):** Source implementation, automated CI, bug fix for retry target ID, and owner-run Windows/Chrome/Antigravity acceptance are recorded PASS. See [PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md](./PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md).

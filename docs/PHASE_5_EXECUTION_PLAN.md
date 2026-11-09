@@ -1,6 +1,6 @@
 # Phase 5 — Human-Supervised Operations & Governance
 
-**Status:** Phase 5.1 COMPLETE; Checkpoint 5.2.1 COMPLETE; Checkpoint 5.2.2 ACTIVE  
+**Status:** Phase 5.1 COMPLETE; 5.2.1 COMPLETE; 5.2.2-E IMPLEMENTED; 5.2.3 IMPLEMENTED; 5.2.4/5.2.5 FINAL CI VALIDATION  
 **Working branch:** `phase-5-implementation`  
 **Baseline:** accepted Phase 4 branch; no merge to `main`.
 
@@ -91,7 +91,7 @@ Frontend CI: https://github.com/awandhani22-boop/SIREADER/actions/runs/426047074
 - The browser keeps the command bearer server-side. Browser writes use the existing operator session + CSRF and a stable idempotency key. An ambiguous timeout preserves the same key for retry; unresolved keys are never evicted to make room for a new command.
 - These runs use test SQLite / disposable PostgreSQL and local BFF mocks. They do not prove the owner's local environment files, PostgreSQL instance, Windows process topology, or real browser session is configured.
 
-Source and CI for checkpoints 5.1.0–5.1.4 are complete. The Phase 5.1 exit gate remains open until owner-side local setup and Windows/Chrome/Antigravity acceptance is recorded. Phase 5.2 must not start before that acceptance.
+Phase 5.1 owner acceptance was recorded on 2026-11-09. Phase 5.2 is active on the dedicated implementation branch. The final Phase 5 owner acceptance is a separate closeout gate and must not be conflated with the completed Phase 5.1 acceptance.
 
 ## Implementation checkpoints
 
@@ -100,8 +100,8 @@ Source and CI for checkpoints 5.1.0–5.1.4 are complete. The Phase 5.1 exit gat
 - [x] 5.1.2 — BFF fixed routes, operator session + CSRF, separate server-side token
 - [x] 5.1.3 — frontend LIVE-only controls and explicit command outcomes
 - [x] 5.1.4 — negative authorization, replay, lifecycle and PostgreSQL privilege verification
-- [ ] 5.1 owner browser acceptance
-- [ ] 5.2 — review, budgets, escalation and governance
+- [x] 5.1 owner browser acceptance (recorded 2026-11-09)
+- [x] 5.2 implementation workstream — review, budgets, escalation and governance (final Phase 5 closeout gate remains open)
 
 ## Known owner-side setup that will be required before local LIVE use
 
