@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { WorkforceRuntimeResponseDto } from '../live/live.contracts';
-import { createDemoWorkerRepository, createLiveWorkerRepository } from './worker.live-repository';
+import { createDemoWorkerDisplayRepository, createLiveWorkerDisplayRepository } from './worker.live-repository';
 import { SimulationEngine, DEFAULT_SIMULATION_SEED } from './simulation.engine';
 
 function createSnapshot(count: number): WorkforceRuntimeResponseDto {
@@ -42,9 +42,9 @@ function createSnapshot(count: number): WorkforceRuntimeResponseDto {
   };
 }
 
-test('LIVE worker repository preserves backend process truth and explicit provenance', () => {
+test('LIVE display repository preserves backend process truth and explicit provenance', () => {
   const snapshot = createSnapshot(7);
-  const repository = createLiveWorkerRepository(snapshot, 'LIVE', 'AUTHENTICATED');
+  const repository = createLiveWorkerDisplayRepository(snapshot, 'LIVE', 'AUTHENTICATED');
   const workers = repository.listWorkers();
 
   assert.equal(repository.source, 'LIVE');
@@ -59,8 +59,8 @@ test('LIVE worker repository preserves backend process truth and explicit proven
   assert.equal(Object.isFrozen(workers[0].capabilityIds), true);
 });
 
-test('LIVE worker repository supports a 100-worker fixture without worker-specific branching', () => {
-  const repository = createLiveWorkerRepository(createSnapshot(100), 'LIVE', 'AUTHENTICATED');
+test('LIVE display repository supports a 100-worker fixture without worker-specific branching', () => {
+  const repository = createLiveWorkerDisplayRepository(createSnapshot(100), 'LIVE', 'AUTHENTICATED');
   const workers = repository.listWorkers();
 
   assert.equal(workers.length, 100);
@@ -68,30 +68,25 @@ test('LIVE worker repository supports a 100-worker fixture without worker-specif
   assert.equal(workers.every((worker) => worker.source === 'LIVE'), true);
 });
 
-test('LIVE stale, offline, error and unauthenticated states never borrow demo worker values', () => {
+test('LIVE stale, error and unauthenticated states never borrow demo worker values', () => {
   const snapshot = createSnapshot(7);
-  const stale = createLiveWorkerRepository(snapshot, 'STALE', 'AUTHENTICATED');
+  const stale = createLiveWorkerDisplayRepository(snapshot, 'STALE', 'AUTHENTICATED');
   assert.equal(stale.getWorker('haiku').freshness, 'STALE');
   assert.equal(stale.getWorker('haiku').activeTaskCount, null);
   assert.equal(stale.getWorker('haiku').visualStatus, 'ERROR');
 
-  const offline = createLiveWorkerRepository(null, 'OFFLINE', 'AUTHENTICATED');
-  assert.equal(offline.listWorkers().length, 0);
-  assert.equal(offline.getWorker('haiku').freshness, 'CONNECTING');
-  assert.equal(offline.getWorker('haiku').source, null);
-
-  const error = createLiveWorkerRepository(null, 'ERROR', 'AUTHENTICATED');
+  const error = createLiveWorkerDisplayRepository(null, 'ERROR', 'AUTHENTICATED');
   assert.equal(error.getWorker('haiku').freshness, 'ERROR');
   assert.equal(error.getWorker('haiku').source, null);
 
-  const unauthenticated = createLiveWorkerRepository(snapshot, 'LIVE', 'UNKNOWN');
+  const unauthenticated = createLiveWorkerDisplayRepository(snapshot, 'LIVE', 'UNKNOWN');
   assert.equal(unauthenticated.listWorkers().length, 0);
   assert.equal(unauthenticated.getWorker('haiku').freshness, 'UNAUTHENTICATED');
 });
 
-test('DEMO repository reads only the deterministic simulation snapshot and labels every value SIMULATED', () => {
+test('DEMO display repository reads only deterministic simulation workers and labels SIMULATED', () => {
   const snapshot = SimulationEngine.createInitialSnapshot(DEFAULT_SIMULATION_SEED);
-  const demo = createDemoWorkerRepository(snapshot.workerOrder.map((id) => snapshot.workers[id]));
+  const demo = createDemoWorkerDisplayRepository(snapshot.workerOrder.map((id) => snapshot.workers[id]));
   assert.equal(demo.source, 'SIMULATED');
   assert.equal(demo.listWorkers().length, 7);
   assert.ok(demo.listWorkers().every((worker) => worker.source === 'SIMULATED'));
