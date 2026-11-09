@@ -93,6 +93,7 @@ export function createLiveApiClient(options: LiveApiClientOptions = {}): LiveApi
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > LIVE_API_TIMEOUT_MS) {
     throw new Error('LIVE API timeout must be between 1 and 5000 milliseconds.');
   }
+  const idempotencyKeyFactory = options.idempotencyKeyFactory ?? (() => crypto.randomUUID());
 
   let csrfToken: string | null = null;
 

@@ -24,6 +24,7 @@ import {
   routeAndMethodGuard,
   stripCorsHeaders,
   isApiTarget,
+  isValidJsonContentType,
 } from './guards.ts';
 import { sendBffError } from './errors.ts';
 import { SafeLogger } from './log.ts';
@@ -282,7 +283,7 @@ export function createBffApp(
       sendBffError(res, 403, 'FORBIDDEN', 'Exact same-origin Origin header is required for workforce commands.');
       return;
     }
-    if (!req.headers['content-type'] || !/^application\\/json(?:\\s*;\\s*charset=utf-8)?$/i.test(req.headers['content-type'])) {
+    if (!isValidJsonContentType(req.headers['content-type'])) {
       sendBffError(res, 400, 'BAD_REQUEST', 'Workforce command Content-Type must be application/json.');
       return;
     }

@@ -318,7 +318,7 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
     assert.equal(calls[2].init.body, JSON.stringify({ password: 'transient-test-password' }));
     assert.equal(calls[3].init.body, '{}');
     assert.equal(calls.every((call) => !new Headers(call.init.headers).has('authorization')), true);
-    assert.equal(Object.keys(api).sort().join(','), 'clearCsrfToken,get,getSession,getWorkforceAttempts,getWorkforceTasks,login,logout');
+    assert.equal(Object.keys(api).sort().join(','), 'clearCsrfToken,get,getSession,getWorkforceAttempts,getWorkforceTasks,login,logout,sendWorkforceCommand');
   });
 
 
@@ -477,6 +477,12 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
         limit,
         offset,
       }),
+      sendWorkforceCommand: async (_path: WorkforceCommandPath, _request: WorkforceCommandRequest): Promise<WorkforceCommandResponseDto> => ({
+        command_id: 'cmd_12345678', actor_id: 'local_operator', command_type: 'WORKER_SCHEDULING_SET',
+        target_id: 'haiku', correlation_id: 'corr_12345678',
+        outcome: { accepted: true, worker_id: 'haiku', accepting_tasks: false, schedule_state: 'PAUSED' },
+        created_at: '2026-11-09T10:00:00Z', replayed: false,
+      }),
       clearCsrfToken: () => { csrfCleared = true; },
     };
     const controller = createLiveController(api);
@@ -499,6 +505,12 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
         ...(fixtures['/api/v1/workforce/tasks'] as WorkforceTasksResponseDto),
         limit,
         offset,
+      }),
+      sendWorkforceCommand: async (_path: WorkforceCommandPath, _request: WorkforceCommandRequest): Promise<WorkforceCommandResponseDto> => ({
+        command_id: 'cmd_12345678', actor_id: 'local_operator', command_type: 'WORKER_SCHEDULING_SET',
+        target_id: 'haiku', correlation_id: 'corr_12345678',
+        outcome: { accepted: true, worker_id: 'haiku', accepting_tasks: false, schedule_state: 'PAUSED' },
+        created_at: '2026-11-09T10:00:00Z', replayed: false,
       }),
       clearCsrfToken: () => undefined,
     };
