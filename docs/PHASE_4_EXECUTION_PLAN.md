@@ -33,7 +33,7 @@ This is the execution ledger for the complete Phase 4 scope. docs/ROADMAP.md rem
 - Every task input/output has a schema version, correlation ID, deduplication key, bounded size, explicit provenance, and retention policy.
 
 ## 1. Phase 4.1 — Real Worker Runtime Contract & Registry
-**Status:** IMPLEMENTED IN CODE; automated verification pending.
+**Status:** IMPLEMENTED; backend automated verification PASS (PostgreSQL 16 disposable CI).
 
 Deliverables:
 1. Versioned domain contract for Worker, Capability, Task, TaskAttempt, ActivityEvent, and RuntimeHealth.
@@ -46,7 +46,7 @@ Deliverables:
 Acceptance: contract rejects unknown versions/states, malformed IDs, oversized values and invalid transitions; seven-worker registry is deterministic; capability/concurrency and ownership are explicit; tests run without database/provider.
 
 ## 2. Phase 4.2 — AI Provider Routing, Execution & Cost Guard
-**Status:** IMPLEMENTED WITH FAIL-CLOSED DEFAULTS; automated verification pending. Live provider remains disabled.
+**Status:** IMPLEMENTED; provider/cost automated verification PASS. Live provider remains disabled by default and requires owner approval.
 
 Deliverables:
 1. Provider interface with deterministic mock implementation and server-side OmniRoute adapter.
@@ -60,7 +60,7 @@ Deliverables:
 Acceptance: fake-provider tests cover success, usage missing, refusal/error, timeout, known-not-charged failure, uncertain outcome, budget blocking, duplicate request and cancellation. Existing Cost Guard reservation is the accounting record. Live smoke/canary is not claimed until owner configures credentials and explicitly approves a bounded budget.
 
 ## 3. Phase 4.3 — Persistent Backend Task Orchestration
-**Status:** IMPLEMENTED IN CODE; disposable PostgreSQL verification pending.
+**Status:** IMPLEMENTED; disposable PostgreSQL migration, privilege, concurrency, and recovery verification PASS.
 
 Deliverables:
 1. Versioned persistent tables for worker registry/capabilities, process heartbeats, generic work tasks, attempts, and append-only activity.
@@ -75,7 +75,7 @@ Deliverables:
 Acceptance: concurrent PostgreSQL claims never double-assign; duplicate enqueue returns original task; worker concurrency is respected; lease recovery, unknown provider outcome, retry, deadline, cancellation and dead-letter are tested; audit reconstructs lifecycle.
 
 ## 4. Phase 4.4 — Frontend LIVE Runtime Adapter & Demo/Live Separation
-**Status:** PARTIALLY IMPLEMENTED; API/BFF read-only workforce panel is present. Scene adapter, explicit DEMO/LIVE selection, pagination, scale fixtures, and full verification remain. and BFF fixed allowlist routes for workers, tasks, attempts/activity, health and runtime usage.
+**Status:** IMPLEMENTED IN CODE; frontend automated verification PASS. Local Windows/Chrome acceptance and any owner-controlled live-provider smoke test remain external gates.
 2. Frontend WorkerRepository interface and LIVE adapter. Transport isolated from UI/3D rendering.
 3. Explicit data mode DEMO/LIVE and provenance. DEMO uses only deterministic simulation store; LIVE uses only backend snapshots/SSE and never falls back to DEMO values.
 4. Typed state mapper from backend state to avatar/UI animation state. Unknown state/schema is ERROR, never guessed.
@@ -102,10 +102,10 @@ Acceptance: DEMO reset/seed repeatability unchanged; LIVE/DEMO state stores bidi
 ## 7. Progress ledger
 | Subphase | Implementation | Automated verification | Owner/live gate |
 |---|---|---|---|
-| 4.1 | IMPLEMENTED IN CODE | PENDING | Contract review |
-| 4.2 | IMPLEMENTED WITH MOCK/FAIL-CLOSED DEFAULTS | PENDING | Provider credential + budget approval |
-| 4.3 | IMPLEMENTED IN CODE | PENDING | Live migration approval/application |
-| 4.4 | PARTIAL | PENDING | Local browser acceptance |
+| 4.1 | IMPLEMENTED | PASS — backend CI | Owner contract review |
+| 4.2 | IMPLEMENTED; LIVE DISABLED | PASS — backend CI | Provider credential + bounded-budget approval |
+| 4.3 | IMPLEMENTED | PASS — disposable PostgreSQL CI | Live Supabase migration approval/application |
+| 4.4 | IMPLEMENTED IN CODE | PASS — frontend CI | Local Windows/Chrome acceptance |
 
 ## 8. Definition of Phase 4 COMPLETE
 Phase 4 is complete only when every Phase 4.1–4.4 deliverable and test gate passes, backend schema migrations/rollback are prepared and verified against disposable PostgreSQL, read-only APIs and BFF/frontend integration work, the DEMO/LIVE boundary is proven, and owner-controlled live gates are either actually completed or explicitly recorded as non-release blockers. No item may be silently skipped or relabeled complete because a mock passed.
