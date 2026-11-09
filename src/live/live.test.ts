@@ -111,6 +111,24 @@ const fixtures = {
   '/api/v1/pipeline/active': pipeline,
   '/api/v1/market-watches/active': marketWatches,
   '/api/v1/audit/decisions': auditDecisions,
+  '/api/v1/workforce/runtime': {
+    server_time_utc: '2026-11-09T10:00:00Z',
+    runtime: {
+      observed_at: '2026-11-09T10:00:00Z', configured_workers: 7,
+      ready_workers: 0, stale_workers: 0, offline_workers: 7,
+      active_tasks: 0, queued_tasks: 0, waiting_review_tasks: 0,
+      dead_lettered_tasks: 0, completed_last_24h: 0,
+    },
+    workers: [],
+  },
+  '/api/v1/workforce/tasks': {
+    server_time_utc: '2026-11-09T10:00:00Z',
+    total_count: 0, limit: 50, offset: 0, tasks: [],
+  },
+  '/api/v1/workforce/activity': {
+    server_time_utc: '2026-11-09T10:00:00Z',
+    total_count: 0, limit: 50, offset: 0, events: [],
+  },
 } as const;
 
 const authenticatedSession: AuthenticatedSessionDto = {
@@ -130,7 +148,7 @@ function bffError(code: string): Record<string, unknown> {
 }
 
 test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated state', async (t) => {
-  await t.test('strict DTO contracts accept the five backend response fixtures', () => {
+  await t.test('strict DTO contracts accept all eight backend response fixtures', () => {
     for (const path of LIVE_API_PATHS) {
       assert.deepEqual(parseLiveApiResponse(path, fixtures[path]), fixtures[path]);
     }
@@ -211,6 +229,28 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
     }
   });
 
+  await t.test('workforce attempts require a bounded task ID and use the authenticated fixed BFF route', async () => {
+    const calls: Array<{ input: RequestInfo | URL; init: RequestInit }> = [];
+    const api = createLiveApiClient({
+      fetchImpl: async (input, init = {}) => {
+        calls.push({ input, init });
+        return jsonResponse({
+          server_time_utc: '2026-11-09T10:00:00Z',
+          task_id: 'task_12345678',
+          attempts: [],
+        });
+      },
+    });
+    await assert.rejects(api.getWorkforceAttempts('bad'), (error: unknown) =>
+      error instanceof LiveApiError && error.code === 'BAD_REQUEST');
+    const result = await api.getWorkforceAttempts('task_12345678');
+    assert.equal(result.task_id, 'task_12345678');
+    assert.equal(String(calls[0].input), '/api/v1/workforce/attempts?task_id=task_12345678');
+    assert.equal(calls[0].init.method, 'GET');
+    assert.equal(calls[0].init.credentials, 'same-origin');
+    assert.equal(new Headers(calls[0].init.headers).get('authorization'), null);
+  });
+
   await t.test('session bootstrap and login keep CSRF in client memory and use it only for logout', async () => {
     const calls: Array<{ input: RequestInfo | URL; init: RequestInit }> = [];
     const api = createLiveApiClient({
@@ -241,7 +281,7 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
     assert.equal(calls[2].init.body, JSON.stringify({ password: 'transient-test-password' }));
     assert.equal(calls[3].init.body, '{}');
     assert.equal(calls.every((call) => !new Headers(call.init.headers).has('authorization')), true);
-    assert.equal(Object.keys(api).sort().join(','), 'clearCsrfToken,get,getSession,login,logout');
+    assert.equal(Object.keys(api).sort().join(','), 'clearCsrfToken,get,getSession,getWorkforceAttempts,login,logout');
   });
 
   await t.test('missing operator session maps to SESSION_REQUIRED', async () => {
@@ -297,6 +337,7 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
       login: async () => authenticatedSession,
       logout: async () => undefined,
       get: async (path) => fixtures[path],
+      getWorkforceAttempts: async (taskId) => ({ server_time_utc: '2026-11-09T10:00:00Z', task_id: taskId, attempts: [] }),
       clearCsrfToken: () => undefined,
     };
     const controller = createLiveController(api);
@@ -324,6 +365,7 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
       login: async () => authenticatedSession,
       logout: async () => undefined,
       get: async (path) => fixtures[path],
+      getWorkforceAttempts: async (taskId) => ({ server_time_utc: '2026-11-09T10:00:00Z', task_id: taskId, attempts: [] }),
       clearCsrfToken: () => { csrfCleared = true; },
     };
     const controller = createLiveController(api);
@@ -341,6 +383,7 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
       login: async () => authenticatedSession,
       logout: async () => undefined,
       get: async () => { throw new LiveApiError('SCHEMA_INVALID'); },
+      getWorkforceAttempts: async (taskId) => ({ server_time_utc: '2026-11-09T10:00:00Z', task_id: taskId, attempts: [] }),
       clearCsrfToken: () => undefined,
     };
     const controller = createLiveController(api);
