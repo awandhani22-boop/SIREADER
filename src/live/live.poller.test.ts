@@ -173,6 +173,11 @@ function createApi(
     logout: async () => undefined,
     get: async <K extends LiveApiPath>(path: K) =>
       await get(path) as LiveApiResponseMap[K],
+    getWorkforceAttempts: async (taskId: string) => ({
+      server_time_utc: '2026-11-09T10:00:00Z',
+      task_id: taskId,
+      attempts: [],
+    }),
     clearCsrfToken: () => undefined,
   };
 }
