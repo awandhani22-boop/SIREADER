@@ -46,8 +46,9 @@ export const RosterWorkerItem = React.memo(function RosterWorkerItem({
   );
   const liveResource = useLiveStore((state) => state.resources['/api/v1/workforce/runtime']);
   const liveSession = useLiveStore((state) => state.session);
+  const liveConnection = useLiveStore((state) => state.connection);
   const liveSnapshot = liveResource.data as WorkforceRuntimeResponseDto | null;
-  const liveRepository = createLiveWorkerRepository(liveSnapshot, liveResource.status, liveSession);
+  const liveRepository = createLiveWorkerRepository(liveSnapshot, liveResource.status, liveSession, liveConnection);
   const demoRepository = createDemoWorkerRepository(worker ? [worker] : []);
   const view = displayMode === 'LIVE'
     ? liveRepository.getWorker(workerId)
@@ -142,8 +143,9 @@ export function OfficeApp() {
   const displayMode = useWorkerDisplayModeStore((state) => state.mode);
   const liveResource = useLiveStore((state) => state.resources['/api/v1/workforce/runtime']);
   const liveSession = useLiveStore((state) => state.session);
+  const liveConnection = useLiveStore((state) => state.connection);
   const liveSnapshot = liveResource.data as WorkforceRuntimeResponseDto | null;
-  const liveRepository = createLiveWorkerRepository(liveSnapshot, liveResource.status, liveSession);
+  const liveRepository = createLiveWorkerRepository(liveSnapshot, liveResource.status, liveSession, liveConnection);
   const liveWorkerIds = liveRepository.listWorkers().map((worker) => worker.workerId);
   const isGlobalPaused = useOfficeStore((s) => s.isGlobalPaused);
   const simSpeedMultiplier = useOfficeStore((s) => s.simSpeedMultiplier);
