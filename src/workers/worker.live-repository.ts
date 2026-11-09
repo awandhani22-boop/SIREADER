@@ -85,7 +85,7 @@ function fromBackendWorker(
   observedAt: string,
   freshness: WorkerRuntimeFreshness,
 ): WorkerRuntimeRecord {
-  if (freshness === 'STALE' || freshness === 'ERROR' || freshness === 'OFFLINE') {
+  if (freshness === 'STALE' || freshness === 'ERROR' || freshness === 'OFFLINE' || freshness === 'CONNECTING' || freshness === 'REFRESHING') {
     return Object.freeze({
       workerId: worker.worker_id,
       displayName: worker.display_name,
@@ -94,7 +94,7 @@ function fromBackendWorker(
       enabled: worker.enabled,
       processStatus: freshness,
       statusLabel: freshness,
-      visualStatus: 'ERROR',
+      visualStatus: freshness === 'CONNECTING' || freshness === 'REFRESHING' ? 'WAITING' : 'ERROR',
       animationState: 'idle',
       modelTier: worker.model_tier,
       capabilityIds: Object.freeze([...worker.capability_ids]),
