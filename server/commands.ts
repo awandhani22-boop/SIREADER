@@ -5,7 +5,7 @@ import { SafeLogger } from './log.ts';
 
 export const WORKFORCE_COMMAND_ORIGIN = 'http://127.0.0.1:8010' as const;
 export const WORKFORCE_COMMAND_TIMEOUT_MS = 5_000;
-export const WORKFORCE_COMMAND_MAX_BODY_BYTES = 20 * 1024;
+export const WORKFORCE_COMMAND_MAX_BODY_BYTES = 80 * 1024;
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
 const CAPABILITY_TASKS: Readonly<Record<string, readonly string[]>> = Object.freeze({
@@ -43,7 +43,19 @@ export type WorkforceCommandPath =
   | '/api/v1/commands/tasks/enqueue'
   | '/api/v1/commands/tasks/cancel'
   | '/api/v1/commands/tasks/retry'
-  | '/api/v1/commands/workers/scheduling';
+  | '/api/v1/commands/workers/scheduling'
+  | '/api/v1/commands/reviews/adjudicate';
+
+export interface ReviewAdjudicationRequest {
+  readonly review_id: string;
+  readonly decision: 'APPROVED' | 'EDITED' | 'REJECTED';
+  readonly expected_original_sha256: string;
+  readonly adjusted_output: Readonly<Record<string, unknown>> | null;
+  readonly reason_code: string | null;
+  readonly notes: string | null;
+}
+
+export const TRUSTED_LOCAL_OPERATOR_ID = 'local_operator' as const;
 
 export interface WorkforceCommandProxyOptions {
   readonly tokenProvider?: () => string | undefined;
@@ -93,6 +105,26 @@ export function validateWorkforceCommandBody(path: WorkforceCommandPath, value: 
       return false;
     }
   }
+  if (path === '/api/v1/commands/reviews/adjudicate') {
+    if (!exactKeys(value, [
+      'review_id', 'decision', 'expected_original_sha256',
+      'adjusted_output', 'reason_code', 'notes',
+    ])) return false;
+    if (typeof value.review_id !== 'string' || !/^rev_[A-Za-z0-9_-]{8,60}$/.test(value.review_id) ||
+        !['APPROVED', 'EDITED', 'REJECTED'].includes(String(value.decision)) ||
+        typeof value.expected_original_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(value.expected_original_sha256) ||
+        !(value.adjusted_output === null || isObject(value.adjusted_output)) ||
+        !(value.reason_code === null || (typeof value.reason_code === 'string' && value.reason_code.length <= 48)) ||
+        !(value.notes === null || (typeof value.notes === 'string' && value.notes.length <= 500))) return false;
+    if (value.decision === 'EDITED' && value.adjusted_output === null) return false;
+    if (value.decision !== 'EDITED' && value.adjusted_output !== null) return false;
+    if (value.decision === 'REJECTED' && (typeof value.reason_code !== 'string' || value.reason_code.length === 0)) return false;
+    try {
+      return Buffer.byteLength(JSON.stringify(value.adjusted_output ?? {}), 'utf8') <= 64 * 1024;
+    } catch {
+      return false;
+    }
+  }
   if (path === '/api/v1/commands/tasks/cancel' || path === '/api/v1/commands/tasks/retry') {
     return exactKeys(value, ['task_id']) &&
       typeof value.task_id === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(value.task_id);
@@ -108,10 +140,12 @@ function expectedCommand(path: WorkforceCommandPath): string {
     case '/api/v1/commands/tasks/cancel': return 'TASK_CANCEL';
     case '/api/v1/commands/tasks/retry': return 'TASK_RETRY';
     case '/api/v1/commands/workers/scheduling': return 'WORKER_SCHEDULING_SET';
+    case '/api/v1/commands/reviews/adjudicate': return 'REVIEW_ADJUDICATE';
   }
 }
 
 function expectedTarget(path: WorkforceCommandPath, body: Record<string, unknown>, response: Record<string, unknown>): string | null {
+  if (path === '/api/v1/commands/reviews/adjudicate') return String(body.review_id);
   if (path === '/api/v1/commands/workers/scheduling') return String(body.worker_id);
   if (path === '/api/v1/commands/tasks/cancel') return String(body.task_id);
   return typeof response.target_id === 'string' ? response.target_id : null;
@@ -155,6 +189,18 @@ function validCommandResponse(
       outcome.status === 'QUEUED' && outcome.task_id === target &&
       typeof outcome.retry_of_task_id === 'string' &&
       outcome.retry_of_task_id === body.task_id;
+  }
+  if (path === '/api/v1/commands/reviews/adjudicate') {
+    return exactKeys(outcome, [
+      'accepted', 'review_id', 'task_id', 'decision',
+      'adjudicated_by', 'adjudicated_at', 'task_status',
+    ]) && outcome.accepted === true &&
+      outcome.review_id === target &&
+      typeof outcome.task_id === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(outcome.task_id) &&
+      outcome.decision === body.decision &&
+      outcome.adjudicated_by === TRUSTED_LOCAL_OPERATOR_ID &&
+      typeof outcome.adjudicated_at === 'string' && Number.isFinite(Date.parse(outcome.adjudicated_at)) &&
+      outcome.task_status === 'COMPLETED';
   }
   return exactKeys(outcome, ['accepted', 'worker_id', 'accepting_tasks', 'schedule_state']) &&
     outcome.accepted === true && outcome.worker_id === target &&
@@ -231,6 +277,7 @@ export function createWorkforceCommandHandlers(
     '/api/v1/commands/tasks/cancel',
     '/api/v1/commands/tasks/retry',
     '/api/v1/commands/workers/scheduling',
+    '/api/v1/commands/reviews/adjudicate',
   ];
   const handlers = {} as Record<WorkforceCommandPath, RequestHandler>;
 
@@ -263,6 +310,9 @@ export function createWorkforceCommandHandlers(
             Accept: 'application/json',
             'Content-Type': 'application/json',
             'Idempotency-Key': idempotencyKey,
+            ...(path === '/api/v1/commands/reviews/adjudicate'
+              ? { 'X-Operator-Id': TRUSTED_LOCAL_OPERATOR_ID }
+              : {}),
           },
           body: JSON.stringify(bodyRecord),
           redirect: 'manual',

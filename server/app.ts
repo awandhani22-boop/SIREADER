@@ -316,6 +316,7 @@ export function createBffApp(
     '/api/v1/commands/tasks/cancel',
     '/api/v1/commands/tasks/retry',
     '/api/v1/commands/workers/scheduling',
+    '/api/v1/commands/reviews/adjudicate',
   ];
   for (const path of commandPaths) {
     app.post(
