@@ -4,12 +4,17 @@ export const LIVE_EVENT_STREAM_URL = '/api/v1/events/stream' as const;
 export const LIVE_SSE_RECONCILIATION_INTERVAL_MS = 60_000;
 
 export const LIVE_EVENT_RESOURCE_PATHS = Object.freeze({
-  system: '/api/v1/system/status',
-  telemetry: '/api/v1/telemetry/usage',
-  pipeline: '/api/v1/pipeline/active',
-  market_watches: '/api/v1/market-watches/active',
-  audit: '/api/v1/audit/decisions',
-} as const satisfies Readonly<Record<string, LiveApiPath>>);
+  system: ['/api/v1/system/status'],
+  telemetry: ['/api/v1/telemetry/usage'],
+  pipeline: ['/api/v1/pipeline/active'],
+  market_watches: ['/api/v1/market-watches/active'],
+  audit: ['/api/v1/audit/decisions'],
+  workforce: [
+    '/api/v1/workforce/runtime',
+    '/api/v1/workforce/tasks',
+    '/api/v1/workforce/activity',
+  ],
+} as const satisfies Readonly<Record<string, readonly LiveApiPath[]>>);
 
 export type LiveEventResource = keyof typeof LIVE_EVENT_RESOURCE_PATHS;
 export type LiveEventResetReason =
@@ -64,7 +69,7 @@ export function parseLiveInvalidationEvent(
     !Number.isFinite(Date.parse(record.occurred_at)) ||
     !Array.isArray(record.resources) ||
     record.resources.length < 1 ||
-    record.resources.length > 5
+    record.resources.length > 6
   ) return null;
 
   const resources: LiveEventResource[] = [];
@@ -81,7 +86,7 @@ export function parseLiveInvalidationEvent(
     epoch: match[1],
     sequence,
     resources,
-    paths: resources.map((resource) => LIVE_EVENT_RESOURCE_PATHS[resource]),
+    paths: resources.flatMap((resource) => LIVE_EVENT_RESOURCE_PATHS[resource]),
   };
 }
 
