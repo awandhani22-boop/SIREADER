@@ -1,12 +1,13 @@
 # SIREADER Virtual Office — Project State
 
 ## Current phase
-**Phase 3.3 — IMPLEMENTATION IN PROGRESS: core owner manual SSE acceptance passed; supplementary acceptance gates remain open.**
+**Phase 4.1 — REAL WORKER RUNTIME CONTRACT & REGISTRY: IN PROGRESS (2026-11-09).** Phase 3.3 was owner-confirmed safe/accepted on 2026-11-09; see the explicit evidence qualification below.
 
 - Phase 3.2 — Secure BFF & Frontend Observability Integration: **COMPLETE — owner acceptance confirmed 2026-11-09**.
 
-- Active Virtual Office implementation branch: `phase-3-3-sse-implementation` (isolated; not merged to main).
-- Active Python Backend implementation branch: `phase-3-3-sse-implementation` (isolated from `phase-3-1-api-gateway`).
+- Active Virtual Office implementation branch: `phase-4-implementation` (branched from the accepted Phase 3.3 baseline; not merged to main).
+- Active Python Backend implementation branch: `phase-4-implementation` (branched from the Phase 3.3 backend baseline; not merged to main).
+- Phase 4 execution order: 4.1 runtime contract/registry → 4.2 provider routing and Cost Guard → 4.3 persistent task orchestration → 4.4 frontend LIVE runtime adapter. No later phase is silently skipped.
 - Phase 3.2 implementation baseline remains `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5`; Phase 3.3 code is isolated in the two branches above.
 - Virtual Office Phase 3.3 initial implementation commit: `57e3f2d1d1eb3a616eb6792f69294f0d3072e261`; GitHub Actions run `42534082388` passed 367/367 tests, TypeScript check, and production build. Follow-up BFF disconnect/capacity test passed run `42572749792`; active-session-expiry EventSource cleanup test passed run `42572901195`; both runs also passed the full test suite, TypeScript check, and production build.
 - Python Backend Phase 3.3 latest implementation/test commit: `b8dac552decc0c25a9aca176d81cd6b387d6bc4a`; GitHub Actions run `42572336352` completed successfully (API tests including disposable PostgreSQL migration/trigger integration, API compile checks, and core regressions).
@@ -14,12 +15,13 @@
 - Batch 1 — BFF Foundation & Security Guards: implementation pushed; port and security changes source-audited.
 - Batch 2 — Fixed Upstream Proxy: implementation pushed; GitHub Actions run `42482847460` passed (323/323).
 - Batch 3 — Operator Authentication & Session Lifecycle: implementation pushed; GitHub Actions run `42483616073` passed (331/331), typecheck and production build passed.
-- Next work unit: complete the owner Chrome acceptance runbook: actual Offline/Online + BFF restart UI acceptance, and five-minute numeric Chrome Performance Monitor evidence. The combined authenticated BFF restart lifecycle, immediate frontend snapshot recovery, LIVE/SIMULATED isolation, and their CI verification are complete. The runbook now defines an explicit idle-browser resource budget. Disposable-PostgreSQL trigger mapping and automated heartbeat evidence are already covered by CI. Do not start Phase 4 until all Phase 3.3 gates pass.
+- Phase 3.3 closeout: owner explicitly confirmed on 2026-11-09 that the remaining BFF restart, recovery, and performance acceptance was safe. The owner's final report describes successful real-browser authentication/SSE, one active EventSource, targeted refresh of all five snapshots, Offline→Online recovery, and LIVE/SIMULATED isolation; it reports the BFF and local services were stopped cleanly. The report did not include the six raw Chrome Performance Monitor samples, so no numeric browser metrics are independently reproduced in this state file. Treat the final owner confirmation as the acceptance attestation; retain this evidence limitation for any later release audit. The earlier CI evidence of 374/374 tests, TypeScript, and production build remains separate from owner-run browser acceptance.
 - Phases 1, 2.1, 2.2 and 2.3 remain complete with historical evidence and documented deferrals.
 - Phase 3.1 is implemented in the separate Python Backend repo. Owner-provided local report confirms the dedicated read-only database/API configuration and five authenticated GET smoke checks; a documentation-only status reconciliation remains for the backend runbook.
 
 Product mission: [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md).
 Master roadmap: [`docs/ROADMAP.md`](ROADMAP.md).
+Phase 4 execution plan and gates: [`docs/PHASE_4_EXECUTION_PLAN.md`](PHASE_4_EXECUTION_PLAN.md).
 Durable Phase 3.2 hand-off: [`docs/PHASE_3_2_EXECUTION_LOG.md`](PHASE_3_2_EXECUTION_LOG.md).
 Phase 3.3 implementation and acceptance ledger: [`docs/PHASE_3_3_SSE_EXECUTION_LOG.md`](PHASE_3_3_SSE_EXECUTION_LOG.md).
 Owner-controlled database setup: [`docs/PHASE_3_3_SSE_SETUP.md`](PHASE_3_3_SSE_SETUP.md).
