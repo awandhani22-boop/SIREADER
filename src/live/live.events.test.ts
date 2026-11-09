@@ -28,6 +28,23 @@ test('LIVE SSE event contract accepts only a bounded allowlisted invalidation en
   assert.equal(LIVE_SSE_RECONCILIATION_INTERVAL_MS, 60_000);
 });
 
+
+test('LIVE SSE workforce invalidation refreshes all three workforce snapshots', () => {
+  const event = parseLiveInvalidationEvent(
+    JSON.stringify({
+      schema_version: 1,
+      occurred_at: '2026-11-09T10:00:00Z',
+      resources: ['workforce'],
+    }),
+    ID,
+  );
+  assert.deepEqual(event?.paths, [
+    '/api/v1/workforce/runtime',
+    '/api/v1/workforce/tasks',
+    '/api/v1/workforce/activity',
+  ]);
+});
+
 test('LIVE SSE parser rejects invalid IDs, unknown resource keys, duplicate keys and extra fields', () => {
   const valid = JSON.stringify({
     schema_version: 1,
