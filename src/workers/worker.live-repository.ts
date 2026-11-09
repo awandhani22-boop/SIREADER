@@ -10,13 +10,13 @@ import type {
   WorkforceProcessStatus,
   WorkforceRuntimeResponseDto,
 } from '../live/live.contracts';
-import type { LiveResourceStatus, LiveSessionState } from '../live/live.state';
+import type { LiveConnectionState, LiveResourceStatus, LiveSessionState } from '../live/live.state';
 import type { AnimationClipKey, WorkerEntity, WorkerStatus } from './worker.types';
 
 export type WorkerRuntimeSource = 'LIVE' | 'SIMULATED';
 export type WorkerRuntimeFreshness =
   | 'LIVE' | 'REFRESHING' | 'STALE' | 'ERROR' | 'CONNECTING'
-  | 'UNAUTHENTICATED' | 'SIMULATED';
+  | 'UNAUTHENTICATED' | 'OFFLINE' | 'SIMULATED';
 
 export interface WorkerRuntimeRecord {
   readonly workerId: string;
@@ -85,7 +85,7 @@ function fromBackendWorker(
   observedAt: string,
   freshness: WorkerRuntimeFreshness,
 ): WorkerRuntimeRecord {
-  if (freshness === 'STALE' || freshness === 'ERROR') {
+  if (freshness === 'STALE' || freshness === 'ERROR' || freshness === 'OFFLINE') {
     return Object.freeze({
       workerId: worker.worker_id,
       displayName: worker.display_name,
@@ -163,11 +163,13 @@ function resolveFreshness(
   status: LiveResourceStatus,
   session: LiveSessionState,
   hasSnapshot: boolean,
+  connection: LiveConnectionState,
 ): WorkerRuntimeFreshness {
-  if (session !== 'AUTHENTICATED') return 'UNAUTHENTICATED';
-  if (status === 'ERROR') return 'ERROR';
-  if (status === 'STALE') return 'STALE';
-  if (status === 'LIVE') return hasSnapshot ? 'LIVE' : 'ERROR';
+  if (session !== 'AUTHENTICATED' || connection === 'SESSION_REQUIRED') return 'UNAUTHENTICATED';
+  if (connection === 'OFFLINE') return 'OFFLINE';
+  if (connection === 'ERROR' || status === 'ERROR') return 'ERROR';
+  if (connection === 'STALE' || status === 'STALE') return 'STALE';
+  if (connection === 'LIVE' && status === 'LIVE') return hasSnapshot ? 'LIVE' : 'ERROR';
   if (status === 'LOADING' && hasSnapshot) return 'REFRESHING';
   return 'CONNECTING';
 }
@@ -177,8 +179,9 @@ export function createLiveWorkerRepository(
   snapshot: WorkforceRuntimeResponseDto | null,
   resourceStatus: LiveResourceStatus,
   session: LiveSessionState,
+  connection: LiveConnectionState,
 ): WorkerRepository {
-  const freshness = resolveFreshness(resourceStatus, session, snapshot !== null);
+  const freshness = resolveFreshness(resourceStatus, session, snapshot !== null, connection);
   const records = session === 'AUTHENTICATED' && snapshot
     ? Object.freeze(snapshot.workers.map((worker) =>
         fromBackendWorker(worker, snapshot.runtime.observed_at, freshness),
