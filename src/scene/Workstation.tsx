@@ -2,6 +2,10 @@ import { useFrame } from '@react-three/fiber';
 import React, { useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useOfficeStore } from '../workers/worker.state';
+import { useWorkerDisplayModeStore } from '../workers/worker.display-mode';
+import { createDemoWorkerRepository, createLiveWorkerRepository } from '../workers/worker.live-repository';
+import { useLiveStore } from '../live/live.state';
+import type { WorkforceRuntimeResponseDto } from '../live/live.contracts';
 import {
   WorkerId,
   WorkerStatus,
@@ -264,22 +268,36 @@ export const WorkstationSceneItem = React.memo(function WorkstationSceneItem({
 }: {
   workstation: WorkstationDefinition;
 }) {
-  const workerStatus = useOfficeStore(
-    (s) => s.workers[workstation.workerId]?.status ?? 'IDLE',
-  );
-  const isSelected = useOfficeStore(
-    (s) => s.selectedWorkerId === workstation.workerId,
-  );
+  const displayMode = useWorkerDisplayModeStore((s) => s.mode);
+  const selectedLiveWorkerId = useWorkerDisplayModeStore((s) => s.selectedLiveWorkerId);
+  const setSelectedLiveWorkerId = useWorkerDisplayModeStore((s) => s.setSelectedLiveWorkerId);
+  const liveResource = useLiveStore((s) => s.resources['/api/v1/workforce/runtime']);
+  const liveSession = useLiveStore((s) => s.session);
+  const liveConnection = useLiveStore((s) => s.connection);
+  const liveSnapshot = liveResource.data as WorkforceRuntimeResponseDto | null;
+  const worker = useOfficeStore((s) => s.workers[workstation.workerId]);
+  const demoRepository = createDemoWorkerRepository(worker ? [worker] : []);
+  const liveRepository = createLiveWorkerRepository(liveSnapshot, liveResource.status, liveSession, liveConnection);
+  const view = displayMode === 'LIVE'
+    ? liveRepository.getWorker(workstation.workerId)
+    : demoRepository.getWorker(workstation.workerId);
+  const selectedDemoWorkerId = useOfficeStore((s) => s.selectedWorkerId);
+  const selectDemoWorker = useOfficeStore((s) => s.selectWorker);
+  const isSelected = displayMode === 'LIVE'
+    ? selectedLiveWorkerId === workstation.workerId
+    : selectedDemoWorkerId === workstation.workerId;
   const reducedMotion = useOfficeStore((s) => s.reducedMotion);
-  const selectWorker = useOfficeStore((s) => s.selectWorker);
 
   return (
     <Workstation
       workstation={workstation}
-      workerStatus={workerStatus}
+      workerStatus={view.visualStatus}
       isSelected={isSelected}
-      reducedMotion={reducedMotion}
-      onSelectWorker={selectWorker}
+      reducedMotion={displayMode === 'LIVE' || reducedMotion}
+      onSelectWorker={(workerId) => {
+        if (displayMode === 'LIVE') setSelectedLiveWorkerId(workerId);
+        else selectDemoWorker(workerId);
+      }}
     />
   );
 });
