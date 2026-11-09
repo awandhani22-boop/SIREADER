@@ -248,7 +248,7 @@ test('SIREADER bounded upstream proxy — local mock integration', async (t) => 
       : path === '/api/v1/workforce/tasks'
         ? (taskQueryValid
           ? {
-              ...(FIXTURES[path] as Record<string, unknown>),
+              ...(FIXTURES[path as UpstreamApiPath] as Record<string, unknown>),
               limit: Number(requestUrl.searchParams.get('limit')),
               offset: Number(requestUrl.searchParams.get('offset')),
             }
