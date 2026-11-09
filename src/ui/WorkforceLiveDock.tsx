@@ -87,6 +87,9 @@ export function WorkforceLiveDock() {
       setTaskPageOffset(0);
       setTaskPageData(null);
       setTaskPageError(null);
+      setSelectedTaskId(null);
+      setAttempts(null);
+      setAttemptError(null);
       setTaskPageLoading(false);
     }
     return () => {
