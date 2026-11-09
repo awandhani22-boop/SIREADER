@@ -51,12 +51,12 @@ This continuation adds the following implementation to the frontend and BFF:
 
 ## Final automated verification evidence (2026-11-09)
 
-- **Frontend Virtual Office HEAD:** `eb8b1ad7dce0cde6cc0821a4831290ee8ffd3dd0`.
-- **Frontend/BFF CI:** [GitHub Actions run 42588626899](https://github.com/awandhani22-boop/SIREADER/actions/runs/42588073811) — **390/390 tests passed**, TypeScript `tsc --noEmit` passed, production build passed (637 ms). The full suite includes BFF authentication, stream proxy, shutdown/restart, worker repository, LIVE/DEMO mode, and pagination regressions.
-- **Python Backend HEAD:** `45d8ce87c6f673da2a2a7b146d51c6cdd0701405`.
-- **Backend CI:** [GitHub Actions run 42588654450](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42587686372) — PostgreSQL 16-backed API/migration/privilege suite **111 passed**, API package compile passed, and core regression suite **74 passed**.
+- **Frontend implementation verification commit:** `eb8b1ad7dce0cde6cc0821a4831290ee8ffd3dd0`.
+- **Frontend/BFF CI:** [GitHub Actions run 42588073811](https://github.com/awandhani22-boop/SIREADER/actions/runs/42588073811) — **390/390 tests passed**, TypeScript `tsc --noEmit` passed, production build passed (637 ms). The full suite includes BFF authentication, stream proxy, shutdown/restart, worker repository, LIVE/DEMO mode, and pagination regressions. Later documentation-only branch commits also completed CI successfully.
+- **Python Backend implementation HEAD:** `3fd1caa7058be69f531909b7a8e22ebb290eba8c`.
+- **Backend CI:** [GitHub Actions run 42588724433](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42588724433) — PostgreSQL 16-backed API/migration/privilege suite **111 passed**, API package compile passed, and core regression suite **75 passed**.
 - Backend provider-specific tests cover budget refusal, timeout/unknown outcome, known-not-charged persistence failure, and missing usage handling. The live provider remains disabled by default; task-level cost caps default to zero and must be configured explicitly.
-- The latest backend runtime hardening publishes a worker heartbeat immediately after task start and provider reservation, so LIVE activity counters do not wait for the next heartbeat interval; this change passed PostgreSQL-backed backend CI.
+- Worker heartbeats now publish `active_task_count=1` atomically when a task enters RUNNING and `in_flight_provider_requests=1` atomically after the provider request reservation is persisted. The final heartbeat returns both counts to zero. Regression coverage verifies the intermediate heartbeat states without waiting for the 15-second periodic interval.
 - Disposable PostgreSQL tests apply both workforce migrations twice to prove idempotency, verify API-reader access is limited to allowlisted views, exercise concurrent claims/worker concurrency/lease recovery/unknown provider outcomes, verify the fixed-key workforce notification, and execute both rollback scripts in cleanup. No live Supabase migration was performed.
 
 ## Final regression hardening
@@ -77,8 +77,8 @@ This continuation adds the following implementation to the frontend and BFF:
    - confirm logout/session expiry clears private panel data and late page responses cannot restore it;
    - confirm task pagination for a result set over 50 records;
    - confirm LIVE never exposes DEMO activity feed/queue controls as LIVE data.
-4. Review the seven physical scene slots versus extra roster records. The current floor plan intentionally retains seven authored stations; extra backend worker IDs are visible in the LIVE roster/dock. Extending the floor plan to place 50–100 avatars requires an explicit spatial-layout decision and should not be inferred from worker IDs.
-5. Review the two new backend migrations and rollback scripts, then obtain explicit owner approval before applying them to live Supabase. No live migration was applied by this work.
-6. Keep live OmniRoute execution disabled until backend-only credentials and a bounded per-task/daily budget are explicitly approved; no paid canary has been run.
+3. Review the seven physical scene slots versus extra roster records. The current floor plan intentionally retains seven authored stations; extra backend worker IDs are visible in the LIVE roster/dock. Extending the floor plan to place 50–100 avatars requires an explicit spatial-layout decision and should not be inferred from worker IDs.
+4. Review the two new backend migrations and rollback scripts, then obtain explicit owner approval before applying them to live Supabase. No live migration was applied by this work.
+5. Keep live OmniRoute execution disabled until backend-only credentials and a bounded per-task/daily budget are explicitly approved; no paid canary has been run.
 
 Phase 4 implementation and automated verification are PASS. Phase 4 may be marked release-complete only after the owner-run browser acceptance is documented and the Supabase migration decision is recorded. A live provider canary remains a separate owner-approved operation.
