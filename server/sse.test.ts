@@ -320,15 +320,32 @@ test('BFF shutdown closes active SSE clients and aborts upstream streams', async
     check();
   });
 
+  // Observe the browser-side close event directly. The server's close callback
+  // can run before the client socket has delivered its corresponding close event.
+  const browserResponseClosed = new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error('BFF shutdown did not close the browser SSE response.')),
+      1_500,
+    );
+    active.response.once('close', () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+  });
   const serverClosed = new Promise<void>((resolve) => proxy.once('close', resolve));
   const shutdownCompleted = new Promise<void>((resolve) => {
     shutdownHttpServer(proxy, resolve);
   });
 
-  await Promise.all([upstreamAborted, upstreamCancelled, serverClosed, shutdownCompleted]);
+  await Promise.all([
+    upstreamAborted,
+    upstreamCancelled,
+    browserResponseClosed,
+    serverClosed,
+    shutdownCompleted,
+  ]);
   assert.equal(signals[0].aborted, true);
   assert.equal(upstreamCancelCount, 1);
-  assert.equal(active.response.destroyed || active.response.complete, true);
 });
 
 
