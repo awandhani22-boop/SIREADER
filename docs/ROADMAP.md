@@ -9,7 +9,11 @@
 | Phase 4.4 — LIVE presentation and workforce operations | Implemented; frontend CI PASS; owner-run Windows/Chrome acceptance PASS |
 | Phase 4 overall | COMPLETE — automated CI and owner-run browser acceptance PASS (2026-11-09) |
 | Phase 5.1 — Human-supervised operations | COMPLETE — automated CI and owner-run browser acceptance PASS (2026-11-09) |
-| Phase 5.2 — Review, budgets, governance | ACTIVE — architecture and planning in progress |
+| Phase 5.2.1 — Lifecycle audit ledger & timeline API | COMPLETE — hardened ledger, append-only trigger, deterministic sequence, actor attribution, safe timeline API & BFF (2026-11-09) |
+| Phase 5.2.2 — Human output review | ACTIVE — review inbox, approve/edit/reject, human decision audit |
+| Phase 5.2.3 — Budget governance & Cost Guard visibility | PENDING 5.2.2 |
+| Phase 5.2.4 — Policy & model tier escalation | PENDING 5.2.3 |
+| Phase 5.2.5 — UI integration & acceptance | PENDING 5.2.4 |
 
 Phase 5.1 source implementation and automated CI now pass on the isolated phase-5-implementation branches. The remaining exit gate is owner-side local database setup and Windows/Chrome acceptance; the work is not yet operator-ready for LIVE writes. No live database migration, paid provider request, trading order, or merge to `main` is implied.
 

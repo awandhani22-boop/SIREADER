@@ -1,14 +1,15 @@
-## Current status override — 2026-11-09 (Phase 5.1 Closeout)
+## Current status override — 2026-11-09 (Phase 5.2.1 Closeout)
 
 - **Phase 5.1 — COMPLETE (owner acceptance recorded 2026-11-09):** Source implementation, automated CI, bug fix for retry target ID, and owner-run Windows/Chrome/Antigravity acceptance are recorded PASS. See [PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md](./PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md).
-- **Current working branch:** phase-5-implementation in both repositories (isolated from main; no merge performed).
-- **Virtual Office source HEAD:** 96aa4a8755193e16e37b912dd3f14cf825fb2400; [CI run 42615872014 PASS](https://github.com/awandhani22-boop/SIREADER/actions/runs/42615872014): 399 tests, TypeScript check, and production build.
-- **Python Backend HEAD:** 988bc32fc5dc83fe25bb29d8557f82a21ffc3842; [CI run 42605004720 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42605004720): API tests, compile check, and core regressions.
-- Phase 5.1 verified a dedicated loopback command API (127.0.0.1:8010), least-privilege PostgreSQL role sireader_workforce_cmd, row-level security, four fixed operator commands (enqueue, cancel, pause/resume worker, retry fixture), BFF session+CSRF protection, LIVE/DEMO isolation, and idempotent append-only audit.
-- **Phase 5.2 — Review, Audit, Budgets & Governance is now UNBLOCKED and ACTIVE for architecture planning.**
+- **Phase 5.2.1 — Lifecycle Audit Ledger & Timeline API: COMPLETE (2026-11-09):**
+  - **Python Backend HEAD:** `a7cc431` — Hardened `workforce_activity_events` audit ledger with append-only BEFORE triggers (blocking UPDATE/DELETE/TRUNCATE), deterministic sequence ordering (`event_seq BIGINT GENERATED ALWAYS AS IDENTITY`), actor attribution (`SYSTEM`, `WORKER`, `OPERATOR`, `LEGACY_UNKNOWN`), explicit retry lineage (`related_task_id`), sanitized security-barrier view `v_api_workforce_task_timeline`, and read-only timeline endpoint `GET /api/v1/workforce/tasks/{task_id}/timeline` on port 8000. 148 backend tests pass (`148 passed in 6.10s`), zero compile errors.
+  - **Virtual Office source HEAD:** `6dd9af4` — Fixed BFF route `/api/v1/workforce/tasks/:taskId/timeline` proxying to port 8000 with loopback-only binding, strict input validation, response schema validation, zero credential leakage, and client adapter `getTaskTimeline`. 406 frontend tests pass (`406 passed in 3.80s`), TypeScript `tsc --noEmit` pass with zero errors, Vite production build successful.
+  - See [PHASE_5_2_1_EXECUTION_LOG.md](./PHASE_5_2_1_EXECUTION_LOG.md) and [PHASE_5_2_1_EVENT_COVERAGE_AUDIT.md](./PHASE_5_2_1_EVENT_COVERAGE_AUDIT.md).
+- **Phase 5.2.2 — Human Output Review Subsystem is now NEXT.**
+- **Current working branch:** `phase-5-implementation` in both repositories (strictly isolated from main; no merge performed).
 - **Hard boundaries preserved:** No live Supabase migration, paid provider invocation, MT5/HFM operation, trading order, or trading approval change was performed.
 
-See [PHASE_5_EXECUTION_PLAN.md](./PHASE_5_EXECUTION_PLAN.md), [PHASE_5_EXECUTION_LOG.md](./PHASE_5_EXECUTION_LOG.md), and [PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md](./PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md).
+See [PHASE_5_EXECUTION_PLAN.md](./PHASE_5_EXECUTION_PLAN.md), [PHASE_5_2_1_EXECUTION_LOG.md](./PHASE_5_2_1_EXECUTION_LOG.md), and [PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md](./PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md).
 
 ---
 
