@@ -57,6 +57,7 @@ export function WorkforceLiveDock() {
   const [taskPageData, setTaskPageData] = useState<WorkforceTasksResponseDto | null>(null);
   const [taskPageLoading, setTaskPageLoading] = useState(false);
   const [taskPageError, setTaskPageError] = useState<string | null>(null);
+  const taskPageRequestGeneration = useRef(0);
   const displayMode = useWorkerDisplayModeStore((state) => state.mode);
 
   useEffect(() => {
@@ -82,11 +83,15 @@ export function WorkforceLiveDock() {
 
   useEffect(() => {
     if (session !== 'AUTHENTICATED') {
+      taskPageRequestGeneration.current += 1;
       setTaskPageOffset(0);
       setTaskPageData(null);
       setTaskPageError(null);
       setTaskPageLoading(false);
     }
+    return () => {
+      taskPageRequestGeneration.current += 1;
+    };
   }, [session]);
 
   const loadTaskPage = async (offset: number): Promise<void> => {
@@ -97,16 +102,21 @@ export function WorkforceLiveDock() {
       setTaskPageError(null);
       return;
     }
+    const requestGeneration = ++taskPageRequestGeneration.current;
     setTaskPageLoading(true);
     setTaskPageError(null);
     try {
       const page = await liveController.getWorkforceTasks(50, offset);
+      if (requestGeneration !== taskPageRequestGeneration.current || session !== 'AUTHENTICATED') return;
       setTaskPageData(page);
       setTaskPageOffset(offset);
     } catch (error) {
+      if (requestGeneration !== taskPageRequestGeneration.current || session !== 'AUTHENTICATED') return;
       setTaskPageError(error instanceof LiveApiError ? error.code : 'REQUEST_FAILED');
     } finally {
-      setTaskPageLoading(false);
+      if (requestGeneration === taskPageRequestGeneration.current) {
+        setTaskPageLoading(false);
+      }
     }
   };
 
