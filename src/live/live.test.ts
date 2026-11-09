@@ -318,7 +318,7 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
     assert.equal(calls[2].init.body, JSON.stringify({ password: 'transient-test-password' }));
     assert.equal(calls[3].init.body, '{}');
     assert.equal(calls.every((call) => !new Headers(call.init.headers).has('authorization')), true);
-    assert.equal(Object.keys(api).sort().join(','), 'clearCsrfToken,get,getSession,getWorkforceAttempts,getWorkforceTasks,login,logout,sendWorkforceCommand');
+    assert.equal(Object.keys(api).sort().join(','), 'clearCsrfToken,get,getSession,getTaskTimeline,getWorkforceAttempts,getWorkforceTasks,login,logout,sendWorkforceCommand');
   });
 
 
@@ -480,6 +480,7 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
       login: async () => authenticatedSession,
       logout: async () => undefined,
       get: async (path) => fixtures[path],
+      getTaskTimeline: async (taskId) => ({} as any),
       getWorkforceAttempts: async (taskId) => ({ server_time_utc: '2026-11-09T10:00:00Z', task_id: taskId, attempts: [] }),
       getWorkforceTasks: async (limit = 50, offset = 0) => ({
         ...(fixtures['/api/v1/workforce/tasks'] as WorkforceTasksResponseDto),
@@ -519,6 +520,7 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
       login: async () => authenticatedSession,
       logout: async () => undefined,
       get: async (path) => fixtures[path],
+      getTaskTimeline: async (taskId) => ({} as any),
       getWorkforceAttempts: async (taskId) => ({ server_time_utc: '2026-11-09T10:00:00Z', task_id: taskId, attempts: [] }),
       getWorkforceTasks: async (limit = 50, offset = 0) => ({
         ...(fixtures['/api/v1/workforce/tasks'] as WorkforceTasksResponseDto),
@@ -548,6 +550,7 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
       login: async () => authenticatedSession,
       logout: async () => undefined,
       get: async () => { throw new LiveApiError('SCHEMA_INVALID'); },
+      getTaskTimeline: async (taskId) => ({} as any),
       getWorkforceAttempts: async (taskId) => ({ server_time_utc: '2026-11-09T10:00:00Z', task_id: taskId, attempts: [] }),
       getWorkforceTasks: async (limit = 50, offset = 0) => ({
         ...(fixtures['/api/v1/workforce/tasks'] as WorkforceTasksResponseDto),
@@ -569,5 +572,85 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
     assert.equal(snapshot.source, null);
     assert.equal(snapshot.data, null);
     assert.equal(useLiveStore.getState().connection, 'ERROR');
+  });
+
+await t.test('getTaskTimeline validates parameters and parses contract', async () => {
+    const calls: Array<{ input: RequestInfo | URL; init: RequestInit }> = [];
+    const timelineData = {
+      server_time_utc: '2026-11-09T00:00:00Z',
+      task_id: 'task_12345678',
+      task: {
+        task_id: 'task_12345678',
+        status: 'FAILED',
+        title: 'Analyze market volatility',
+        task_type: 'market_analysis',
+        required_capability: 'market_data_ingest',
+        assigned_worker_id: 'sonnet',
+        requested_worker_id: null,
+        priority: 50,
+        attempts: 1,
+        max_attempts: 3,
+        created_at: '2026-11-09T00:00:00Z',
+        completed_at: null,
+        related_task_id: null,
+      },
+      retry_lineage: {
+        retry_of_task_id: null,
+        retried_by_task_id: 'task_87654321',
+      },
+      total_events: 1,
+      limit: 100,
+      offset: 0,
+      events: [
+        {
+          event_seq: 1,
+          event_id: 'evt_12345678',
+          task_id: 'task_12345678',
+          event_type: 'TASK_ENQUEUED',
+          occurred_at: '2026-11-09T00:00:00Z',
+          actor_type: 'OPERATOR',
+          actor_id: 'operator_1',
+          worker_id: null,
+          attempt_id: null,
+          attempt_number: null,
+          related_task_id: null,
+          correlation_id: 'corr_12345678',
+          event_summary: { note: 'test' },
+        },
+      ],
+    };
+
+    const client = createLiveApiClient({
+      fetchImpl: async (input, init = {}) => {
+        calls.push({ input, init });
+        return new Response(JSON.stringify(timelineData), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      },
+    });
+
+    // Valid call
+    const res = await client.getTaskTimeline('task_12345678', 50, 0);
+    assert.equal(res.task_id, 'task_12345678');
+    assert.equal(res.events.length, 1);
+    assert.equal(res.retry_lineage.retried_by_task_id, 'task_87654321');
+    assert.equal(calls[0].input, '/api/v1/workforce/tasks/task_12345678/timeline?limit=50&offset=0');
+
+    // Invalid task_id rejects before network
+    await assert.rejects(
+      () => client.getTaskTimeline('bad*id'),
+      (err: any) => err instanceof LiveApiError && err.code === 'BAD_REQUEST',
+    );
+    await assert.rejects(
+      () => client.getTaskTimeline('short'),
+      (err: any) => err instanceof LiveApiError && err.code === 'BAD_REQUEST',
+    );
+
+    // Invalid limit rejects before network
+    await assert.rejects(
+      () => client.getTaskTimeline('task_12345678', 300),
+      (err: any) => err instanceof LiveApiError && err.code === 'BAD_REQUEST',
+    );
   });
 });

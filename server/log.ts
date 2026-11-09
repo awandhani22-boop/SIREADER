@@ -12,7 +12,7 @@
  */
 
 import type { BffErrorCode } from './errors.ts';
-import { isAllowlistedPath } from './allowlist.ts';
+import { isAllowlistedPath, WORKFORCE_TASK_TIMELINE_PATTERN } from './allowlist.ts';
 
 export type SafeLogEvent =
   | 'BFF_STARTUP'
@@ -67,6 +67,9 @@ export class SafeLogger {
     if (!rawRoute) return '';
     // Strip query string and fragment if somehow present
     const clean = rawRoute.split(/[?#]/)[0] || '';
+    if (WORKFORCE_TASK_TIMELINE_PATTERN.test(clean)) {
+      return '/api/v1/workforce/tasks/:taskId/timeline';
+    }
     if (isAllowlistedPath(clean)) {
       return clean;
     }

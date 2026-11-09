@@ -247,6 +247,61 @@ export interface WorkforceActivityDto {
   readonly correlation_id: string;
 }
 
+
+export type WorkforceActorType =
+  | 'SYSTEM'
+  | 'WORKER'
+  | 'OPERATOR'
+  | 'LEGACY_UNKNOWN';
+
+export interface WorkforceTimelineEventDto {
+  readonly event_seq: number;
+  readonly event_id: string;
+  readonly task_id: string | null;
+  readonly event_type: WorkforceActivityType;
+  readonly occurred_at: string;
+  readonly actor_type: WorkforceActorType;
+  readonly actor_id: string | null;
+  readonly worker_id: string | null;
+  readonly attempt_id: string | null;
+  readonly attempt_number: number | null;
+  readonly related_task_id: string | null;
+  readonly correlation_id: string;
+  readonly event_summary: Readonly<Record<string, unknown>>;
+}
+
+export interface WorkforceTaskSummaryDto {
+  readonly task_id: string;
+  readonly status: WorkforceTaskStatus;
+  readonly title: string;
+  readonly task_type: string;
+  readonly required_capability: string;
+  readonly assigned_worker_id: string | null;
+  readonly requested_worker_id: string | null;
+  readonly priority: number;
+  readonly attempts: number;
+  readonly max_attempts: number;
+  readonly created_at: string;
+  readonly completed_at: string | null;
+  readonly related_task_id: string | null;
+}
+
+export interface WorkforceRetryLineageDto {
+  readonly retry_of_task_id: string | null;
+  readonly retried_by_task_id: string | null;
+}
+
+export interface WorkforceTaskTimelineResponseDto {
+  readonly server_time_utc: string;
+  readonly task_id: string;
+  readonly task: WorkforceTaskSummaryDto;
+  readonly retry_lineage: WorkforceRetryLineageDto;
+  readonly total_events: number;
+  readonly limit: number;
+  readonly offset: number;
+  readonly events: readonly WorkforceTimelineEventDto[];
+}
+
 export interface WorkforceActivityResponseDto {
   readonly server_time_utc: string;
   readonly total_count: number;
@@ -714,6 +769,118 @@ function validWorkforceActivityResponse(value: unknown): value is WorkforceActiv
     Array.isArray(value.events) && value.events.length <= 100 &&
     value.events.every(validWorkforceActivity)
   );
+}
+
+
+const WORKFORCE_ACTOR_TYPES: readonly WorkforceActorType[] = [
+  'SYSTEM', 'WORKER', 'OPERATOR', 'LEGACY_UNKNOWN',
+];
+
+function validEventSummary(value: unknown): boolean {
+  if (!isObject(value)) return false;
+  const prohibitedKeywords = [
+    'password', 'secret', 'bearer', 'lease_token', 'database_url', 'api_key', 'authorization',
+  ];
+  for (const [key, val] of Object.entries(value)) {
+    const lowerKey = key.toLowerCase();
+    if (prohibitedKeywords.some((p) => lowerKey.includes(p))) return false;
+    if (typeof val === 'string') {
+      const lowerVal = val.toLowerCase();
+      if (prohibitedKeywords.some((p) => lowerVal.includes(p))) return false;
+    }
+  }
+  return true;
+}
+
+function validWorkforceTimelineEvent(value: unknown): value is WorkforceTimelineEventDto {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, [
+      'event_seq', 'event_id', 'task_id', 'event_type', 'occurred_at',
+      'actor_type', 'actor_id', 'worker_id', 'attempt_id', 'attempt_number',
+      'related_task_id', 'correlation_id', 'event_summary',
+    ]) &&
+    isInteger(value.event_seq, 1) &&
+    isString(value.event_id) && value.event_id.length >= 8 && value.event_id.length <= 64 &&
+    (value.task_id === null || (isString(value.task_id) && value.task_id.length >= 8 && value.task_id.length <= 64)) &&
+    WORKFORCE_ACTIVITY_TYPES.includes(value.event_type as WorkforceActivityType) &&
+    isIsoDateTime(value.occurred_at) &&
+    WORKFORCE_ACTOR_TYPES.includes(value.actor_type as WorkforceActorType) &&
+    (value.actor_id === null || isString(value.actor_id)) &&
+    (value.worker_id === null || isString(value.worker_id)) &&
+    (value.attempt_id === null || isString(value.attempt_id)) &&
+    (value.attempt_number === null || isInteger(value.attempt_number, 1)) &&
+    (value.related_task_id === null || (isString(value.related_task_id) && value.related_task_id.length >= 8 && value.related_task_id.length <= 64)) &&
+    isString(value.correlation_id) && value.correlation_id.length >= 8 && value.correlation_id.length <= 64 &&
+    validEventSummary(value.event_summary)
+  );
+}
+
+function validWorkforceTaskSummary(value: unknown): value is WorkforceTaskSummaryDto {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, [
+      'task_id', 'status', 'title', 'task_type', 'required_capability',
+      'assigned_worker_id', 'requested_worker_id', 'priority',
+      'attempts', 'max_attempts', 'created_at', 'completed_at', 'related_task_id',
+    ]) &&
+    isString(value.task_id) && value.task_id.length >= 8 && value.task_id.length <= 64 &&
+    WORKFORCE_TASK_STATUSES.includes(value.status as WorkforceTaskStatus) &&
+    isString(value.title) &&
+    isString(value.task_type) &&
+    isString(value.required_capability) &&
+    (value.assigned_worker_id === null || isString(value.assigned_worker_id)) &&
+    (value.requested_worker_id === null || isString(value.requested_worker_id)) &&
+    isInteger(value.priority, 1) && value.priority <= 100 &&
+    isInteger(value.attempts, 0) && value.attempts <= 100 &&
+    isInteger(value.max_attempts, 1) && value.max_attempts <= 10 &&
+    isIsoDateTime(value.created_at) &&
+    validNullableDateTime(value.completed_at) &&
+    (value.related_task_id === null || isString(value.related_task_id))
+  );
+}
+
+function validWorkforceRetryLineage(value: unknown): value is WorkforceRetryLineageDto {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, ['retry_of_task_id', 'retried_by_task_id']) &&
+    (value.retry_of_task_id === null || isString(value.retry_of_task_id)) &&
+    (value.retried_by_task_id === null || isString(value.retried_by_task_id))
+  );
+}
+
+export function validWorkforceTaskTimelineResponse(
+  value: unknown,
+): value is WorkforceTaskTimelineResponseDto {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, [
+      'server_time_utc', 'task_id', 'task', 'retry_lineage',
+      'total_events', 'limit', 'offset', 'events',
+    ]) &&
+    isIsoDateTime(value.server_time_utc) &&
+    isString(value.task_id) && value.task_id.length >= 8 && value.task_id.length <= 64 &&
+    validWorkforceTaskSummary(value.task) &&
+    validWorkforceRetryLineage(value.retry_lineage) &&
+    isInteger(value.total_events, 0) &&
+    isInteger(value.limit, 1) && value.limit <= 200 &&
+    isInteger(value.offset, 0) &&
+    Array.isArray(value.events) && value.events.length <= 200 &&
+    value.events.every(validWorkforceTimelineEvent)
+  );
+}
+
+export function parseWorkforceTaskTimelineResponse(
+  value: unknown,
+  expectedTaskId?: string,
+): WorkforceTaskTimelineResponseDto {
+  if (
+    !validWorkforceTaskTimelineResponse(value) ||
+    (expectedTaskId !== undefined && value.task_id !== expectedTaskId)
+  ) {
+    throw new LiveContractError();
+  }
+  return value;
 }
 
 export function parseWorkforceAttemptsResponse(

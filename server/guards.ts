@@ -110,7 +110,7 @@ export function rawPathGuard(req: Request, res: Response, next: NextFunction): v
     return;
   }
 
-  // One narrowly-scoped query is required for the read-only attempt history.
+  // Narrowly-scoped queries permitted for workforce attempt history, task pagination, and task timeline.
   // Do not generalize query forwarding to any other API route or parameter.
   const attemptsQueryAllowed =
     rawUrl.startsWith('/api/v1/workforce/attempts?') &&
@@ -122,7 +122,21 @@ export function rawPathGuard(req: Request, res: Response, next: NextFunction): v
     taskQueryParts.length === 2 &&
     /^limit=(?:[1-9]|[1-9][0-9]|100)$/.test(taskQueryParts[0] ?? '') &&
     /^offset=(?:0|[1-9][0-9]{0,4}|100000)$/.test(taskQueryParts[1] ?? '');
-  if (rawUrl.includes('?') && !attemptsQueryAllowed && !workforceTaskPageQueryAllowed) {
+
+  const timelinePath = taskQueryIndex >= 0 ? rawUrl.slice(0, taskQueryIndex) : '';
+  const isTimelineRoute = /^\/api\/v1\/workforce\/tasks\/[A-Za-z0-9_-]{8,64}\/timeline$/.test(timelinePath);
+  const timelinePageQueryAllowed =
+    isTimelineRoute &&
+    (
+      (taskQueryParts.length === 2 &&
+        /^limit=(?:[1-9]|[1-9][0-9]|1[0-9]{2}|200)$/.test(taskQueryParts[0] ?? '') &&
+        /^offset=(?:0|[1-9][0-9]{0,4}|100000)$/.test(taskQueryParts[1] ?? '')) ||
+      (taskQueryParts.length === 1 &&
+        (/^limit=(?:[1-9]|[1-9][0-9]|1[0-9]{2}|200)$/.test(taskQueryParts[0] ?? '') ||
+         /^offset=(?:0|[1-9][0-9]{0,4}|100000)$/.test(taskQueryParts[1] ?? '')))
+    );
+
+  if (rawUrl.includes('?') && !attemptsQueryAllowed && !workforceTaskPageQueryAllowed && !timelinePageQueryAllowed) {
     sendBffError(res, 400, 'BAD_REQUEST', 'Query strings are not permitted on this API route.');
     return;
   }

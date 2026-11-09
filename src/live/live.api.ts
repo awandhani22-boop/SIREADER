@@ -14,6 +14,8 @@ import {
   parseLoggedOut,
   parseWorkforceAttemptsResponse,
   parseWorkforceCommandResponse,
+  parseWorkforceTaskTimelineResponse,
+  type WorkforceTaskTimelineResponseDto,
   type WorkforceCommandPath,
   type WorkforceCommandRequest,
   type WorkforceCommandResponseDto,
@@ -49,6 +51,7 @@ export interface LiveApiClient {
   logout(): Promise<void>;
   get<K extends LiveApiPath>(path: K): Promise<LiveApiResponseMap[K]>;
   getWorkforceAttempts(taskId: string): Promise<WorkforceAttemptsResponseDto>;
+  getTaskTimeline(taskId: string, limit?: number, offset?: number): Promise<WorkforceTaskTimelineResponseDto>;
   getWorkforceTasks(limit?: number, offset?: number): Promise<WorkforceTasksResponseDto>;
   sendWorkforceCommand(path: WorkforceCommandPath, request: WorkforceCommandRequest): Promise<WorkforceCommandResponseDto>;
   clearCsrfToken(): void;
@@ -346,6 +349,41 @@ export function createLiveApiClient(options: LiveApiClientOptions = {}): LiveApi
         const payload = await readSuccessfulJson(response);
         try {
           return parseWorkforceAttemptsResponse(payload, taskId);
+        } catch {
+          throw new LiveApiError('SCHEMA_INVALID');
+        }
+      } catch (error) {
+        if (error instanceof LiveApiError && error.code === 'SESSION_REQUIRED') csrfToken = null;
+        throw error;
+      }
+    },
+
+
+    async getTaskTimeline(
+      taskId: string,
+      limit = 100,
+      offset = 0,
+    ): Promise<WorkforceTaskTimelineResponseDto> {
+      if (typeof taskId !== 'string' || !/^[A-Za-z0-9_-]{8,64}$/.test(taskId)) {
+        throw new LiveApiError('BAD_REQUEST');
+      }
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200 ||
+          !Number.isSafeInteger(offset) || offset < 0 || offset > 100_000) {
+        throw new LiveApiError('BAD_REQUEST');
+      }
+      try {
+        const query = '?limit=' + limit + '&offset=' + offset;
+        const response = await request(
+          '/api/v1/workforce/tasks/' + encodeURIComponent(taskId) + '/timeline' + query,
+          {
+            method: 'GET',
+            headers: { Accept: 'application/json' },
+          },
+        );
+        await requireSuccess(response);
+        const payload = await readSuccessfulJson(response);
+        try {
+          return parseWorkforceTaskTimelineResponse(payload, taskId);
         } catch {
           throw new LiveApiError('SCHEMA_INVALID');
         }

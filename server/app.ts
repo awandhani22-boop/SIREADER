@@ -28,7 +28,7 @@ import {
 } from './guards.ts';
 import { sendBffError } from './errors.ts';
 import { SafeLogger } from './log.ts';
-import { createUpstreamHandlers, type UpstreamProxyOptions, type UpstreamApiPath } from './upstream.ts';
+import { createUpstreamHandlers, createTaskTimelineHandler, type UpstreamProxyOptions, type UpstreamApiPath } from './upstream.ts';
 import { createEventStreamProxyHandler, type SseProxyOptions } from './sse.ts';
 import { OperatorAuthService, disableAuthCaching, type OperatorAuthOptions } from './auth.ts';
 import {
@@ -112,6 +112,7 @@ export function createBffApp(
   const config = loadBffConfig(configOverrides);
   const app = express();
   const upstreamHandlers = createUpstreamHandlers(dependencies);
+  const taskTimelineHandler = createTaskTimelineHandler(dependencies);
   const eventStreamHandler = createEventStreamProxyHandler(dependencies.eventStreamOptions);
   const workforceCommandHandlers = createWorkforceCommandHandlers(dependencies.workforceCommandOptions);
   const operatorAuth = new OperatorAuthService(dependencies.authOptions);
@@ -274,6 +275,7 @@ export function createBffApp(
     app.get(path, requireOperatorSession, upstreamHandlers[path]);
   }
   app.get('/api/v1/events/stream', requireOperatorSession, eventStreamHandler);
+  app.get('/api/v1/workforce/tasks/:taskId/timeline', requireOperatorSession, taskTimelineHandler);
 
   // Domain 3: Human-supervised workforce commands. Every command requires
   // the existing operator session AND per-session CSRF token before parsing.

@@ -177,6 +177,7 @@ function createApi(
     logout: async () => undefined,
     get: async <K extends LiveApiPath>(path: K) =>
       await get(path) as LiveApiResponseMap[K],
+    getTaskTimeline: async (taskId: string) => ({} as any),
     getWorkforceAttempts: async (taskId: string) => ({
       server_time_utc: '2026-11-09T10:00:00Z',
       task_id: taskId,
@@ -445,7 +446,8 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
         if (!sessionValid) throw new LiveApiError('SESSION_REQUIRED');
         return responses[path] as LiveApiResponseMap[K];
       },
-      getWorkforceAttempts: async (taskId: string) => ({
+      getTaskTimeline: async (taskId: string) => ({} as any),
+    getWorkforceAttempts: async (taskId: string) => ({
         server_time_utc: '2026-11-09T10:00:00Z',
         task_id: taskId,
         attempts: [],

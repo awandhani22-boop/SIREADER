@@ -397,6 +397,100 @@ const validateWorkforceActivity: Validator = (value) =>
   Array.isArray(value.events) && value.events.length <= 100 &&
   value.events.every(validWorkforceActivity);
 
+
+const WORKFORCE_ACTOR_TYPES = [
+  'SYSTEM', 'WORKER', 'OPERATOR', 'LEGACY_UNKNOWN',
+] as const;
+
+function validEventSummary(value: unknown): boolean {
+  if (!isObject(value)) return false;
+  const prohibitedKeywords = [
+    'password', 'secret', 'bearer', 'lease_token', 'database_url', 'api_key', 'authorization',
+  ];
+  for (const [key, val] of Object.entries(value)) {
+    const lowerKey = key.toLowerCase();
+    if (prohibitedKeywords.some((p) => lowerKey.includes(p))) return false;
+    if (typeof val === 'string') {
+      const lowerVal = val.toLowerCase();
+      if (prohibitedKeywords.some((p) => lowerVal.includes(p))) return false;
+    }
+  }
+  return true;
+}
+
+function validWorkforceTimelineEvent(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, [
+      'event_seq', 'event_id', 'task_id', 'event_type', 'occurred_at',
+      'actor_type', 'actor_id', 'worker_id', 'attempt_id', 'attempt_number',
+      'related_task_id', 'correlation_id', 'event_summary',
+    ]) &&
+    isInteger(value.event_seq, 1) &&
+    isString(value.event_id) && value.event_id.length >= 8 && value.event_id.length <= 64 &&
+    (value.task_id === null || (isString(value.task_id) && value.task_id.length >= 8 && value.task_id.length <= 64)) &&
+    WORKFORCE_ACTIVITY_TYPES.includes(value.event_type as typeof WORKFORCE_ACTIVITY_TYPES[number]) &&
+    isIsoDateTime(value.occurred_at) &&
+    WORKFORCE_ACTOR_TYPES.includes(value.actor_type as typeof WORKFORCE_ACTOR_TYPES[number]) &&
+    (value.actor_id === null || isString(value.actor_id)) &&
+    (value.worker_id === null || isString(value.worker_id)) &&
+    (value.attempt_id === null || isString(value.attempt_id)) &&
+    (value.attempt_number === null || isInteger(value.attempt_number, 1)) &&
+    (value.related_task_id === null || (isString(value.related_task_id) && value.related_task_id.length >= 8 && value.related_task_id.length <= 64)) &&
+    isString(value.correlation_id) && value.correlation_id.length >= 8 && value.correlation_id.length <= 64 &&
+    validEventSummary(value.event_summary)
+  );
+}
+
+function validWorkforceTaskSummary(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, [
+      'task_id', 'status', 'title', 'task_type', 'required_capability',
+      'assigned_worker_id', 'requested_worker_id', 'priority',
+      'attempts', 'max_attempts', 'created_at', 'completed_at', 'related_task_id',
+    ]) &&
+    isString(value.task_id) && value.task_id.length >= 8 && value.task_id.length <= 64 &&
+    WORKFORCE_TASK_STATUSES.includes(value.status as typeof WORKFORCE_TASK_STATUSES[number]) &&
+    isString(value.title) &&
+    isString(value.task_type) &&
+    isString(value.required_capability) &&
+    (value.assigned_worker_id === null || isString(value.assigned_worker_id)) &&
+    (value.requested_worker_id === null || isString(value.requested_worker_id)) &&
+    isInteger(value.priority, 1) && value.priority <= 100 &&
+    isInteger(value.attempts, 0) && value.attempts <= 100 &&
+    isInteger(value.max_attempts, 1) && value.max_attempts <= 10 &&
+    isIsoDateTime(value.created_at) &&
+    validNullableDateTime(value.completed_at) &&
+    (value.related_task_id === null || isString(value.related_task_id))
+  );
+}
+
+function validWorkforceRetryLineage(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, ['retry_of_task_id', 'retried_by_task_id']) &&
+    (value.retry_of_task_id === null || isString(value.retry_of_task_id)) &&
+    (value.retried_by_task_id === null || isString(value.retried_by_task_id))
+  );
+}
+
+export const validateWorkforceTaskTimeline: Validator = (value) =>
+  isObject(value) &&
+  hasExactKeys(value, [
+    'server_time_utc', 'task_id', 'task', 'retry_lineage',
+    'total_events', 'limit', 'offset', 'events',
+  ]) &&
+  isIsoDateTime(value.server_time_utc) &&
+  isString(value.task_id) && value.task_id.length >= 8 && value.task_id.length <= 64 &&
+  validWorkforceTaskSummary(value.task) &&
+  validWorkforceRetryLineage(value.retry_lineage) &&
+  isInteger(value.total_events, 0) &&
+  isInteger(value.limit, 1) && value.limit <= 200 &&
+  isInteger(value.offset, 0) &&
+  Array.isArray(value.events) && value.events.length <= 200 &&
+  value.events.every(validWorkforceTimelineEvent);
+
 const RESPONSE_VALIDATORS: Readonly<Record<UpstreamApiPath, Validator>> = Object.freeze({
   '/api/v1/system/status': validateSystemStatus,
   '/api/v1/telemetry/usage': validateTelemetryUsage,
@@ -661,4 +755,171 @@ export function createUpstreamHandlers(
     };
   }
   return Object.freeze(handlers);
+}
+
+
+export function createTaskTimelineHandler(
+  options: UpstreamProxyOptions = {},
+): RequestHandler {
+  const origin = resolveBaseUrl(options.baseUrl ?? UPSTREAM_ORIGIN);
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  const tokenProvider = options.tokenProvider ?? readServerToken;
+  const timeoutMs = options.timeoutMs ?? UPSTREAM_TIMEOUT_MS;
+  const maximumBytes = options.maxResponseBytes ?? UPSTREAM_MAX_RESPONSE_BYTES;
+
+  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > UPSTREAM_TIMEOUT_MS) {
+    throw new Error('Upstream timeout must be between 1 and 5000 milliseconds.');
+  }
+  if (!Number.isInteger(maximumBytes) || maximumBytes <= 0 || maximumBytes > UPSTREAM_MAX_RESPONSE_BYTES) {
+    throw new Error('Upstream response limit must be between 1 byte and 1 MiB.');
+  }
+
+  return async (req, res): Promise<void> => {
+    const rawTaskId = req.params.taskId;
+    if (
+      typeof rawTaskId !== 'string' ||
+      !/^[A-Za-z0-9_-]{8,64}$/.test(rawTaskId)
+    ) {
+      sendBffError(res, 400, 'BAD_REQUEST', 'A valid taskId path parameter is required.');
+      return;
+    }
+
+    const queryKeys = Object.keys(req.query);
+    const hasUnknownQuery = queryKeys.some((key) => key !== 'limit' && key !== 'offset');
+    const validInteger = (value: unknown, fallback: number, min: number, max: number): number | null => {
+      if (value === undefined) return fallback;
+      if (typeof value !== 'string' || !/^(0|[1-9][0-9]{0,5})$/.test(value)) return null;
+      const parsed = Number(value);
+      return Number.isSafeInteger(parsed) && parsed >= min && parsed <= max ? parsed : null;
+    };
+    const limit = validInteger(req.query.limit, 100, 1, 200);
+    const offset = validInteger(req.query.offset, 0, 0, 100_000);
+    if (hasUnknownQuery || limit === null || offset === null) {
+      sendBffError(res, 400, 'BAD_REQUEST', 'Only bounded integer limit and offset parameters are permitted.');
+      return;
+    }
+
+    let token: string | undefined;
+    try {
+      token = tokenProvider();
+    } catch {
+      token = undefined;
+    }
+    if (!token || !/^[A-Za-z0-9._~+/-]+=*$/.test(token)) {
+      SafeLogger.warn('UPSTREAM_AUTH_MISSING', {
+        method: 'GET', route: '/api/v1/workforce/tasks/:taskId/timeline', statusCode: 503, errorCode: 'UPSTREAM_AUTH_FAILED',
+      });
+      sendBffError(res, 503, 'UPSTREAM_AUTH_FAILED', 'Backend authentication is not configured.');
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const target = new URL('/api/v1/workforce/tasks/' + encodeURIComponent(rawTaskId) + '/timeline', origin);
+      target.searchParams.set('limit', String(limit));
+      target.searchParams.set('offset', String(offset));
+
+      const upstream = await fetchImpl(target, {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer ' + token,
+          Accept: 'application/json',
+        },
+        redirect: 'manual',
+        signal: controller.signal,
+      });
+
+      if (upstream.status === 404) {
+        await cancelBody(upstream);
+        sendBffError(res, 404, 'NOT_FOUND', 'Task not found.');
+        return;
+      }
+
+      if (upstream.status >= 300 && upstream.status < 400) {
+        await cancelBody(upstream);
+        SafeLogger.warn('UPSTREAM_RESPONSE_REJECTED', {
+          method: 'GET', route: '/api/v1/workforce/tasks/:taskId/timeline', statusCode: 502, errorCode: 'BACKEND_ERROR',
+        });
+        sendBffError(res, 502, 'BACKEND_ERROR', 'Backend returned an unsupported redirect.');
+        return;
+      }
+
+      if (upstream.status !== 200) {
+        const authFailure = upstream.status === 401 || upstream.status === 403;
+        await cancelBody(upstream);
+        SafeLogger.warn('UPSTREAM_REQUEST_FAILED', {
+          method: 'GET', route: '/api/v1/workforce/tasks/:taskId/timeline', statusCode: 502,
+          errorCode: authFailure ? 'UPSTREAM_AUTH_FAILED' : 'BACKEND_ERROR',
+        });
+        sendBffError(
+          res, 502, authFailure ? 'UPSTREAM_AUTH_FAILED' : 'BACKEND_ERROR',
+          authFailure ? 'Backend authentication failed.' : 'Backend request failed.',
+        );
+        return;
+      }
+
+      if (!isValidJsonContentType(upstream.headers.get('content-type') ?? undefined)) {
+        await cancelBody(upstream);
+        SafeLogger.warn('UPSTREAM_RESPONSE_REJECTED', {
+          method: 'GET', route: '/api/v1/workforce/tasks/:taskId/timeline', statusCode: 502,
+          errorCode: 'INVALID_UPSTREAM_CONTENT_TYPE',
+        });
+        sendBffError(
+          res, 502, 'INVALID_UPSTREAM_CONTENT_TYPE',
+          'Backend returned an unsupported response content type.',
+        );
+        return;
+      }
+
+      const bodyText = await readBoundedBody(upstream, maximumBytes);
+      let payload: unknown;
+      try {
+        payload = JSON.parse(bodyText);
+      } catch {
+        throw new UpstreamBodyError();
+      }
+
+      if (!validateWorkforceTaskTimeline(payload)) {
+        SafeLogger.warn('UPSTREAM_RESPONSE_REJECTED', {
+          method: 'GET', route: '/api/v1/workforce/tasks/:taskId/timeline', statusCode: 502, errorCode: 'SCHEMA_INVALID',
+        });
+        sendBffError(
+          res, 502, 'SCHEMA_INVALID',
+          'Backend response did not match the required API contract.',
+        );
+        return;
+      }
+
+      res.status(200).json(payload);
+    } catch (error) {
+      if (controller.signal.aborted) {
+        SafeLogger.warn('UPSTREAM_TIMEOUT', {
+          method: 'GET', route: '/api/v1/workforce/tasks/:taskId/timeline', statusCode: 504, errorCode: 'TIMEOUT',
+        });
+        sendBffError(res, 504, 'TIMEOUT', 'Backend request timed out.');
+        return;
+      }
+      if (error instanceof UpstreamResponseTooLargeError) {
+        SafeLogger.warn('UPSTREAM_RESPONSE_REJECTED', {
+          method: 'GET', route: '/api/v1/workforce/tasks/:taskId/timeline', statusCode: 502, errorCode: 'TOO_LARGE',
+        });
+        sendBffError(res, 502, 'TOO_LARGE', 'Backend response exceeds the 1 MiB limit.');
+        return;
+      }
+      if (error instanceof UpstreamBodyError) {
+        SafeLogger.warn('UPSTREAM_RESPONSE_REJECTED', {
+          method: 'GET', route: '/api/v1/workforce/tasks/:taskId/timeline', statusCode: 502, errorCode: 'SCHEMA_INVALID',
+        });
+        sendBffError(res, 502, 'SCHEMA_INVALID', 'Backend response body was invalid.');
+        return;
+      }
+      SafeLogger.warn('UPSTREAM_REQUEST_FAILED', {
+        method: 'GET', route: '/api/v1/workforce/tasks/:taskId/timeline', statusCode: 502, errorCode: 'UNREACHABLE',
+      });
+      sendBffError(res, 502, 'UNREACHABLE', 'Backend service is unavailable.');
+    } finally {
+      clearTimeout(timer);
+    }
+  };
 }

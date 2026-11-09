@@ -1,9 +1,10 @@
 /**
  * SIREADER Phase 3.2 BFF - Route Allowlist
  *
- * Defines the canonical fixed allowlist of exactly 13 permitted routes:
+ * Defines the canonical fixed allowlist of permitted routes:
  * - 3 Authentication & Session lifecycle endpoints
- * - 5 Phase 3 observability snapshots, 4 Phase 4 workforce read endpoints, and 1 SSE endpoint
+ * - 5 Phase 3 observability snapshots, 5 Phase 4/5.2 workforce read endpoints, and 1 SSE endpoint
+ * - 4 Phase 5.1 workforce command endpoints
  *
  * Strictly prevents arbitrary proxy paths or wildcard forwarding.
  */
@@ -68,6 +69,11 @@ export const CANONICAL_ROUTES: readonly CanonicalRouteDefinition[] = Object.free
     description: 'Read-only persistent workforce task queue and lifecycle',
   },
   {
+    path: '/api/v1/workforce/tasks/:taskId/timeline',
+    allowedMethods: Object.freeze(['GET']),
+    description: 'Read-only lifecycle audit timeline and retry lineage for one task',
+  },
+  {
     path: '/api/v1/workforce/attempts',
     allowedMethods: Object.freeze(['GET']),
     description: 'Read-only attempt history for one validated task ID',
@@ -109,16 +115,23 @@ const CANONICAL_ROUTE_MAP = new Map<string, readonly string[]>(
   CANONICAL_ROUTES.map((route) => [route.path, route.allowedMethods]),
 );
 
+export const WORKFORCE_TASK_TIMELINE_PATTERN = /^\/api\/v1\/workforce\/tasks\/[^/]+\/timeline$/;
+
 export function isAllowlistedPath(path: string): boolean {
-  return CANONICAL_ROUTE_MAP.has(path);
+  return CANONICAL_ROUTE_MAP.has(path) || WORKFORCE_TASK_TIMELINE_PATTERN.test(path);
 }
 
 export function getAllowedMethods(path: string): readonly string[] | undefined {
-  return CANONICAL_ROUTE_MAP.get(path);
+  const allowed = CANONICAL_ROUTE_MAP.get(path);
+  if (allowed) return allowed;
+  if (WORKFORCE_TASK_TIMELINE_PATTERN.test(path)) {
+    return Object.freeze(['GET']);
+  }
+  return undefined;
 }
 
 export function isMethodAllowed(path: string, method: string): boolean {
-  const allowed = CANONICAL_ROUTE_MAP.get(path);
+  const allowed = getAllowedMethods(path);
   if (!allowed) return false;
   return allowed.includes(method.toUpperCase());
 }

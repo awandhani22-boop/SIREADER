@@ -87,6 +87,51 @@ const FIXTURES: Record<UpstreamApiPath, unknown> = {
   },
 };
 
+
+const TIMELINE_FIXTURE = {
+  server_time_utc: '2026-11-09T00:00:00Z',
+  task_id: 'task_12345678',
+  task: {
+    task_id: 'task_12345678',
+    status: 'FAILED',
+    title: 'Analyze market volatility',
+    task_type: 'market_analysis',
+    required_capability: 'market_data_ingest',
+    assigned_worker_id: 'sonnet',
+    requested_worker_id: null,
+    priority: 50,
+    attempts: 1,
+    max_attempts: 3,
+    created_at: '2026-11-09T00:00:00Z',
+    completed_at: null,
+    related_task_id: null,
+  },
+  retry_lineage: {
+    retry_of_task_id: null,
+    retried_by_task_id: 'task_87654321',
+  },
+  total_events: 1,
+  limit: 100,
+  offset: 0,
+  events: [
+    {
+      event_seq: 1,
+      event_id: 'evt_12345678',
+      task_id: 'task_12345678',
+      event_type: 'TASK_ENQUEUED',
+      occurred_at: '2026-11-09T00:00:00Z',
+      actor_type: 'OPERATOR',
+      actor_id: 'operator_1',
+      worker_id: null,
+      attempt_id: null,
+      attempt_number: null,
+      related_task_id: null,
+      correlation_id: 'corr_12345678',
+      event_summary: { reason: 'Initial submission' },
+    },
+  ],
+};
+
 function listen(server: Server): Promise<void> {
   return new Promise((resolve, reject) => {
     server.once('error', reject);
@@ -243,6 +288,28 @@ test('SIREADER bounded upstream proxy — local mock integration', async (t) => 
       /^(?:[1-9]|[1-9][0-9]|100)$/.test(requestUrl.searchParams.get('limit') || '') &&
       /^(?:0|[1-9][0-9]{0,5})$/.test(requestUrl.searchParams.get('offset') || '') &&
       Number(requestUrl.searchParams.get('offset')) <= 100_000;
+
+    const isTimelineRequest =
+      path.startsWith('/api/v1/workforce/tasks/') && path.endsWith('/timeline');
+    if (isTimelineRequest) {
+      const match = path.match(/^\/api\/v1\/workforce\/tasks\/([^\/]+)\/timeline$/);
+      const reqTaskId = match ? match[1] : '';
+      if (reqTaskId === 'task_12345678') {
+        const lim = requestUrl.searchParams.get('limit');
+        const off = requestUrl.searchParams.get('offset');
+        res.setHeader('content-type', 'application/json; charset=utf-8');
+        res.end(JSON.stringify({
+          ...TIMELINE_FIXTURE,
+          limit: lim ? Number(lim) : 100,
+          offset: off ? Number(off) : 0,
+        }));
+        return;
+      }
+      res.statusCode = 404;
+      res.end();
+      return;
+    }
+
     const payload = path === '/api/v1/workforce/attempts'
       ? (attemptsQueryValid ? FIXTURES[path as UpstreamApiPath] : undefined)
       : path === '/api/v1/workforce/tasks'
@@ -449,6 +516,96 @@ test('SIREADER bounded upstream proxy — local mock integration', async (t) => 
       assert.equal(result.body.includes('test-server-bearer-token'), false);
     } finally {
       await close(unavailable);
+    }
+  });
+
+
+  await t.test('timeline proxy forwards request with loopback origin and validates schema', async () => {
+    mode = 'normal';
+    const result = await request(proxy, '/api/v1/workforce/tasks/task_12345678/timeline');
+    assert.equal(result.status, 200);
+    assert.equal(result.json.task_id, 'task_12345678');
+    assert.equal(result.json.task.status, 'FAILED');
+    assert.equal(result.json.retry_lineage.retried_by_task_id, 'task_87654321');
+    assert.equal(result.json.events.length, 1);
+    assert.equal(result.json.events[0].actor_type, 'OPERATOR');
+
+    const lastReceived = received[received.length - 1];
+    assert.equal(lastReceived.path, '/api/v1/workforce/tasks/task_12345678/timeline?limit=100&offset=0');
+    assert.equal(lastReceived.headers.authorization, 'Bearer test-server-bearer-token');
+  });
+
+  await t.test('timeline proxy forwards bounded pagination parameters', async () => {
+    mode = 'normal';
+    const result = await request(proxy, '/api/v1/workforce/tasks/task_12345678/timeline?limit=50&offset=10');
+    assert.equal(result.status, 200);
+    assert.equal(result.json.limit, 50);
+    assert.equal(result.json.offset, 10);
+    const lastReceived = received[received.length - 1];
+    assert.equal(lastReceived.path, '/api/v1/workforce/tasks/task_12345678/timeline?limit=50&offset=10');
+  });
+
+  await t.test('timeline proxy rejects invalid query and invalid taskId parameters', async () => {
+    const invalidQuery = await request(proxy, '/api/v1/workforce/tasks/task_12345678/timeline?limit=999');
+    assert.equal(invalidQuery.status, 400);
+
+    const unknownQuery = await request(proxy, '/api/v1/workforce/tasks/task_12345678/timeline?foo=bar');
+    assert.equal(unknownQuery.status, 400);
+
+    const invalidId = await request(proxy, '/api/v1/workforce/tasks/bad*id/timeline');
+    assert.equal(invalidId.status, 400);
+
+    const shortId = await request(proxy, '/api/v1/workforce/tasks/short/timeline');
+    assert.equal(shortId.status, 400);
+  });
+
+  await t.test('timeline proxy maps upstream 404 cleanly', async () => {
+    mode = 'normal';
+    const result = await request(proxy, '/api/v1/workforce/tasks/task_nonexistent/timeline');
+    assert.equal(result.status, 404);
+    assert.equal(result.json?.error?.code, 'NOT_FOUND');
+  });
+
+  await t.test('timeline proxy fails closed when upstream response leaks sensitive credentials', async () => {
+    mode = 'normal';
+    const leakingMock = http.createServer((_req, res) => {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({
+        ...TIMELINE_FIXTURE,
+        events: [{
+          ...TIMELINE_FIXTURE.events[0],
+          event_summary: { password: 'should_not_leak' },
+        }],
+      }));
+    });
+    await listen(leakingMock);
+    const leakingPort = (leakingMock.address() as AddressInfo).port;
+    const leakingProxy = createProxyServer('http://127.0.0.1:' + leakingPort);
+    await listen(leakingProxy);
+    try {
+      const res = await request(leakingProxy, '/api/v1/workforce/tasks/task_12345678/timeline');
+      assert.equal(res.status, 502);
+      assert.equal(res.json?.error?.code, 'SCHEMA_INVALID');
+      assert.equal(res.body.includes('should_not_leak'), false);
+    } finally {
+      await close(leakingProxy);
+      await close(leakingMock);
+    }
+  });
+
+  await t.test('timeline proxy requires operator session when unauthenticated', async () => {
+    const authApp = createBffApp(undefined, {
+      baseUrl: upstreamOrigin,
+      tokenProvider: () => 'test-server-bearer-token',
+    });
+    const authServer = http.createServer(authApp);
+    await listen(authServer);
+    try {
+      const res = await request(authServer, '/api/v1/workforce/tasks/task_12345678/timeline');
+      assert.equal(res.status, 401);
+      assert.equal(res.json?.error?.code, 'SESSION_REQUIRED');
+    } finally {
+      await close(authServer);
     }
   });
 
