@@ -283,14 +283,12 @@ export function createLiveApiClient(options: LiveApiClientOptions = {}): LiveApi
       const commandFingerprint = path + ':' + stableCommandSerialization(command);
       let idempotencyKey = pendingCommandKeys.get(commandFingerprint);
       if (!idempotencyKey) {
+        // Never evict an unresolved key: doing so could duplicate a command
+        // whose first response timed out after the backend committed it.
+        if (pendingCommandKeys.size >= 32) throw new LiveApiError('RATE_LIMITED');
         idempotencyKey = idempotencyKeyFactory();
         if (!/^[A-Za-z0-9._~-]{8,128}$/.test(idempotencyKey)) throw new LiveApiError('BAD_REQUEST');
         pendingCommandKeys.set(commandFingerprint, idempotencyKey);
-        while (pendingCommandKeys.size > 32) {
-          const oldestKey = pendingCommandKeys.keys().next().value;
-          if (oldestKey === undefined) break;
-          pendingCommandKeys.delete(oldestKey);
-        }
       }
       if (![
         '/api/v1/commands/tasks/enqueue',
