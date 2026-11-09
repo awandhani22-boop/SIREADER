@@ -19,6 +19,10 @@ export const UPSTREAM_API_PATHS = Object.freeze([
   '/api/v1/pipeline/active',
   '/api/v1/market-watches/active',
   '/api/v1/audit/decisions',
+  '/api/v1/workforce/runtime',
+  '/api/v1/workforce/tasks',
+  '/api/v1/workforce/attempts',
+  '/api/v1/workforce/activity',
 ] as const);
 export type UpstreamApiPath = (typeof UPSTREAM_API_PATHS)[number];
 
@@ -223,12 +227,185 @@ const validateAuditDecisions: Validator = (value) =>
   Array.isArray(value.decisions) &&
   value.decisions.every(validAuditDecision);
 
+
+const WORKFORCE_PROCESS_STATUSES = [
+  'STARTING', 'READY', 'DRAINING', 'STOPPED', 'FAILED', 'STALE', 'OFFLINE', 'DISABLED',
+] as const;
+const WORKFORCE_TASK_STATUSES = [
+  'QUEUED', 'CLAIMED', 'RUNNING', 'RETRY_WAIT', 'WAITING_REVIEW',
+  'COMPLETED', 'FAILED', 'CANCELLED', 'DEAD_LETTERED',
+] as const;
+const WORKFORCE_ATTEMPT_STATUSES = [
+  'CLAIMED', 'STARTED', 'PROVIDER_REQUESTED', 'COMPLETED',
+  'FAILED', 'TIMED_OUT', 'UNKNOWN', 'CANCELLED',
+] as const;
+const WORKFORCE_ACTIVITY_TYPES = [
+  'TASK_ENQUEUED', 'TASK_CLAIMED', 'TASK_STARTED', 'PROVIDER_REQUESTED',
+  'TASK_RETRIED', 'TASK_COMPLETED', 'TASK_FAILED', 'TASK_CANCELLED',
+  'TASK_WAITING_REVIEW', 'TASK_DEAD_LETTERED', 'WORKER_HEARTBEAT', 'WORKER_STATE_CHANGED',
+] as const;
+
+function validNullableDateTime(value: unknown): boolean {
+  return value === null || isIsoDateTime(value);
+}
+
+function validWorkforceWorker(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, [
+      'worker_id', 'display_name', 'role', 'department', 'enabled',
+      'max_concurrency', 'model_tier', 'capability_ids', 'process_status',
+      'heartbeat_at', 'active_task_count', 'in_flight_provider_requests',
+      'schema_version', 'created_at', 'updated_at',
+    ]) &&
+    isString(value.worker_id) && value.worker_id.length >= 2 && value.worker_id.length <= 64 &&
+    isString(value.display_name) && isString(value.role) && isString(value.department) &&
+    isBoolean(value.enabled) &&
+    isInteger(value.max_concurrency, 1) && value.max_concurrency <= 32 &&
+    ['NONE', 'FAST', 'REASONING', 'ESCALATION'].includes(String(value.model_tier)) &&
+    Array.isArray(value.capability_ids) && value.capability_ids.length <= 28 &&
+    value.capability_ids.every((item) => isString(item) && /^[a-z][a-z0-9_]{1,63}$/.test(item)) &&
+    WORKFORCE_PROCESS_STATUSES.includes(value.process_status as typeof WORKFORCE_PROCESS_STATUSES[number]) &&
+    validNullableDateTime(value.heartbeat_at) &&
+    isInteger(value.active_task_count) &&
+    isInteger(value.in_flight_provider_requests) &&
+    value.schema_version === 1 &&
+    isIsoDateTime(value.created_at) && isIsoDateTime(value.updated_at)
+  );
+}
+
+function validWorkforceRuntime(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, [
+      'observed_at', 'configured_workers', 'ready_workers', 'stale_workers',
+      'offline_workers', 'active_tasks', 'queued_tasks', 'waiting_review_tasks',
+      'dead_lettered_tasks', 'completed_last_24h',
+    ]) &&
+    isIsoDateTime(value.observed_at) &&
+    isInteger(value.configured_workers) && isInteger(value.ready_workers) &&
+    isInteger(value.stale_workers) && isInteger(value.offline_workers) &&
+    isInteger(value.active_tasks) && isInteger(value.queued_tasks) &&
+    isInteger(value.waiting_review_tasks) && isInteger(value.dead_lettered_tasks) &&
+    isInteger(value.completed_last_24h)
+  );
+}
+
+function validWorkforceTask(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, [
+      'task_id', 'correlation_id', 'schema_version', 'task_type', 'title',
+      'required_capability', 'requested_worker_id', 'assigned_worker_id',
+      'priority', 'status', 'attempts', 'max_attempts', 'not_before',
+      'deadline_at', 'lease_expires_at', 'failure_code', 'created_at',
+      'updated_at', 'completed_at',
+    ]) &&
+    isString(value.task_id) && value.task_id.length >= 8 && value.task_id.length <= 64 &&
+    isString(value.correlation_id) && value.correlation_id.length >= 8 && value.correlation_id.length <= 64 &&
+    value.schema_version === 1 &&
+    isString(value.task_type) && isString(value.title) && isString(value.required_capability) &&
+    (value.requested_worker_id === null || isString(value.requested_worker_id)) &&
+    (value.assigned_worker_id === null || isString(value.assigned_worker_id)) &&
+    isInteger(value.priority, 1) && value.priority <= 100 &&
+    WORKFORCE_TASK_STATUSES.includes(value.status as typeof WORKFORCE_TASK_STATUSES[number]) &&
+    isInteger(value.attempts) && value.attempts <= 100 &&
+    isInteger(value.max_attempts, 1) && value.max_attempts <= 10 &&
+    isIsoDateTime(value.not_before) &&
+    validNullableDateTime(value.deadline_at) &&
+    validNullableDateTime(value.lease_expires_at) &&
+    (value.failure_code === null || isString(value.failure_code)) &&
+    isIsoDateTime(value.created_at) && isIsoDateTime(value.updated_at) &&
+    validNullableDateTime(value.completed_at)
+  );
+}
+
+const validateWorkforceRuntime: Validator = (value) =>
+  isObject(value) &&
+  hasExactKeys(value, ['server_time_utc', 'runtime', 'workers']) &&
+  isIsoDateTime(value.server_time_utc) &&
+  validWorkforceRuntime(value.runtime) &&
+  Array.isArray(value.workers) &&
+  value.workers.length <= 100 &&
+  value.workers.every(validWorkforceWorker);
+
+const validateWorkforceTasks: Validator = (value) =>
+  isObject(value) &&
+  hasExactKeys(value, ['server_time_utc', 'total_count', 'limit', 'offset', 'tasks']) &&
+  isIsoDateTime(value.server_time_utc) &&
+  isInteger(value.total_count) &&
+  isInteger(value.limit, 1) && value.limit <= 100 &&
+  isInteger(value.offset) &&
+  Array.isArray(value.tasks) && value.tasks.length <= 100 &&
+  value.tasks.every(validWorkforceTask);
+
+function validWorkforceAttempt(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, [
+      'attempt_id', 'task_id', 'attempt_number', 'worker_id', 'status',
+      'billing_currency', 'cost_amount', 'error_code', 'started_at',
+      'finished_at', 'created_at',
+    ]) &&
+    isString(value.attempt_id) && value.attempt_id.length >= 8 && value.attempt_id.length <= 64 &&
+    isString(value.task_id) && value.task_id.length >= 8 && value.task_id.length <= 64 &&
+    isInteger(value.attempt_number, 1) && value.attempt_number <= 10 &&
+    isString(value.worker_id) &&
+    WORKFORCE_ATTEMPT_STATUSES.includes(value.status as typeof WORKFORCE_ATTEMPT_STATUSES[number]) &&
+    (value.billing_currency === null || hasCurrency(value.billing_currency)) &&
+    isDecimal(value.cost_amount, true) &&
+    (value.error_code === null || isString(value.error_code)) &&
+    validNullableDateTime(value.started_at) &&
+    validNullableDateTime(value.finished_at) &&
+    isIsoDateTime(value.created_at)
+  );
+}
+
+const validateWorkforceAttempts: Validator = (value) =>
+  isObject(value) &&
+  hasExactKeys(value, ['server_time_utc', 'task_id', 'attempts']) &&
+  isIsoDateTime(value.server_time_utc) &&
+  isString(value.task_id) && value.task_id.length >= 8 && value.task_id.length <= 64 &&
+  Array.isArray(value.attempts) && value.attempts.length <= 10 &&
+  value.attempts.every(validWorkforceAttempt);
+
+function validWorkforceActivity(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, [
+      'event_id', 'event_type', 'occurred_at', 'worker_id',
+      'task_id', 'attempt_id', 'correlation_id',
+    ]) &&
+    isString(value.event_id) && value.event_id.length >= 8 && value.event_id.length <= 64 &&
+    WORKFORCE_ACTIVITY_TYPES.includes(value.event_type as typeof WORKFORCE_ACTIVITY_TYPES[number]) &&
+    isIsoDateTime(value.occurred_at) &&
+    (value.worker_id === null || isString(value.worker_id)) &&
+    (value.task_id === null || isString(value.task_id)) &&
+    (value.attempt_id === null || isString(value.attempt_id)) &&
+    isString(value.correlation_id) && value.correlation_id.length >= 8 && value.correlation_id.length <= 64
+  );
+}
+
+const validateWorkforceActivity: Validator = (value) =>
+  isObject(value) &&
+  hasExactKeys(value, ['server_time_utc', 'total_count', 'limit', 'offset', 'events']) &&
+  isIsoDateTime(value.server_time_utc) &&
+  isInteger(value.total_count) &&
+  isInteger(value.limit, 1) && value.limit <= 100 &&
+  isInteger(value.offset) &&
+  Array.isArray(value.events) && value.events.length <= 100 &&
+  value.events.every(validWorkforceActivity);
+
 const RESPONSE_VALIDATORS: Readonly<Record<UpstreamApiPath, Validator>> = Object.freeze({
   '/api/v1/system/status': validateSystemStatus,
   '/api/v1/telemetry/usage': validateTelemetryUsage,
   '/api/v1/pipeline/active': validateActivePipeline,
   '/api/v1/market-watches/active': validateActiveMarketWatches,
   '/api/v1/audit/decisions': validateAuditDecisions,
+  '/api/v1/workforce/runtime': validateWorkforceRuntime,
+  '/api/v1/workforce/tasks': validateWorkforceTasks,
+  '/api/v1/workforce/attempts': validateWorkforceAttempts,
+  '/api/v1/workforce/activity': validateWorkforceActivity,
 });
 
 class UpstreamResponseTooLargeError extends Error {}
@@ -329,7 +506,20 @@ export function createUpstreamHandlers(
 
   const handlers = {} as Record<UpstreamApiPath, RequestHandler>;
   for (const path of UPSTREAM_API_PATHS) {
-    handlers[path] = async (_req, res): Promise<void> => {
+    handlers[path] = async (req, res): Promise<void> => {
+      let taskId: string | undefined;
+      if (path === '/api/v1/workforce/attempts') {
+        const rawTaskId = req.query.task_id;
+        if (
+          typeof rawTaskId !== 'string' ||
+          !/^[A-Za-z0-9_-]{8,64}$/.test(rawTaskId) ||
+          Object.keys(req.query).length !== 1
+        ) {
+          sendBffError(res, 400, 'BAD_REQUEST', 'A valid task_id query parameter is required.');
+          return;
+        }
+        taskId = rawTaskId;
+      }
       let token: string | undefined;
       try {
         token = tokenProvider();
@@ -348,6 +538,7 @@ export function createUpstreamHandlers(
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const target = new URL(path, origin);
+        if (taskId !== undefined) target.searchParams.set('task_id', taskId);
         const upstream = await fetchImpl(target, {
           method: 'GET',
           headers: {
