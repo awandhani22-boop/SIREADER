@@ -4,8 +4,8 @@ Phase 4.1–4.4 implementation code is present on the isolated branches. Automat
 
 - **Virtual Office branch:** `phase-4-implementation`, HEAD `eb8b1ad7dce0cde6cc0821a4831290ee8ffd3dd0`.
 - **Frontend/BFF CI:** [run 42588626899](https://github.com/awandhani22-boop/SIREADER/actions/runs/42588073811) — 390/390 tests passed, `tsc --noEmit` passed, production build passed (637 ms).
-- **Python Backend branch:** `phase-4-implementation`, HEAD `45d8ce87c6f673da2a2a7b146d51c6cdd0701405`.
-- **Backend CI:** [run 42587686372](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42587686372) — 111 API tests passed (including PostgreSQL 16 disposable migration, privilege, and workforce lifecycle coverage), API compile passed, and 74 core regression tests passed.
+- **Python Backend branch:** `phase-4-implementation`, HEAD `3fd1caa7058be69f531909b7a8e22ebb290eba8c`.
+- **Backend CI:** [run 42588724433](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42588724433) — 111 API tests passed (including PostgreSQL 16 disposable migration, privilege, and workforce lifecycle coverage), API compile passed, and 75 core regression tests passed.
 - The migration tests run against disposable PostgreSQL only. No migration was applied to live Supabase.
 - Provider mode remains MOCK by default; worker runtime and live provider are disabled by default. No paid provider request, trading action, MT5/HFM action, push to `main`, or merge to `main` was performed.
 
