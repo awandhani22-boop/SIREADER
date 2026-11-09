@@ -15,6 +15,7 @@ import {
   parseWorkforceAttemptsResponse,
   type AuthenticatedSessionDto,
   type WorkforceAttemptsResponseDto,
+  type WorkforceTasksResponseDto,
   type BffErrorCode,
   type LiveApiPath,
   type LiveApiResponseMap,
@@ -44,6 +45,7 @@ export interface LiveApiClient {
   logout(): Promise<void>;
   get<K extends LiveApiPath>(path: K): Promise<LiveApiResponseMap[K]>;
   getWorkforceAttempts(taskId: string): Promise<WorkforceAttemptsResponseDto>;
+  getWorkforceTasks(limit?: number, offset?: number): Promise<WorkforceTasksResponseDto>;
   clearCsrfToken(): void;
 }
 
@@ -223,6 +225,29 @@ export function createLiveApiClient(options: LiveApiClientOptions = {}): LiveApi
         }
         try {
           return parseLiveApiResponse(path, payload);
+        } catch {
+          throw new LiveApiError('SCHEMA_INVALID');
+        }
+      } catch (error) {
+        if (error instanceof LiveApiError && error.code === 'SESSION_REQUIRED') csrfToken = null;
+        throw error;
+      }
+    },
+
+    async getWorkforceTasks(limit = 50, offset = 0): Promise<WorkforceTasksResponseDto> {
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
+          !Number.isSafeInteger(offset) || offset < 0 || offset > 100_000) {
+        throw new LiveApiError('BAD_REQUEST');
+      }
+      try {
+        const response = await request(
+          '/api/v1/workforce/tasks?limit=' + limit + '&offset=' + offset,
+          { method: 'GET', headers: { Accept: 'application/json' } },
+        );
+        await requireSuccess(response);
+        const payload = await readSuccessfulJson(response);
+        try {
+          return parseLiveApiResponse('/api/v1/workforce/tasks', payload) as WorkforceTasksResponseDto;
         } catch {
           throw new LiveApiError('SCHEMA_INVALID');
         }
