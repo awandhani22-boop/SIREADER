@@ -10,7 +10,11 @@ import {
   type LiveApiClient,
   type LiveApiErrorCode,
 } from './live.api';
-import type { LiveApiPath, LiveApiResponseMap } from './live.contracts';
+import type {
+  LiveApiPath,
+  LiveApiResponseMap,
+  WorkforceAttemptsResponseDto,
+} from './live.contracts';
 import { useLiveStore } from './live.state';
 
 function getErrorCode(error: unknown): LiveApiErrorCode {
@@ -26,6 +30,7 @@ export interface LiveController {
   login(password: string): Promise<void>;
   logout(): Promise<void>;
   getResource<K extends LiveApiPath>(path: K): Promise<LiveApiResponseMap[K]>;
+  getWorkforceAttempts(taskId: string): Promise<WorkforceAttemptsResponseDto>;
   loadResource<K extends LiveApiPath>(path: K): Promise<LiveApiResponseMap[K]>;
 }
 
@@ -98,6 +103,18 @@ export function createLiveController(
     },
 
     getResource,
+
+    async getWorkforceAttempts(taskId: string): Promise<WorkforceAttemptsResponseDto> {
+      try {
+        return await api.getWorkforceAttempts(taskId);
+      } catch (error) {
+        if (error instanceof LiveApiError && error.code === 'SESSION_REQUIRED') {
+          api.clearCsrfToken();
+          applySessionRequired();
+        }
+        throw error;
+      }
+    },
 
     async loadResource<K extends LiveApiPath>(path: K): Promise<LiveApiResponseMap[K]> {
       useLiveStore.getState().setResourceLoading(path);
