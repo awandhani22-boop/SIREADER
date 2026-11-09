@@ -8,8 +8,10 @@
 | Phase 4.3 — Durable task runtime | Implemented; disposable PostgreSQL migration/privilege/recovery, multi-process heartbeat, and bounded payload-retention CI PASS |
 | Phase 4.4 — LIVE presentation and workforce operations | Implemented; frontend CI PASS; owner-run Windows/Chrome acceptance PASS |
 | Phase 4 overall | COMPLETE — automated CI and owner-run browser acceptance PASS (2026-11-09) |
+| Phase 5.1 — Human-supervised operations | Source + automated CI PASS; owner local/Windows browser acceptance pending |
+| Phase 5.2 — Review, budgets, governance | PLANNED — blocked until Phase 5.1 owner acceptance |
 
-Phase 5.1 may now enter planning. No live database migration, paid provider request, trading order, or merge to `main` is implied by Phase 4 acceptance.
+Phase 5.1 source implementation and automated CI now pass on the isolated phase-5-implementation branches. The remaining exit gate is owner-side local database setup and Windows/Chrome acceptance; the work is not yet operator-ready for LIVE writes. No live database migration, paid provider request, trading order, or merge to `main` is implied.
 
 See [PHASE_4_EXECUTION_LOG.md](./PHASE_4_EXECUTION_LOG.md).
 
@@ -19,7 +21,7 @@ See [PHASE_4_EXECUTION_LOG.md](./PHASE_4_EXECUTION_LOG.md).
 
 **Document status:** ROADMAP LOCKED — source of truth for phase order, scope, and acceptance gates  
 **Repository:** `awandhani22-boop/SIREADER`  
-**Current implementation branch:** `phase-4-implementation` (isolated from `main`; matching branch exists in both SIREADER repositories).  
+**Current implementation branch:** `phase-5-implementation` (isolated from `main`; matching branch exists in both SIREADER repositories). The accepted Phase 4 branch remains the baseline.  
 **Last roadmap review:** 2026-11-09
 
 This document governs the SIREADER Virtual Office project from the existing 3D frontend through the final v1.0 release. **The canonical product mission and meaning of the final product are in [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md); read that before every task.** Keep this roadmap and `docs/PROJECT_STATE.md` aligned after every milestone. Do not create a replacement frontend or restart completed phases.

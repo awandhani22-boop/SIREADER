@@ -105,4 +105,4 @@ Source and CI for checkpoints 5.1.0–5.1.4 are complete. The Phase 5.1 exit gat
 
 ## Known owner-side setup that will be required before local LIVE use
 
-The owner must follow the local command API runbook in the Python Backend repository: provision the dedicated sireader_workforce_cmd login on a disposable local database, keep the DB URL and independently generated command token in ignored local environment files, apply the additive migration only to that local database, then start the command API on loopback. Never paste secret values into chat or commit them. Do not apply this migration to Supabase LIVE.
+The owner must follow the [local command API runbook](https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/PHASE_5_LOCAL_COMMAND_API_RUNBOOK.md): provision the dedicated sireader_workforce_cmd login on a disposable local database, keep the DB URL and independently generated command token in ignored local environment files, apply the additive migration only to that local database, then start the command API on loopback. Never paste secret values into chat or commit them. Do not apply this migration to Supabase LIVE.
