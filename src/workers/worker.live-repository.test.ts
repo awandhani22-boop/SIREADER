@@ -60,7 +60,7 @@ function makeSnapshot(
 
 test('LIVE repository maps backend READY workload without inventing process state', () => {
   const snapshot = makeSnapshot([makeWorker(1, { active_task_count: 2, in_flight_provider_requests: 1 })]);
-  const repository = createLiveWorkerRepository(snapshot, 'LIVE', 'AUTHENTICATED');
+  const repository = createLiveWorkerRepository(snapshot, 'LIVE', 'AUTHENTICATED', 'LIVE');
   const worker = repository.getWorker('worker_001');
 
   assert.equal(repository.source, 'LIVE');
@@ -77,7 +77,7 @@ test('LIVE repository maps backend READY workload without inventing process stat
 test('LIVE repository marks stale and error snapshots as non-current and suppresses live counters', () => {
   const snapshot = makeSnapshot([makeWorker(1, { active_task_count: 3, in_flight_provider_requests: 2 })]);
   for (const status of ['STALE', 'ERROR'] as const) {
-    const worker = createLiveWorkerRepository(snapshot, status, 'AUTHENTICATED').getWorker('worker_001');
+    const worker = createLiveWorkerRepository(snapshot, status, 'AUTHENTICATED', status).getWorker('worker_001');
     assert.equal(worker.statusLabel, status);
     assert.equal(worker.visualStatus, 'ERROR');
     assert.equal(worker.activeTaskCount, null);
@@ -87,15 +87,24 @@ test('LIVE repository marks stale and error snapshots as non-current and suppres
 });
 
 test('LIVE repository does not display cached process status while a snapshot is connecting', () => {
-  const repository = createLiveWorkerRepository(makeSnapshot(), 'IDLE', 'AUTHENTICATED');
+  const repository = createLiveWorkerRepository(makeSnapshot(), 'IDLE', 'AUTHENTICATED', 'CONNECTING');
   const worker = repository.getWorker('worker_001');
   assert.equal(worker.statusLabel, 'CONNECTING');
   assert.equal(worker.visualStatus, 'WAITING');
   assert.equal(worker.activeTaskCount, null);
 });
 
+test('global OFFLINE connection suppresses last-known worker counters and process state', () => {
+  const repository = createLiveWorkerRepository(makeSnapshot(), 'LIVE', 'AUTHENTICATED', 'OFFLINE');
+  const worker = repository.getWorker('worker_001');
+  assert.equal(worker.freshness, 'OFFLINE');
+  assert.equal(worker.statusLabel, 'OFFLINE');
+  assert.equal(worker.activeTaskCount, null);
+  assert.equal(worker.visualStatus, 'ERROR');
+});
+
 test('LIVE repository clears private worker records before authentication', () => {
-  const repository = createLiveWorkerRepository(makeSnapshot(), 'LIVE', 'UNKNOWN');
+  const repository = createLiveWorkerRepository(makeSnapshot(), 'LIVE', 'UNKNOWN', 'SESSION_REQUIRED');
   assert.deepEqual(repository.listWorkers(), []);
   const worker = repository.getWorker('worker_001');
   assert.equal(worker.statusLabel, 'UNAUTHENTICATED');
@@ -104,7 +113,7 @@ test('LIVE repository clears private worker records before authentication', () =
 });
 
 test('LIVE repository reports absent and unknown workers explicitly', () => {
-  const missing = createLiveWorkerRepository(makeSnapshot([]), 'LIVE', 'AUTHENTICATED')
+  const missing = createLiveWorkerRepository(makeSnapshot([]), 'LIVE', 'AUTHENTICATED', 'LIVE')
     .getWorker('worker_missing');
   assert.equal(missing.statusLabel, 'NOT_REPORTED');
   assert.equal(missing.source, null);
@@ -126,7 +135,7 @@ test('LIVE repository reports absent and unknown workers explicitly', () => {
 test('LIVE repository returns complete 50-worker and 100-worker rosters without fixed-roster truncation', () => {
   for (const count of [50, 100]) {
     const snapshot = makeSnapshot(Array.from({ length: count }, (_, index) => makeWorker(index + 1)));
-    const repository = createLiveWorkerRepository(snapshot, 'LIVE', 'AUTHENTICATED');
+    const repository = createLiveWorkerRepository(snapshot, 'LIVE', 'AUTHENTICATED', 'LIVE');
     const workers = repository.listWorkers();
 
     assert.equal(workers.length, count);
