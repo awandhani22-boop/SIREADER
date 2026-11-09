@@ -17,14 +17,25 @@ git -C $back status --short --branch
 
 Check both repositories before syncing. If either has tracked local changes, stop and reconcile them manually. Preserve all untracked user files. Never run `git reset`, `git clean`, or an automatic merge to `main`.
 
-If both working trees are safe for a fast-forward:
+If both working trees are safe, fetch the exact branch and switch to it without deleting or overwriting any untracked file:
 
 ```powershell
-git -C $front fetch origin phase-4-implementation
-git -C $front merge --ff-only FETCH_HEAD
+git -C $front fetch origin refs/heads/phase-4-implementation:refs/remotes/origin/phase-4-implementation
+git -C $back fetch origin refs/heads/phase-4-implementation:refs/remotes/origin/phase-4-implementation
 
-git -C $back fetch origin phase-4-implementation
-git -C $back merge --ff-only FETCH_HEAD
+if (git -C $front show-ref --verify --quiet refs/heads/phase-4-implementation) {
+  git -C $front switch phase-4-implementation
+  git -C $front merge --ff-only origin/phase-4-implementation
+} else {
+  git -C $front switch --create phase-4-implementation --track origin/phase-4-implementation
+}
+
+if (git -C $back show-ref --verify --quiet refs/heads/phase-4-implementation) {
+  git -C $back switch phase-4-implementation
+  git -C $back merge --ff-only origin/phase-4-implementation
+} else {
+  git -C $back switch --create phase-4-implementation --track origin/phase-4-implementation
+}
 
 git -C $front rev-parse --short HEAD
 git -C $back rev-parse --short HEAD
@@ -32,7 +43,7 @@ git -C $front status --short --branch
 git -C $back status --short --branch
 ```
 
-If a fast-forward is not possible, stop. Do not reset or rebase local work to force it.
+Expected current branch heads: Virtual Office `237c3fa`; Python Backend `45d8ce8`. If switching or fast-forwarding is blocked by a local file, stop and report the exact message. Do not reset, clean, stash, rebase, or overwrite local work to force it.
 
 ## 2. Automated validation
 
