@@ -574,6 +574,19 @@ test('SIREADER Phase 3.2 BFF Test Suite — Remediated', async (t) => {
     assert.equal(res.headers['allow'], 'GET');
   });
 
+
+  await t.test('Phase 4 workforce routes remain GET-only before body parsing', async () => {
+    const res = await makeRequest(server, {
+      method: 'POST',
+      path: '/api/v1/workforce/tasks',
+      headers: { ...VALID_HEADERS, 'content-type': 'application/json' },
+      body: JSON.stringify({ task: 'must-not-be-accepted' }),
+    });
+    assert.equal(res.status, 405);
+    assert.equal(res.json?.error?.code, 'METHOD_NOT_ALLOWED');
+    assert.equal(res.headers['allow'], 'GET');
+  });
+
   await t.test('P1-5. Middleware ordering: Oversized POST to unknown API route returns 404 (not 413)', async () => {
     const oversizedBody = JSON.stringify({ data: 'A'.repeat(5000) }); // > 1 KiB
     const res = await makeRequest(server, {
