@@ -21,6 +21,10 @@ import {
 } from '../workers/simulation.engine';
 import { useOfficeStore } from '../workers/worker.state';
 import { WorkerId } from '../workers/worker.types';
+import { useWorkerDisplayModeStore, shouldRunSimulationClock } from '../workers/worker.display-mode';
+import { createDemoWorkerDisplayRepository, createLiveWorkerDisplayRepository } from '../workers/worker.live-repository';
+import { useLiveStore } from '../live/live.state';
+import type { WorkforceRuntimeResponseDto } from '../live/live.contracts';
 
 /**
  * Granular Memoized Roster Worker Item (Phase 1.1 Fix C)
@@ -30,65 +34,79 @@ import { WorkerId } from '../workers/worker.types';
 export const RosterWorkerItem = React.memo(function RosterWorkerItem({
   workerId,
 }: {
-  workerId: WorkerId;
+  workerId: string;
 }) {
-  recordWorkerComponentRender(workerId, 'roster');
+  recordWorkerComponentRender(workerId as WorkerId, 'roster');
 
-  const worker = useOfficeStore((s) => s.workers[workerId]);
+  const displayMode = useWorkerDisplayModeStore((state) => state.mode);
+  const worker = useOfficeStore((state) => state.workers[workerId as WorkerId]);
   const activeTaskId = worker?.currentTaskId ?? null;
-  const activeTask = useOfficeStore((s) =>
-    activeTaskId ? s.tasks[activeTaskId] ?? null : null,
+  const activeTask = useOfficeStore((state) =>
+    activeTaskId ? state.tasks[activeTaskId] ?? null : null,
   );
-  const isSelected = useOfficeStore((s) => s.selectedWorkerId === workerId);
-  const selectWorker = useOfficeStore((s) => s.selectWorker);
+  const liveResource = useLiveStore((state) => state.resources['/api/v1/workforce/runtime']);
+  const liveSession = useLiveStore((state) => state.session);
+  const liveSnapshot = liveResource.data as WorkforceRuntimeResponseDto | null;
+  const liveRepository = createLiveWorkerDisplayRepository(liveSnapshot, liveResource.status, liveSession);
+  const demoRepository = createDemoWorkerDisplayRepository(worker ? [worker] : []);
+  const view = displayMode === 'LIVE'
+    ? liveRepository.getWorker(workerId)
+    : demoRepository.getWorker(workerId);
+  const isSelected = useOfficeStore((state) => state.selectedWorkerId === workerId);
+  const selectWorker = useOfficeStore((state) => state.selectWorker);
+  const canSelect = Boolean(worker);
 
-  if (!worker) return null;
+  if (displayMode === 'DEMO' && !worker) return null;
+
+  const displayName = displayMode === 'LIVE'
+    ? (view.source === 'LIVE' ? view.displayName : workerId)
+    : (worker?.name ?? workerId);
+  const department = displayMode === 'LIVE' ? view.department : (worker?.department ?? '');
+  const accentColor = worker?.avatarConfig.accentColor ?? '#06B6D4';
+  const statusTone = view.statusLabel === 'READY' || view.statusLabel === 'IDLE'
+    ? 'bg-emerald-950 text-emerald-300 border-emerald-500/40'
+    : view.statusLabel === 'BUSY' || view.statusLabel === 'RUNNING'
+      ? 'bg-cyan-950 text-cyan-300 border-cyan-500/40'
+      : view.statusLabel === 'STALE' || view.statusLabel === 'CONNECTING' || view.statusLabel === 'REFRESHING'
+        ? 'bg-amber-950 text-amber-300 border-amber-500/40'
+        : 'bg-rose-950 text-rose-300 border-rose-500/40';
 
   return (
     <button
       type="button"
-      data-testid={`roster-worker-${worker.id}`}
-      onClick={() => selectWorker(worker.id)}
-      className={`w-full flex flex-col gap-0.5 p-2 rounded-md border text-left transition-all cursor-pointer ${
+      data-testid={`roster-worker-${workerId}`}
+      onClick={() => {
+        if (canSelect) selectWorker(workerId as WorkerId);
+      }}
+      disabled={!canSelect}
+      className={`w-full flex flex-col gap-0.5 p-2 rounded-md border text-left transition-all ${canSelect ? 'cursor-pointer' : 'cursor-default'} ${
         isSelected
           ? 'bg-slate-900 border-cyan-400/80 shadow-[0_0_12px_rgba(6,182,212,0.2)]'
           : 'bg-slate-900/60 border-slate-800/90 hover:bg-slate-900 hover:border-slate-700'
       }`}
-      aria-label={`Select ${worker.name} in ${worker.department}`}
+      aria-label={`Select ${displayName} in ${department || 'LIVE workforce'}`}
+      aria-disabled={!canSelect}
     >
       <div className="flex items-center justify-between gap-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
-          <span
-            className="w-2 h-2 rounded-sm shrink-0"
-            style={{ backgroundColor: worker.avatarConfig.accentColor }}
-          />
-          <span className="text-xs font-semibold text-white truncate">
-            {worker.name}
-          </span>
+          <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: accentColor }} />
+          <span className="text-xs font-semibold text-white truncate">{displayName}</span>
         </div>
-        <span
-          className={`font-mono text-[9px] font-semibold px-1.5 py-0.5 rounded border shrink-0 ${
-            worker.status === 'PAUSED'
-              ? 'bg-amber-950 text-amber-300 border-amber-500/40'
-              : worker.status === 'BUSY' ||
-                  worker.status === 'WALKING' ||
-                  worker.status === 'TASK_RECEIVED'
-                ? 'bg-cyan-950 text-cyan-300 border-cyan-500/40'
-                : 'bg-slate-800 text-slate-400 border-slate-700'
-          }`}
-        >
-          {worker.status}
+        <span className={`font-mono text-[9px] font-semibold px-1.5 py-0.5 rounded border shrink-0 ${statusTone}`}>
+          {view.statusLabel}
         </span>
       </div>
 
       <div className="flex items-center justify-between text-[10px] text-slate-400">
-        <span className="truncate">{worker.department}</span>
+        <span className="truncate">{department || (displayMode === 'LIVE' ? 'Backend registry' : '—')}</span>
         <span className="font-mono text-slate-400 shrink-0">
-          Queue: {worker.taskQueueIds.length}
+          {displayMode === 'LIVE'
+            ? `Active: ${view.activeTaskCount ?? '—'}/${view.maxConcurrency ?? '—'}`
+            : `Queue: ${worker?.taskQueueIds.length ?? 0}`}
         </span>
       </div>
 
-      {activeTask && (
+      {displayMode === 'DEMO' && activeTask && (
         <div className="flex items-center justify-between gap-2 pt-0.5">
           <span className="font-mono text-[9px] text-sky-300 truncate">
             {activeTask.status}: {activeTask.title}
@@ -97,6 +115,12 @@ export const RosterWorkerItem = React.memo(function RosterWorkerItem({
             {Math.round(activeTask.progress)}%
           </span>
         </div>
+      )}
+      {displayMode === 'LIVE' && view.freshness === 'STALE' && (
+        <span className="font-mono text-[9px] text-amber-300">Last-known backend data · stale</span>
+      )}
+      {displayMode === 'LIVE' && view.freshness === 'UNAUTHENTICATED' && (
+        <span className="font-mono text-[9px] text-amber-300">Login operator required</span>
       )}
     </button>
   );
@@ -115,6 +139,12 @@ export const RosterWorkerItem = React.memo(function RosterWorkerItem({
  */
 
 export function OfficeApp() {
+  const displayMode = useWorkerDisplayModeStore((state) => state.mode);
+  const liveResource = useLiveStore((state) => state.resources['/api/v1/workforce/runtime']);
+  const liveSession = useLiveStore((state) => state.session);
+  const liveSnapshot = liveResource.data as WorkforceRuntimeResponseDto | null;
+  const liveRepository = createLiveWorkerDisplayRepository(liveSnapshot, liveResource.status, liveSession);
+  const liveWorkerIds = liveRepository.listWorkers().map((worker) => worker.workerId);
   const isGlobalPaused = useOfficeStore((s) => s.isGlobalPaused);
   const simSpeedMultiplier = useOfficeStore((s) => s.simSpeedMultiplier);
   const advanceByWallClock = useOfficeStore((s) => s.advanceByWallClock);
@@ -140,10 +170,10 @@ export function OfficeApp() {
     SimulationEngine.syncRealtimeClockAnchor(
       useOfficeStore.getState(),
       startWallNow,
-      !isGlobalPaused,
+      shouldRunSimulationClock(displayMode, isGlobalPaused),
     );
 
-    if (isGlobalPaused) return;
+    if (!shouldRunSimulationClock(displayMode, isGlobalPaused)) return;
 
     const intervalId = window.setInterval(() => {
       const now = performance.now();
@@ -165,7 +195,7 @@ export function OfficeApp() {
         false,
       );
     };
-  }, [isGlobalPaused, simSpeedMultiplier, advanceByWallClock]);
+  }, [displayMode, isGlobalPaused, simSpeedMultiplier, advanceByWallClock]);
 
   return (
     <div className="relative w-screen h-screen flex flex-col bg-[#070C18] text-slate-100 overflow-hidden">
@@ -252,7 +282,7 @@ export function OfficeApp() {
               <div className="flex items-center justify-between px-3 py-2 bg-[#080E1A] border-b border-slate-800">
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
                   <Users className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>7 AI Workers · Roster</span>
+                  <span>{displayMode === 'LIVE' ? liveWorkerIds.length + ' Backend Workers · LIVE' : '7 AI Workers · DEMO'}</span>
                 </div>
                 <button
                   type="button"
@@ -265,9 +295,11 @@ export function OfficeApp() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
-                {workerOrder.map((workerId) => (
-                  <RosterWorkerItem key={workerId} workerId={workerId} />
-                ))}
+                {displayMode === 'LIVE'
+                  ? (liveWorkerIds.length > 0
+                    ? liveWorkerIds.map((workerId) => <RosterWorkerItem key={workerId} workerId={workerId} />)
+                    : <p data-testid="live-roster-empty" className="p-2 text-[10px] text-slate-500">Menunggu snapshot workforce LIVE terautentikasi.</p>)
+                  : workerOrder.map((workerId) => <RosterWorkerItem key={workerId} workerId={workerId} />)}
               </div>
             </nav>
           ) : (
@@ -278,26 +310,28 @@ export function OfficeApp() {
               aria-label="Expand Worker Roster"
             >
               <Users className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Roster (7)</span>
+              <span>Roster ({displayMode === 'LIVE' ? liveWorkerIds.length : workerOrder.length})</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
 
         {/* Bottom-Left Simulated Activity Feed */}
-        <div className="absolute bottom-0 left-3 z-20 pointer-events-auto max-w-[calc(100vw-24px)]">
-          <ActivityFeed />
-        </div>
+        {displayMode === 'DEMO' && (
+          <div className="absolute bottom-0 left-3 z-20 pointer-events-auto max-w-[calc(100vw-24px)]">
+            <ActivityFeed />
+          </div>
+        )}
 
         {/* Right Selected Worker Detail Drawer (hidden when Global Queue Drawer is open) */}
-        {selectedWorkerId && !isGlobalQueueOpen && (
+        {displayMode === 'DEMO' && selectedWorkerId && !isGlobalQueueOpen && (
           <div className="absolute top-0 right-0 bottom-0 z-20 flex pointer-events-auto max-w-full">
             <WorkerPanel />
           </div>
         )}
 
         {/* Right Global Task Queue Drawer */}
-        {isGlobalQueueOpen && (
+        {displayMode === 'DEMO' && isGlobalQueueOpen && (
           <div className="absolute top-0 right-0 bottom-0 z-20 flex pointer-events-auto max-w-full">
             <GlobalQueuePanel />
           </div>
