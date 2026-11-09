@@ -318,7 +318,7 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
     assert.equal(calls[2].init.body, JSON.stringify({ password: 'transient-test-password' }));
     assert.equal(calls[3].init.body, '{}');
     assert.equal(calls.every((call) => !new Headers(call.init.headers).has('authorization')), true);
-    assert.equal(Object.keys(api).sort().join(','), 'clearCsrfToken,get,getSession,getTaskTimeline,getWorkforceAttempts,getWorkforceTasks,login,logout,sendWorkforceCommand');
+    assert.equal(Object.keys(api).sort().join(','), 'clearCsrfToken,get,getPendingWorkforceReviews,getSession,getTaskTimeline,getWorkforceAttempts,getWorkforceReview,getWorkforceTasks,login,logout,sendWorkforceCommand');
   });
 
 
