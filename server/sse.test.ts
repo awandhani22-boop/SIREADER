@@ -182,7 +182,7 @@ test('SSE BFF aborts upstream and releases stream capacity after browser disconn
         signals.push(init.signal);
         const body = new ReadableStream<Uint8Array>({
           start(controller) {
-            controller.enqueue(encoder.encode('retry: 3000\n\n'));
+            controller.enqueue(encoder.encode('retry: 3000' + String.fromCharCode(10, 10)));
           },
           cancel() {
             upstreamCancelCount += 1;
