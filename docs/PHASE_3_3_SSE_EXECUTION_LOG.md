@@ -59,10 +59,11 @@ Virtual Office:
 ## CI evidence
 
 ### Virtual Office
-- Implementation code commit: 57e3f2d1d1eb3a616eb6792f69294f0d3072e261 (current documentation branch head may be later)
-- GitHub Actions run: 42534082388
-- Result: **367/367 tests passed, 0 failed; TypeScript check passed; production build passed.**
-- This includes SSE BFF proxy integration/security tests, frontend event schema tests, poller invalidation/fallback tests, and existing regression suite.
+- Initial Phase 3.3 implementation code commit: `57e3f2d1d1eb3a616eb6792f69294f0d3072e261`.
+- Initial GitHub Actions run: `42534082388`; **367/367 tests passed, TypeScript check passed, and production build passed.**
+- Follow-up BFF disconnect/capacity test commit: `e1a91a0cc018269b4d830568c402e7958ee32389`; GitHub Actions run `42572749792` completed with **success** (full test suite, TypeScript, production build). The HTTP integration test keeps one SSE stream open with a one-stream test cap, asserts a second connection receives 503 + Retry-After, destroys the browser response, verifies the BFF aborts the upstream signal and cancels its body, then verifies a new stream is accepted after the slot is released.
+- Follow-up active-session-expiry test commit: `51fe17fe06b16f1766e9c4abdf26a4adcf5bd4d4`; GitHub Actions run `42572901195` completed with **success** (full test suite, TypeScript, production build). The fake-clock test opens SSE, simulates the snapshot endpoint returning SESSION_REQUIRED at the healthy-SSE 60-second reconciliation, and asserts the poller stops, EventSource closes, private LIVE snapshots clear, and timers are removed.
+- Together with the original suite, this covers SSE BFF proxy integration/security, browser event schema validation, targeted invalidation, polling fallback, stream reset/reconnect, upstream cancellation/capacity release, and active-session expiry cleanup.
 
 ### Python Backend
 - Backend heartbeat-test commit: `b8dac552decc0c25a9aca176d81cd6b387d6bc4a`.
