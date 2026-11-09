@@ -65,6 +65,15 @@ function isAbortError(error: unknown): boolean {
     'name' in error && (error as { name?: unknown }).name === 'AbortError';
 }
 
+function stableCommandSerialization(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return '[' + value.map(stableCommandSerialization).join(',') + ']';
+  const record = value as Record<string, unknown>;
+  return '{' + Object.keys(record).sort().map((key) =>
+    JSON.stringify(key) + ':' + stableCommandSerialization(record[key]),
+  ).join(',') + '}';
+}
+
 function hasJsonContentType(response: Response): boolean {
   const raw = response.headers.get('content-type') ?? '';
   return raw.split(';', 1)[0].trim().toLowerCase() === 'application/json';
@@ -94,6 +103,7 @@ export function createLiveApiClient(options: LiveApiClientOptions = {}): LiveApi
     throw new Error('LIVE API timeout must be between 1 and 5000 milliseconds.');
   }
   const idempotencyKeyFactory = options.idempotencyKeyFactory ?? (() => crypto.randomUUID());
+  const pendingCommandKeys = new Map<string, string>();
 
   let csrfToken: string | null = null;
 
@@ -270,8 +280,18 @@ export function createLiveApiClient(options: LiveApiClientOptions = {}): LiveApi
       command: WorkforceCommandRequest,
     ): Promise<WorkforceCommandResponseDto> {
       if (!csrfToken) throw new LiveApiError('CSRF_MISSING');
-      const idempotencyKey = idempotencyKeyFactory();
-      if (!/^[A-Za-z0-9._~-]{8,128}$/.test(idempotencyKey)) throw new LiveApiError('BAD_REQUEST');
+      const commandFingerprint = path + ':' + stableCommandSerialization(command);
+      let idempotencyKey = pendingCommandKeys.get(commandFingerprint);
+      if (!idempotencyKey) {
+        idempotencyKey = idempotencyKeyFactory();
+        if (!/^[A-Za-z0-9._~-]{8,128}$/.test(idempotencyKey)) throw new LiveApiError('BAD_REQUEST');
+        pendingCommandKeys.set(commandFingerprint, idempotencyKey);
+        while (pendingCommandKeys.size > 32) {
+          const oldestKey = pendingCommandKeys.keys().next().value;
+          if (oldestKey === undefined) break;
+          pendingCommandKeys.delete(oldestKey);
+        }
+      }
       if (![
         '/api/v1/commands/tasks/enqueue',
         '/api/v1/commands/tasks/cancel',
@@ -292,14 +312,22 @@ export function createLiveApiClient(options: LiveApiClientOptions = {}): LiveApi
         await requireSuccess(response);
         const payload = await readSuccessfulJson(response);
         try {
-          return parseWorkforceCommandResponse(payload, path, command);
+          const parsed = parseWorkforceCommandResponse(payload, path, command);
+          pendingCommandKeys.delete(commandFingerprint);
+          return parsed;
         } catch {
+          // A malformed success response may follow a committed command. Keep
+          // the key so an operator retry receives the original audit result.
           throw new LiveApiError('SCHEMA_INVALID');
         }
       } catch (error) {
         if (error instanceof LiveApiError && (
           error.code === 'SESSION_REQUIRED' || error.code === 'CSRF_INVALID'
         )) csrfToken = null;
+        const outcomeMayBeUnknown = error instanceof LiveApiError && [
+          'TIMEOUT', 'OFFLINE', 'UNREACHABLE', 'BACKEND_ERROR', 'SCHEMA_INVALID',
+        ].includes(error.code);
+        if (!outcomeMayBeUnknown) pendingCommandKeys.delete(commandFingerprint);
         throw error;
       }
     },

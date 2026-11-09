@@ -361,6 +361,54 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
     assert.equal(calls[1].init.body, JSON.stringify({ worker_id: 'haiku', accepting_tasks: false }));
   });
 
+
+  await t.test('workforce command reuses the same idempotency key after an ambiguous timeout', async () => {
+    const calls: Array<{ headers: Headers; body: string }> = [];
+    let keySequence = 0;
+    let attempts = 0;
+    const responseBody = {
+      command_id: 'cmd_timeout1234',
+      actor_id: 'local_operator',
+      command_type: 'TASK_ENQUEUE',
+      target_id: 'task_timeout1234',
+      correlation_id: 'corr_timeout1234',
+      outcome: { accepted: true, created: true, status: 'QUEUED', task_id: 'task_timeout1234' },
+      created_at: '2026-11-09T10:00:00Z',
+      replayed: true,
+    };
+    const api = createLiveApiClient({
+      idempotencyKeyFactory: () => 'timeout-retry-key-' + (++keySequence),
+      fetchImpl: async (input, init = {}) => {
+        if (String(input) === '/api/auth/session') return jsonResponse(authenticatedSession);
+        attempts += 1;
+        calls.push({ headers: new Headers(init.headers), body: String(init.body) });
+        if (attempts === 1) return jsonResponse(bffError('TIMEOUT'), 504);
+        return jsonResponse(responseBody);
+      },
+    });
+    await api.getSession();
+    const request = {
+      task_type: 'SUMMARIZATION',
+      title: 'Retry after ambiguous timeout',
+      required_capability: 'summarization',
+      requested_worker_id: 'haiku',
+      input_payload: { text: 'safe content' },
+      priority: 50,
+      max_attempts: 2,
+      non_trading_acknowledged: true as const,
+    };
+    await assert.rejects(
+      api.sendWorkforceCommand('/api/v1/commands/tasks/enqueue', request),
+      (error: unknown) => error instanceof LiveApiError && error.code === 'TIMEOUT',
+    );
+    const result = await api.sendWorkforceCommand('/api/v1/commands/tasks/enqueue', request);
+    assert.equal(result.replayed, true);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].headers.get('idempotency-key'), calls[1].headers.get('idempotency-key'));
+    assert.equal(calls[0].body, calls[1].body);
+    assert.equal(keySequence, 1);
+  });
+
   await t.test('workforce command fails closed without a CSRF token and validates response schema', async () => {
     const noSession = createLiveApiClient({ fetchImpl: async () => jsonResponse({}) });
     await assert.rejects(
