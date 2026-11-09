@@ -22,7 +22,7 @@ import {
 import { useOfficeStore } from '../workers/worker.state';
 import { WorkerId } from '../workers/worker.types';
 import { useWorkerDisplayModeStore, shouldRunSimulationClock } from '../workers/worker.display-mode';
-import { createDemoWorkerRepository, createLiveWorkerRepository } from '../workers/worker.live-repository';
+import { createDemoWorkerDisplayRepository, createLiveWorkerDisplayRepository } from '../workers/worker.live-repository';
 import { useLiveStore } from '../live/live.state';
 import type { WorkforceRuntimeResponseDto } from '../live/live.contracts';
 
@@ -47,8 +47,8 @@ export const RosterWorkerItem = React.memo(function RosterWorkerItem({
   const liveResource = useLiveStore((state) => state.resources['/api/v1/workforce/runtime']);
   const liveSession = useLiveStore((state) => state.session);
   const liveSnapshot = liveResource.data as WorkforceRuntimeResponseDto | null;
-  const liveRepository = createLiveWorkerRepository(liveSnapshot, liveResource.status, liveSession);
-  const demoRepository = createDemoWorkerRepository(worker ? [worker] : []);
+  const liveRepository = createLiveWorkerDisplayRepository(liveSnapshot, liveResource.status, liveSession);
+  const demoRepository = createDemoWorkerDisplayRepository(worker ? [worker] : []);
   const view = displayMode === 'LIVE'
     ? liveRepository.getWorker(workerId)
     : demoRepository.getWorker(workerId);
@@ -143,7 +143,7 @@ export function OfficeApp() {
   const liveResource = useLiveStore((state) => state.resources['/api/v1/workforce/runtime']);
   const liveSession = useLiveStore((state) => state.session);
   const liveSnapshot = liveResource.data as WorkforceRuntimeResponseDto | null;
-  const liveRepository = createLiveWorkerRepository(liveSnapshot, liveResource.status, liveSession);
+  const liveRepository = createLiveWorkerDisplayRepository(liveSnapshot, liveResource.status, liveSession);
   const liveWorkerIds = liveRepository.listWorkers().map((worker) => worker.workerId);
   const isGlobalPaused = useOfficeStore((s) => s.isGlobalPaused);
   const simSpeedMultiplier = useOfficeStore((s) => s.simSpeedMultiplier);
