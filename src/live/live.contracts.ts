@@ -11,6 +11,9 @@ export const LIVE_API_PATHS = Object.freeze([
   '/api/v1/pipeline/active',
   '/api/v1/market-watches/active',
   '/api/v1/audit/decisions',
+  '/api/v1/workforce/runtime',
+  '/api/v1/workforce/tasks',
+  '/api/v1/workforce/activity',
 ] as const);
 
 export type LiveApiPath = (typeof LIVE_API_PATHS)[number];
@@ -131,12 +134,135 @@ export interface AuditDecisionsDto {
   readonly decisions: readonly AuditDecisionDto[];
 }
 
+
+export type WorkforceProcessStatus =
+  | 'STARTING' | 'READY' | 'DRAINING' | 'STOPPED' | 'FAILED'
+  | 'STALE' | 'OFFLINE' | 'DISABLED';
+export type WorkforceTaskStatus =
+  | 'QUEUED' | 'CLAIMED' | 'RUNNING' | 'RETRY_WAIT' | 'WAITING_REVIEW'
+  | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'DEAD_LETTERED';
+export type WorkforceAttemptStatus =
+  | 'CLAIMED' | 'STARTED' | 'PROVIDER_REQUESTED' | 'COMPLETED'
+  | 'FAILED' | 'TIMED_OUT' | 'UNKNOWN' | 'CANCELLED';
+export type WorkforceActivityType =
+  | 'TASK_ENQUEUED' | 'TASK_CLAIMED' | 'TASK_STARTED' | 'PROVIDER_REQUESTED'
+  | 'TASK_RETRIED' | 'TASK_COMPLETED' | 'TASK_FAILED' | 'TASK_CANCELLED'
+  | 'TASK_WAITING_REVIEW' | 'TASK_DEAD_LETTERED' | 'WORKER_HEARTBEAT' | 'WORKER_STATE_CHANGED';
+
+export interface WorkforceWorkerDto {
+  readonly worker_id: string;
+  readonly display_name: string;
+  readonly role: string;
+  readonly department: string;
+  readonly enabled: boolean;
+  readonly max_concurrency: number;
+  readonly model_tier: 'NONE' | 'FAST' | 'REASONING' | 'ESCALATION';
+  readonly capability_ids: readonly string[];
+  readonly process_status: WorkforceProcessStatus;
+  readonly heartbeat_at: string | null;
+  readonly active_task_count: number;
+  readonly in_flight_provider_requests: number;
+  readonly schema_version: 1;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
+export interface WorkforceRuntimeDto {
+  readonly observed_at: string;
+  readonly configured_workers: number;
+  readonly ready_workers: number;
+  readonly stale_workers: number;
+  readonly offline_workers: number;
+  readonly active_tasks: number;
+  readonly queued_tasks: number;
+  readonly waiting_review_tasks: number;
+  readonly dead_lettered_tasks: number;
+  readonly completed_last_24h: number;
+}
+
+export interface WorkforceRuntimeResponseDto {
+  readonly server_time_utc: string;
+  readonly runtime: WorkforceRuntimeDto;
+  readonly workers: readonly WorkforceWorkerDto[];
+}
+
+export interface WorkforceTaskDto {
+  readonly task_id: string;
+  readonly correlation_id: string;
+  readonly schema_version: 1;
+  readonly task_type: string;
+  readonly title: string;
+  readonly required_capability: string;
+  readonly requested_worker_id: string | null;
+  readonly assigned_worker_id: string | null;
+  readonly priority: number;
+  readonly status: WorkforceTaskStatus;
+  readonly attempts: number;
+  readonly max_attempts: number;
+  readonly not_before: string;
+  readonly deadline_at: string | null;
+  readonly lease_expires_at: string | null;
+  readonly failure_code: string | null;
+  readonly created_at: string;
+  readonly updated_at: string;
+  readonly completed_at: string | null;
+}
+
+export interface WorkforceTasksResponseDto {
+  readonly server_time_utc: string;
+  readonly total_count: number;
+  readonly limit: number;
+  readonly offset: number;
+  readonly tasks: readonly WorkforceTaskDto[];
+}
+
+export interface WorkforceAttemptDto {
+  readonly attempt_id: string;
+  readonly task_id: string;
+  readonly attempt_number: number;
+  readonly worker_id: string;
+  readonly status: WorkforceAttemptStatus;
+  readonly billing_currency: CurrencyCode | null;
+  readonly cost_amount: number | string | null;
+  readonly error_code: string | null;
+  readonly started_at: string | null;
+  readonly finished_at: string | null;
+  readonly created_at: string;
+}
+
+export interface WorkforceAttemptsResponseDto {
+  readonly server_time_utc: string;
+  readonly task_id: string;
+  readonly attempts: readonly WorkforceAttemptDto[];
+}
+
+export interface WorkforceActivityDto {
+  readonly event_id: string;
+  readonly event_type: WorkforceActivityType;
+  readonly occurred_at: string;
+  readonly worker_id: string | null;
+  readonly task_id: string | null;
+  readonly attempt_id: string | null;
+  readonly correlation_id: string;
+}
+
+export interface WorkforceActivityResponseDto {
+  readonly server_time_utc: string;
+  readonly total_count: number;
+  readonly limit: number;
+  readonly offset: number;
+  readonly events: readonly WorkforceActivityDto[];
+}
+
 export interface LiveApiResponseMap {
   '/api/v1/system/status': SystemStatusDto;
   '/api/v1/telemetry/usage': TelemetryUsageDto;
   '/api/v1/pipeline/active': ActivePipelineDto;
   '/api/v1/market-watches/active': ActiveMarketWatchesDto;
   '/api/v1/audit/decisions': AuditDecisionsDto;
+  '/api/v1/workforce/runtime': WorkforceRuntimeResponseDto;
+  '/api/v1/workforce/tasks': WorkforceTasksResponseDto;
+  '/api/v1/workforce/activity': WorkforceActivityResponseDto;
 }
 
 export interface AuthenticatedSessionDto {
@@ -407,6 +533,197 @@ function validAuditDecisions(value: unknown): value is AuditDecisionsDto {
   );
 }
 
+
+const WORKFORCE_PROCESS_STATUSES: readonly WorkforceProcessStatus[] = [
+  'STARTING', 'READY', 'DRAINING', 'STOPPED', 'FAILED', 'STALE', 'OFFLINE', 'DISABLED',
+];
+const WORKFORCE_TASK_STATUSES: readonly WorkforceTaskStatus[] = [
+  'QUEUED', 'CLAIMED', 'RUNNING', 'RETRY_WAIT', 'WAITING_REVIEW',
+  'COMPLETED', 'FAILED', 'CANCELLED', 'DEAD_LETTERED',
+];
+const WORKFORCE_ATTEMPT_STATUSES: readonly WorkforceAttemptStatus[] = [
+  'CLAIMED', 'STARTED', 'PROVIDER_REQUESTED', 'COMPLETED',
+  'FAILED', 'TIMED_OUT', 'UNKNOWN', 'CANCELLED',
+];
+const WORKFORCE_ACTIVITY_TYPES: readonly WorkforceActivityType[] = [
+  'TASK_ENQUEUED', 'TASK_CLAIMED', 'TASK_STARTED', 'PROVIDER_REQUESTED',
+  'TASK_RETRIED', 'TASK_COMPLETED', 'TASK_FAILED', 'TASK_CANCELLED',
+  'TASK_WAITING_REVIEW', 'TASK_DEAD_LETTERED', 'WORKER_HEARTBEAT', 'WORKER_STATE_CHANGED',
+];
+
+function validNullableDateTime(value: unknown): boolean {
+  return value === null || isIsoDateTime(value);
+}
+
+function validWorkforceWorker(value: unknown): value is WorkforceWorkerDto {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, [
+      'worker_id', 'display_name', 'role', 'department', 'enabled',
+      'max_concurrency', 'model_tier', 'capability_ids', 'process_status',
+      'heartbeat_at', 'active_task_count', 'in_flight_provider_requests',
+      'schema_version', 'created_at', 'updated_at',
+    ]) &&
+    isString(value.worker_id) && value.worker_id.length >= 2 && value.worker_id.length <= 64 &&
+    isString(value.display_name) && isString(value.role) && isString(value.department) &&
+    isBoolean(value.enabled) &&
+    isInteger(value.max_concurrency, 1) && value.max_concurrency <= 32 &&
+    (value.model_tier === 'NONE' || value.model_tier === 'FAST' ||
+      value.model_tier === 'REASONING' || value.model_tier === 'ESCALATION') &&
+    Array.isArray(value.capability_ids) && value.capability_ids.length <= 28 &&
+    value.capability_ids.every((item) => isString(item) && /^[a-z][a-z0-9_]{1,63}$/.test(item)) &&
+    WORKFORCE_PROCESS_STATUSES.includes(value.process_status as WorkforceProcessStatus) &&
+    validNullableDateTime(value.heartbeat_at) &&
+    isInteger(value.active_task_count) &&
+    isInteger(value.in_flight_provider_requests) &&
+    value.schema_version === 1 &&
+    isIsoDateTime(value.created_at) && isIsoDateTime(value.updated_at)
+  );
+}
+
+function validWorkforceRuntime(value: unknown): value is WorkforceRuntimeDto {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, [
+      'observed_at', 'configured_workers', 'ready_workers', 'stale_workers',
+      'offline_workers', 'active_tasks', 'queued_tasks', 'waiting_review_tasks',
+      'dead_lettered_tasks', 'completed_last_24h',
+    ]) &&
+    isIsoDateTime(value.observed_at) &&
+    isInteger(value.configured_workers) && isInteger(value.ready_workers) &&
+    isInteger(value.stale_workers) && isInteger(value.offline_workers) &&
+    isInteger(value.active_tasks) && isInteger(value.queued_tasks) &&
+    isInteger(value.waiting_review_tasks) && isInteger(value.dead_lettered_tasks) &&
+    isInteger(value.completed_last_24h)
+  );
+}
+
+function validWorkforceRuntimeResponse(value: unknown): value is WorkforceRuntimeResponseDto {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, ['server_time_utc', 'runtime', 'workers']) &&
+    isIsoDateTime(value.server_time_utc) &&
+    validWorkforceRuntime(value.runtime) &&
+    Array.isArray(value.workers) && value.workers.length <= 100 &&
+    value.workers.every(validWorkforceWorker)
+  );
+}
+
+function validWorkforceTask(value: unknown): value is WorkforceTaskDto {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, [
+      'task_id', 'correlation_id', 'schema_version', 'task_type', 'title',
+      'required_capability', 'requested_worker_id', 'assigned_worker_id',
+      'priority', 'status', 'attempts', 'max_attempts', 'not_before',
+      'deadline_at', 'lease_expires_at', 'failure_code', 'created_at',
+      'updated_at', 'completed_at',
+    ]) &&
+    isString(value.task_id) && value.task_id.length >= 8 && value.task_id.length <= 64 &&
+    isString(value.correlation_id) && value.correlation_id.length >= 8 && value.correlation_id.length <= 64 &&
+    value.schema_version === 1 &&
+    isString(value.task_type) && isString(value.title) && isString(value.required_capability) &&
+    (value.requested_worker_id === null || isString(value.requested_worker_id)) &&
+    (value.assigned_worker_id === null || isString(value.assigned_worker_id)) &&
+    isInteger(value.priority, 1) && value.priority <= 100 &&
+    WORKFORCE_TASK_STATUSES.includes(value.status as WorkforceTaskStatus) &&
+    isInteger(value.attempts) && value.attempts <= 100 &&
+    isInteger(value.max_attempts, 1) && value.max_attempts <= 10 &&
+    isIsoDateTime(value.not_before) &&
+    validNullableDateTime(value.deadline_at) &&
+    validNullableDateTime(value.lease_expires_at) &&
+    (value.failure_code === null || isString(value.failure_code)) &&
+    isIsoDateTime(value.created_at) && isIsoDateTime(value.updated_at) &&
+    validNullableDateTime(value.completed_at)
+  );
+}
+
+function validWorkforceTasksResponse(value: unknown): value is WorkforceTasksResponseDto {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, ['server_time_utc', 'total_count', 'limit', 'offset', 'tasks']) &&
+    isIsoDateTime(value.server_time_utc) &&
+    isInteger(value.total_count) &&
+    isInteger(value.limit, 1) && value.limit <= 100 &&
+    isInteger(value.offset) &&
+    Array.isArray(value.tasks) && value.tasks.length <= 100 &&
+    value.tasks.every(validWorkforceTask)
+  );
+}
+
+function validWorkforceAttempt(value: unknown): value is WorkforceAttemptDto {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, [
+      'attempt_id', 'task_id', 'attempt_number', 'worker_id', 'status',
+      'billing_currency', 'cost_amount', 'error_code', 'started_at',
+      'finished_at', 'created_at',
+    ]) &&
+    isString(value.attempt_id) && value.attempt_id.length >= 8 && value.attempt_id.length <= 64 &&
+    isString(value.task_id) && value.task_id.length >= 8 && value.task_id.length <= 64 &&
+    isInteger(value.attempt_number, 1) && value.attempt_number <= 10 &&
+    isString(value.worker_id) &&
+    WORKFORCE_ATTEMPT_STATUSES.includes(value.status as WorkforceAttemptStatus) &&
+    (value.billing_currency === null || hasCurrency(value.billing_currency)) &&
+    isDecimal(value.cost_amount, true) &&
+    (value.error_code === null || isString(value.error_code)) &&
+    validNullableDateTime(value.started_at) &&
+    validNullableDateTime(value.finished_at) &&
+    isIsoDateTime(value.created_at)
+  );
+}
+
+function validWorkforceAttemptsResponse(value: unknown): value is WorkforceAttemptsResponseDto {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, ['server_time_utc', 'task_id', 'attempts']) &&
+    isIsoDateTime(value.server_time_utc) &&
+    isString(value.task_id) && value.task_id.length >= 8 && value.task_id.length <= 64 &&
+    Array.isArray(value.attempts) && value.attempts.length <= 10 &&
+    value.attempts.every(validWorkforceAttempt)
+  );
+}
+
+function validWorkforceActivity(value: unknown): value is WorkforceActivityDto {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, [
+      'event_id', 'event_type', 'occurred_at', 'worker_id',
+      'task_id', 'attempt_id', 'correlation_id',
+    ]) &&
+    isString(value.event_id) && value.event_id.length >= 8 && value.event_id.length <= 64 &&
+    WORKFORCE_ACTIVITY_TYPES.includes(value.event_type as WorkforceActivityType) &&
+    isIsoDateTime(value.occurred_at) &&
+    (value.worker_id === null || isString(value.worker_id)) &&
+    (value.task_id === null || isString(value.task_id)) &&
+    (value.attempt_id === null || isString(value.attempt_id)) &&
+    isString(value.correlation_id) && value.correlation_id.length >= 8 && value.correlation_id.length <= 64
+  );
+}
+
+function validWorkforceActivityResponse(value: unknown): value is WorkforceActivityResponseDto {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, ['server_time_utc', 'total_count', 'limit', 'offset', 'events']) &&
+    isIsoDateTime(value.server_time_utc) &&
+    isInteger(value.total_count) &&
+    isInteger(value.limit, 1) && value.limit <= 100 &&
+    isInteger(value.offset) &&
+    Array.isArray(value.events) && value.events.length <= 100 &&
+    value.events.every(validWorkforceActivity)
+  );
+}
+
+export function parseWorkforceAttemptsResponse(
+  value: unknown,
+  expectedTaskId: string,
+): WorkforceAttemptsResponseDto {
+  if (!validWorkforceAttemptsResponse(value) || value.task_id !== expectedTaskId) {
+    throw new LiveContractError();
+  }
+  return value;
+}
+
 export function parseLiveApiResponse<K extends LiveApiPath>(
   path: K,
   value: unknown,
@@ -427,6 +744,15 @@ export function parseLiveApiResponse<K extends LiveApiPath>(
       break;
     case '/api/v1/audit/decisions':
       valid = validAuditDecisions(value);
+      break;
+    case '/api/v1/workforce/runtime':
+      valid = validWorkforceRuntimeResponse(value);
+      break;
+    case '/api/v1/workforce/tasks':
+      valid = validWorkforceTasksResponse(value);
+      break;
+    case '/api/v1/workforce/activity':
+      valid = validWorkforceActivityResponse(value);
       break;
     default:
       throw new LiveContractError();
