@@ -61,7 +61,7 @@ export function WorkforceLiveDock() {
   const displayMode = useWorkerDisplayModeStore((state) => state.mode);
 
   useEffect(() => {
-    if (displayMode === 'LIVE') setIsOpen(true);
+    setIsOpen(displayMode === 'LIVE');
   }, [displayMode]);
 
   const connection = useLiveStore((state) => state.connection);
