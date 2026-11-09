@@ -65,7 +65,7 @@ const FIXTURES: Record<UpstreamApiPath, unknown> = {
     workers: [{
       worker_id: 'haiku', display_name: 'Haiku Worker',
       role: 'Fast Research & Intake Specialist', department: 'Research',
-      enabled: true, max_concurrency: 2, model_tier: 'FAST',
+      enabled: true, accepting_tasks: true, max_concurrency: 2, model_tier: 'FAST',
       capability_ids: ['quick_research', 'summarization'],
       process_status: 'OFFLINE', heartbeat_at: null,
       active_task_count: 0, in_flight_provider_requests: 0,
