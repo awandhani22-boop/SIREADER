@@ -146,7 +146,7 @@ export function createReviewReadHandlers(options: ReviewReadProxyOptions = {}) {
         }
         const payload = await readBoundedJson(upstream);
         if (!validate(payload)) {
-          SafeLogger.warn('REVIEW_UPSTREAM_SCHEMA_REJECTED', {
+          SafeLogger.warn('UPSTREAM_RESPONSE_REJECTED', {
             method: 'GET', route: req.path, statusCode: 502, errorCode: 'SCHEMA_INVALID',
           });
           sendBffError(res, 502, 'SCHEMA_INVALID', 'Review backend response did not match the required contract.');
@@ -160,7 +160,7 @@ export function createReviewReadHandlers(options: ReviewReadProxyOptions = {}) {
         } else if (error instanceof Error && error.message === 'TOO_LARGE') {
           sendBffError(res, 502, 'TOO_LARGE', 'Review backend response exceeds the 1 MiB limit.');
         } else {
-          SafeLogger.warn('REVIEW_UPSTREAM_REQUEST_FAILED', {
+          SafeLogger.warn('UPSTREAM_REQUEST_FAILED', {
             method: 'GET', route: req.path, statusCode: 502, errorCode: 'UNREACHABLE',
           });
           sendBffError(res, 502, 'UNREACHABLE', 'Review backend service is unavailable.');

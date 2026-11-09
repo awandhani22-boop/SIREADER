@@ -191,11 +191,11 @@ test('review adjudication proxy injects the trusted operator identity and valida
     created_at: '2026-11-10T00:00:00Z',
     replayed: false,
   };
-  let receivedHeaders: Headers | null = null;
+  const receivedHeaders = { current: new Headers() };
   const proxy = await startProxy({
     tokenProvider: () => TOKEN,
     fetchImpl: async (_input, init = {}) => {
-      receivedHeaders = new Headers(init.headers);
+      receivedHeaders.current = new Headers(init.headers);
       return new Response(JSON.stringify(responseBody), {
         status: 200, headers: { 'content-type': 'application/json' },
       });
@@ -214,9 +214,9 @@ test('review adjudication proxy injects the trusted operator identity and valida
     });
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), responseBody);
-    assert.equal(receivedHeaders?.get('x-operator-id'), 'local_operator');
-    assert.equal(receivedHeaders?.get('authorization'), 'Bearer ' + TOKEN);
-    assert.equal(receivedHeaders?.get('cookie'), null);
+    assert.equal(receivedHeaders.current.get('x-operator-id'), 'local_operator');
+    assert.equal(receivedHeaders.current.get('authorization'), 'Bearer ' + TOKEN);
+    assert.equal(receivedHeaders.current.get('cookie'), null);
   } finally { await close(proxy.server); }
 });
 

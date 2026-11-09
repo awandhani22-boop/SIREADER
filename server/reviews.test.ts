@@ -53,12 +53,12 @@ async function withServer(
 
 test('pending review BFF uses a fixed loopback origin, server token, bounded query and no browser headers', async () => {
   let requestedUrl = '';
-  let receivedHeaders: Headers | null = null;
+  const receivedHeaders = { current: new Headers() };
   const handlers = createReviewReadHandlers({
     tokenProvider: () => TOKEN,
     fetchImpl: async (input, init = {}) => {
       requestedUrl = String(input);
-      receivedHeaders = new Headers(init.headers);
+      receivedHeaders.current = new Headers(init.headers);
       return new Response(JSON.stringify(pendingResponse), {
         status: 200, headers: { 'content-type': 'application/json' },
       });
@@ -72,8 +72,8 @@ test('pending review BFF uses a fixed loopback origin, server token, bounded que
     assert.deepEqual(await response.json(), pendingResponse);
   });
   assert.equal(requestedUrl, 'http://127.0.0.1:8000/api/v1/workforce/reviews/pending?limit=25&offset=0');
-  assert.equal(receivedHeaders?.get('authorization'), 'Bearer ' + TOKEN);
-  assert.equal(receivedHeaders?.get('cookie'), null);
+  assert.equal(receivedHeaders.current.get('authorization'), 'Bearer ' + TOKEN);
+  assert.equal(receivedHeaders.current.get('cookie'), null);
 });
 
 test('review BFF rejects unbounded query strings and invalid review identifiers before upstream access', async () => {
