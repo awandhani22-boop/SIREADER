@@ -39,7 +39,7 @@ This is the execution ledger for the complete Phase 4 scope. docs/ROADMAP.md rem
 
 Deliverables:
 1. Versioned domain contract for Worker, Capability, Task, TaskAttempt, ActivityEvent, and RuntimeHealth.
-2. Stable worker IDs for supervisor, haiku-worker, sonnet-worker, opus-worker, decision-engineer, market-monitor, and data-archivist.
+2. Stable worker IDs matching the existing frontend roster and database seed: `supervisor`, `haiku`, `sonnet`, `opus`, `decision_engineer`, `market_monitor`, and `data_archivist`.
 3. Capability catalog and normalized worker-to-capability registry with per-worker concurrency limits.
 4. Explicit state machines and timestamps. Configured worker, process heartbeat, provider request, and task lifecycle remain independent facts.
 5. Contract validation, status transition rules, idempotency/correlation rules, and backward-compatible version policy.
