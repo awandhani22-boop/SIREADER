@@ -21,7 +21,7 @@
 - Phase 5.2.5: one-shot maintenance command, Windows wrapper, operating runbook, PostgreSQL migration/retention integration test updates.
 - Backend 5.2.3 CI [42667794174](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42667794174): 177 API tests and 75 core tests passed.
 - Backend follow-up review/retention CI [42670505104](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42670505104): 185 API tests and 75 core tests passed.
-- Current backend branch head at this snapshot: `1568435e092fc3b59bb271a9eef9d24981daa8e8`; latest final policy-hardening CI [42671067597](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42671067597) is pending.
+- Current backend branch head at this snapshot: `1568435e092fc3b59bb271a9eef9d24981daa8e8`; latest policy/maintenance CI [42671067597](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42671067597) PASS: 187 API tests and 76 core tests.
 
 ## Important operational qualifications
 
