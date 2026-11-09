@@ -349,6 +349,42 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
     assert.equal(clock.pendingCount(), 0);
   });
 
+  await t.test('SESSION_REQUIRED after SSE opens closes EventSource and clears private LIVE data', async () => {
+    useLiveStore.getState().reset();
+    const clock = new FakeClock();
+    let sessionExpired = false;
+    const sources: FakeEventSource[] = [];
+    const api = createApi(async (path) => {
+      if (sessionExpired) throw new LiveApiError('SESSION_REQUIRED');
+      return responses[path];
+    });
+    const poller = createLivePoller(createLiveController(api), {
+      clock,
+      eventSourceFactory: () => {
+        const source = new FakeEventSource();
+        sources.push(source);
+        return source;
+      },
+    });
+
+    assert.equal(await poller.start(), true);
+    assert.equal(sources.length, 1);
+    sources[0].open();
+    await clock.flushMicrotasks();
+    assert.equal(useLiveStore.getState().session, 'AUTHENTICATED');
+    assert.ok(useLiveStore.getState().resources['/api/v1/system/status'].data);
+
+    sessionExpired = true;
+    await clock.advanceBy(10_000);
+
+    assert.equal(poller.isRunning(), false);
+    assert.equal(sources[0].closed, true);
+    assert.equal(useLiveStore.getState().session, 'UNAUTHENTICATED');
+    assert.equal(useLiveStore.getState().connection, 'SESSION_REQUIRED');
+    assert.equal(useLiveStore.getState().resources['/api/v1/system/status'].data, null);
+    assert.equal(clock.pendingCount(), 0);
+  });
+
   await t.test('stopping during an in-flight request prevents late data from repopulating the store', async () => {
     useLiveStore.getState().reset();
     const clock = new FakeClock();
