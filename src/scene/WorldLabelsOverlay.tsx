@@ -3,6 +3,10 @@ import { recordWorkerComponentRender } from '../utils/renderProfiler';
 import { ROOM_LIST } from '../workers/worker.registry';
 import { useOfficeStore } from '../workers/worker.state';
 import { RoomDefinition, RoomId, WorkerId } from '../workers/worker.types';
+import { useWorkerDisplayModeStore } from '../workers/worker.display-mode';
+import { createDemoWorkerDisplayRepository, createLiveWorkerDisplayRepository } from '../workers/worker.live-repository';
+import { useLiveStore } from '../live/live.state';
+import type { WorkforceRuntimeResponseDto } from '../live/live.contracts';
 
 /**
  * WorldLabelsOverlay (Fix C — Granular Per-Worker & Per-Room Subscriptions)
@@ -68,37 +72,50 @@ export const WorldWorkerBadgeItem = React.memo(function WorldWorkerBadgeItem({
 }) {
   recordWorkerComponentRender(workerId, 'badge');
 
-  const worker = useOfficeStore((s) => s.workers[workerId]);
-  const activeTask = useOfficeStore((s) => {
-    const tid = s.workers[workerId]?.currentTaskId;
-    return tid ? s.tasks[tid] ?? null : null;
+  const worker = useOfficeStore((state) => state.workers[workerId]);
+  const activeTask = useOfficeStore((state) => {
+    const taskId = state.workers[workerId]?.currentTaskId;
+    return taskId ? state.tasks[taskId] ?? null : null;
   });
-  const isSelected = useOfficeStore((s) => s.selectedWorkerId === workerId);
-  const selectWorker = useOfficeStore((s) => s.selectWorker);
+  const isSelected = useOfficeStore((state) => state.selectedWorkerId === workerId);
+  const selectWorker = useOfficeStore((state) => state.selectWorker);
+  const displayMode = useWorkerDisplayModeStore((state) => state.mode);
+  const liveResource = useLiveStore((state) => state.resources['/api/v1/workforce/runtime']);
+  const liveSession = useLiveStore((state) => state.session);
+  const liveSnapshot = liveResource.data as WorkforceRuntimeResponseDto | null;
 
   if (!worker) return null;
 
+  const liveRepository = createLiveWorkerDisplayRepository(liveSnapshot, liveResource.status, liveSession);
+  const demoRepository = createDemoWorkerDisplayRepository([worker]);
+  const view = displayMode === 'LIVE'
+    ? liveRepository.getWorker(workerId)
+    : demoRepository.getWorker(workerId);
+  const displayName = displayMode === 'LIVE'
+    ? (view.source === 'LIVE' ? view.displayName : workerId)
+    : worker.shortName;
+  const statusLabel = view.statusLabel;
   const statusBadgeColor =
-    worker.status === 'PAUSED'
-      ? 'text-amber-300 border-amber-500/40 bg-amber-950/90'
-      : worker.status === 'BUSY' ||
-          worker.status === 'WALKING' ||
-          worker.status === 'TASK_RECEIVED'
+    statusLabel === 'READY' || statusLabel === 'IDLE'
+      ? 'text-emerald-300 border-emerald-500/40 bg-emerald-950/90'
+      : statusLabel === 'BUSY' || statusLabel === 'RUNNING'
         ? 'text-cyan-300 border-cyan-500/40 bg-cyan-950/90'
-        : 'text-slate-300 border-slate-600/50 bg-slate-900/90';
+        : statusLabel === 'STALE' || statusLabel === 'CONNECTING' || statusLabel === 'REFRESHING'
+          ? 'text-amber-300 border-amber-500/40 bg-amber-950/90'
+          : 'text-rose-300 border-rose-500/40 bg-rose-950/90';
 
   return (
     <div
-      ref={(el) => {
-        workerLabelDomRefs[worker.id] = el;
+      ref={(element) => {
+        workerLabelDomRefs[worker.id] = element;
       }}
       className="absolute top-0 left-0 will-change-transform pointer-events-auto"
       style={{ transform: 'translate3d(-9999px, -9999px, 0)' }}
     >
       <button
         type="button"
-        onClick={(e) => {
-          e.stopPropagation();
+        onClick={(event) => {
+          event.stopPropagation();
           selectWorker(worker.id);
         }}
         className={`-translate-x-1/2 -translate-y-full flex flex-col items-center gap-0.5 px-2 py-1 rounded-md border transition-colors cursor-pointer select-none whitespace-nowrap ${
@@ -106,7 +123,8 @@ export const WorldWorkerBadgeItem = React.memo(function WorldWorkerBadgeItem({
             ? 'bg-slate-900/95 border-cyan-400 shadow-[0_0_14px_rgba(6,182,212,0.45)]'
             : 'bg-slate-950/90 border-slate-700/80 hover:border-slate-500'
         }`}
-        aria-label={`Select 3D worker ${worker.name}, status ${worker.status}`}
+        aria-label={`Select 3D worker ${displayName}, status ${statusLabel}, source ${displayMode}`}
+        data-testid={`scene-worker-status-${workerId}`}
       >
         <div className="flex items-center gap-1.5">
           <span
@@ -114,16 +132,14 @@ export const WorldWorkerBadgeItem = React.memo(function WorldWorkerBadgeItem({
             style={{ backgroundColor: worker.avatarConfig.accentColor }}
           />
           <span className="text-[11px] font-semibold text-slate-100">
-            {worker.shortName}
+            {displayName}
           </span>
-          <span
-            className={`font-mono text-[9px] font-medium px-1 py-0.2 rounded border ${statusBadgeColor}`}
-          >
-            {worker.status}
+          <span className={`font-mono text-[9px] font-medium px-1 py-0.2 rounded border ${statusBadgeColor}`}>
+            {statusLabel}
           </span>
         </div>
 
-        {activeTask && (
+        {displayMode === 'DEMO' && activeTask && (
           <div className="w-full flex items-center gap-1.5 pt-0.5">
             <span className="font-mono text-[9px] text-slate-400">
               {activeTask.status}
@@ -144,6 +160,15 @@ export const WorldWorkerBadgeItem = React.memo(function WorldWorkerBadgeItem({
               {Math.round(activeTask.progress)}%
             </span>
           </div>
+        )}
+
+        {displayMode === 'LIVE' && view.activeTaskCount !== null && (
+          <span className="font-mono text-[9px] text-slate-300">
+            Backend active tasks: {view.activeTaskCount}
+          </span>
+        )}
+        {displayMode === 'LIVE' && view.freshness === 'UNAUTHENTICATED' && (
+          <span className="font-mono text-[9px] text-amber-300">Operator login required</span>
         )}
       </button>
     </div>
