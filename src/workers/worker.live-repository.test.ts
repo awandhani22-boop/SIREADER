@@ -46,7 +46,7 @@ function createSnapshot(count: number): WorkforceRuntimeResponseDto {
 
 test('LIVE display repository preserves backend process truth and explicit provenance', () => {
   const snapshot = createSnapshot(7);
-  const repository = createLiveWorkerRepository(snapshot, 'LIVE', 'AUTHENTICATED');
+  const repository = createLiveWorkerRepository(snapshot, 'LIVE', 'AUTHENTICATED', 'LIVE');
   const workers = repository.listWorkers();
 
   assert.equal(repository.source, 'LIVE');
@@ -63,7 +63,7 @@ test('LIVE display repository preserves backend process truth and explicit prove
 
 test('LIVE display repository supports 50 and 100 worker fixtures without worker-specific branching', () => {
   for (const count of [50, 100]) {
-    const repository = createLiveWorkerRepository(createSnapshot(count), 'LIVE', 'AUTHENTICATED');
+    const repository = createLiveWorkerRepository(createSnapshot(count), 'LIVE', 'AUTHENTICATED', 'LIVE');
     const workers = repository.listWorkers();
 
     assert.equal(workers.length, count);
@@ -74,16 +74,16 @@ test('LIVE display repository supports 50 and 100 worker fixtures without worker
 
 test('LIVE stale, error and unauthenticated states never borrow demo worker values', () => {
   const snapshot = createSnapshot(7);
-  const stale = createLiveWorkerRepository(snapshot, 'STALE', 'AUTHENTICATED');
+  const stale = createLiveWorkerRepository(snapshot, 'STALE', 'AUTHENTICATED', 'STALE');
   assert.equal(stale.getWorker('haiku').freshness, 'STALE');
   assert.equal(stale.getWorker('haiku').activeTaskCount, null);
   assert.equal(stale.getWorker('haiku').visualStatus, 'ERROR');
 
-  const error = createLiveWorkerRepository(null, 'ERROR', 'AUTHENTICATED');
+  const error = createLiveWorkerRepository(null, 'ERROR', 'AUTHENTICATED', 'ERROR');
   assert.equal(error.getWorker('haiku').freshness, 'ERROR');
   assert.equal(error.getWorker('haiku').source, null);
 
-  const unauthenticated = createLiveWorkerRepository(snapshot, 'LIVE', 'UNKNOWN');
+  const unauthenticated = createLiveWorkerRepository(snapshot, 'LIVE', 'UNKNOWN', 'SESSION_REQUIRED');
   assert.equal(unauthenticated.listWorkers().length, 0);
   assert.equal(unauthenticated.getWorker('haiku').freshness, 'UNAUTHENTICATED');
 });
@@ -105,6 +105,7 @@ test('LIVE visual mapping uses backend task count and fails closed on unknown pr
     { ...base, workers: [busyWorker] },
     'LIVE',
     'AUTHENTICATED',
+    'LIVE',
   ).getWorker('supervisor');
   assert.equal(busy.statusLabel, 'READY');
   assert.equal(busy.visualStatus, 'BUSY');
@@ -119,14 +120,29 @@ test('LIVE visual mapping uses backend task count and fails closed on unknown pr
     { ...base, workers: [unknownWorker] },
     'LIVE',
     'AUTHENTICATED',
+    'LIVE',
   ).getWorker('supervisor');
   assert.equal(unknown.statusLabel, 'ERROR');
   assert.equal(unknown.visualStatus, 'ERROR');
   assert.equal(unknown.animationState, 'idle');
 });
 
+test('global OFFLINE connection overrides a previously LIVE worker snapshot', () => {
+  const repository = createLiveWorkerRepository(
+    createSnapshot(7),
+    'LIVE',
+    'AUTHENTICATED',
+    'OFFLINE',
+  );
+  const worker = repository.getWorker('haiku');
+  assert.equal(worker.freshness, 'OFFLINE');
+  assert.equal(worker.statusLabel, 'OFFLINE');
+  assert.equal(worker.activeTaskCount, null);
+  assert.equal(worker.visualStatus, 'ERROR');
+});
+
 test('LIVE display reports missing backend records instead of falling back to DEMO', () => {
-  const repository = createLiveWorkerRepository(createSnapshot(0), 'LIVE', 'AUTHENTICATED');
+  const repository = createLiveWorkerRepository(createSnapshot(0), 'LIVE', 'AUTHENTICATED', 'LIVE');
   const worker = repository.getWorker('haiku');
   assert.equal(worker.statusLabel, 'NOT_REPORTED');
   assert.equal(worker.source, null);
