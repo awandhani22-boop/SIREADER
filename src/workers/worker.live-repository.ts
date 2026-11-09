@@ -33,7 +33,7 @@ export interface WorkerRuntimeRecord {
   readonly role: string;
   readonly department: string;
   readonly enabled: boolean | null;
-  readonly processStatus: WorkforceProcessStatus | 'NOT_REPORTED' | 'CONNECTING' | 'ERROR' | 'UNAUTHENTICATED';
+  readonly processStatus: string;
   readonly statusLabel: string;
   readonly visualStatus: WorkerStatus;
   readonly animationState: AnimationClipKey;
@@ -61,11 +61,7 @@ function emptyLiveRecord(
   const statusLabel = freshness === 'LIVE' || freshness === 'REFRESHING'
     ? 'NOT_REPORTED'
     : freshness;
-  const processStatus =
-    statusLabel === 'NOT_REPORTED' || statusLabel === 'CONNECTING'
-      || statusLabel === 'ERROR' || statusLabel === 'UNAUTHENTICATED'
-      ? statusLabel
-      : 'OFFLINE';
+  const processStatus = statusLabel;
 
   return Object.freeze({
     workerId,
@@ -202,6 +198,29 @@ export function createLiveWorkerRepository(
   });
 }
 
+function emptyDemoRecord(workerId: string): WorkerRuntimeRecord {
+  return Object.freeze({
+    workerId,
+    displayName: workerId,
+    role: '',
+    department: '',
+    enabled: null,
+    processStatus: 'NOT_REPORTED',
+    statusLabel: 'NOT_REPORTED',
+    visualStatus: 'ERROR',
+    animationState: 'idle',
+    modelTier: null,
+    capabilityIds: Object.freeze([]),
+    maxConcurrency: null,
+    activeTaskCount: null,
+    inFlightProviderRequests: null,
+    heartbeatAt: null,
+    observedAt: null,
+    source: 'SIMULATED',
+    freshness: 'SIMULATED',
+  });
+}
+
 export function createDemoWorkerRepository(
   workers: readonly WorkerEntity[],
 ): WorkerRepository {
@@ -230,6 +249,6 @@ export function createDemoWorkerRepository(
   return Object.freeze({
     source: 'SIMULATED' as const,
     listWorkers: () => records,
-    getWorker: (workerId: string) => byId.get(workerId) ?? emptyLiveRecord(workerId, 'CONNECTING'),
+    getWorker: (workerId: string) => byId.get(workerId) ?? emptyDemoRecord(workerId),
   });
 }
