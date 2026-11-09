@@ -10,6 +10,7 @@ import {
   type LiveApiResponseMap,
   type SystemStatusDto,
   type TelemetryUsageDto,
+  type WorkforceTasksResponseDto,
 } from './live.contracts';
 import { LiveApiError, type LiveApiClient } from './live.api';
 import { createLiveController } from './live.controller';
@@ -177,6 +178,11 @@ function createApi(
       server_time_utc: '2026-11-09T10:00:00Z',
       task_id: taskId,
       attempts: [],
+    }),
+    getWorkforceTasks: async (limit = 50, offset = 0) => ({
+      ...(await get('/api/v1/workforce/tasks') as WorkforceTasksResponseDto),
+      limit,
+      offset,
     }),
     clearCsrfToken: () => undefined,
   };
@@ -430,6 +436,16 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
         if (!sessionValid) throw new LiveApiError('SESSION_REQUIRED');
         return responses[path] as LiveApiResponseMap[K];
       },
+      getWorkforceAttempts: async (taskId: string) => ({
+        server_time_utc: '2026-11-09T10:00:00Z',
+        task_id: taskId,
+        attempts: [],
+      }),
+      getWorkforceTasks: async (limit = 50, offset = 0) => ({
+        ...(responses['/api/v1/workforce/tasks'] as WorkforceTasksResponseDto),
+        limit,
+        offset,
+      }),
       clearCsrfToken: () => undefined,
     };
     const controller = createLiveController(api);
