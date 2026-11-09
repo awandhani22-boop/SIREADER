@@ -84,11 +84,26 @@ export const CANONICAL_ROUTES: readonly CanonicalRouteDefinition[] = Object.free
     description: 'Read-only workforce activity event history',
   },
   {
+    path: '/api/v1/workforce/reviews/pending',
+    allowedMethods: Object.freeze(['GET']),
+    description: 'Read-only pending workforce output reviews',
+  },
+  {
+    path: '/api/v1/governance/reviews/pending',
+    allowedMethods: Object.freeze(['GET']),
+    description: 'Read-only pending governance output reviews',
+  },
+  {
     path: '/api/v1/events/stream',
     allowedMethods: Object.freeze(['GET']),
     description: 'Authenticated SSE resource invalidation stream',
   },
   // Narrow human-supervised workforce command surface (operator session + CSRF).
+  {
+    path: '/api/v1/commands/reviews/adjudicate',
+    allowedMethods: Object.freeze(['POST']),
+    description: 'Adjudicate one quarantined workforce output review',
+  },
   {
     path: '/api/v1/commands/tasks/enqueue',
     allowedMethods: Object.freeze(['POST']),

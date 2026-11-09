@@ -30,6 +30,7 @@ import { sendBffError } from './errors.ts';
 import { SafeLogger } from './log.ts';
 import { createUpstreamHandlers, createTaskTimelineHandler, type UpstreamProxyOptions, type UpstreamApiPath } from './upstream.ts';
 import { createEventStreamProxyHandler, type SseProxyOptions } from './sse.ts';
+import { createReviewReadHandlers, type ReviewReadProxyOptions } from './reviews.ts';
 import { OperatorAuthService, disableAuthCaching, type OperatorAuthOptions } from './auth.ts';
 import {
   createWorkforceCommandHandlers,
@@ -48,6 +49,7 @@ export interface BffAppDependencies extends UpstreamProxyOptions {
   readonly eventStreamOptions?: SseProxyOptions;
   /** Test seam for the fixed loopback workforce command proxy. */
   readonly workforceCommandOptions?: WorkforceCommandProxyOptions;
+  readonly reviewReadOptions?: ReviewReadProxyOptions;
 }
 
 function installStaticFrontend(app: express.Application, staticRoot: string): void {
@@ -115,6 +117,7 @@ export function createBffApp(
   const taskTimelineHandler = createTaskTimelineHandler(dependencies);
   const eventStreamHandler = createEventStreamProxyHandler(dependencies.eventStreamOptions);
   const workforceCommandHandlers = createWorkforceCommandHandlers(dependencies.workforceCommandOptions);
+  const reviewReadHandlers = createReviewReadHandlers(dependencies.reviewReadOptions);
   const operatorAuth = new OperatorAuthService(dependencies.authOptions);
   const requireOperatorSession = dependencies.requireOperatorSession ?? operatorAuth.requireSession;
 
@@ -274,6 +277,10 @@ export function createBffApp(
   for (const path of upstreamRoutes) {
     app.get(path, requireOperatorSession, upstreamHandlers[path]);
   }
+  app.get('/api/v1/workforce/reviews/pending', requireOperatorSession, reviewReadHandlers.workforcePending);
+  app.get('/api/v1/governance/reviews/pending', requireOperatorSession, reviewReadHandlers.governancePending);
+  app.get('/api/v1/workforce/reviews/:reviewId', requireOperatorSession, reviewReadHandlers.workforceDetail);
+  app.get('/api/v1/governance/reviews/:reviewId', requireOperatorSession, reviewReadHandlers.governanceDetail);
   app.get('/api/v1/events/stream', requireOperatorSession, eventStreamHandler);
   app.get('/api/v1/workforce/tasks/:taskId/timeline', requireOperatorSession, taskTimelineHandler);
 
