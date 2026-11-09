@@ -535,6 +535,7 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
   await t.test('SSE LIVE invalidations and SIMULATED controls remain isolated in both directions', async () => {
     useLiveStore.getState().reset();
     useOfficeStore.getState().resetSimulationWithSeed(20_261_109);
+    useOfficeStore.getState().setGlobalPaused(true);
 
     const clock = new FakeClock();
     const sources: FakeEventSource[] = [];
@@ -581,7 +582,7 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
     );
     const liveResourcesBeforeSimulation = liveAfterEvent.resources;
 
-    useOfficeStore.getState().advanceByWallClock(500);
+    useOfficeStore.getState().tickSimulation(500);
 
     const simulatedAfterControl = useOfficeStore.getState();
     assert.equal(simulatedAfterControl.simTimeMs, simulatedBeforeEvent.simTimeMs + 500);
