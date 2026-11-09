@@ -43,7 +43,7 @@ git -C $front status --short --branch
 git -C $back status --short --branch
 ```
 
-Expected current branch heads: Virtual Office `237c3fa`; Python Backend `45d8ce8`. If switching or fast-forwarding is blocked by a local file, stop and report the exact message. Do not reset, clean, stash, rebase, or overwrite local work to force it.
+Expected current branch heads: Virtual Office `b3e950d`; Python Backend `55a0cb7`. If switching or fast-forwarding is blocked by a local file, stop and report the exact message. Do not reset, clean, stash, rebase, or overwrite local work to force it.
 
 ## 2. Automated validation
 
