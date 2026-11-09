@@ -5,6 +5,7 @@ on:
     branches:
       - phase-3-2-batch-1-bff-foundation
       - phase-3-3-sse-implementation
+      - phase-4-implementation
   pull_request:
     branches:
       - main
