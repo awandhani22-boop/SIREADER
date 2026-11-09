@@ -1,74 +1,73 @@
-# SIREADER Phase 5.2 — Architecture & Governance Proposal
-
-**Document Version:** 1.0.0  
-**Status:** PROPOSAL — FOR REVIEW  
-**Target Branch:** `phase-5-implementation`  
-**Prerequisites:** Phase 5.1 COMPLETE ([PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md](./PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md))  
-**Related Documents:** [PRODUCT_VISION.md](./PRODUCT_VISION.md) · [ROADMAP.md](./ROADMAP.md) · [PROJECT_STATE.md](./PROJECT_STATE.md) · [PHASE_5_EXECUTION_PLAN.md](./PHASE_5_EXECUTION_PLAN.md)
+# SIREADER Phase 5.2 - Architecture & Governance Proposal
+**Subsystem:** Workforce Operations, Observability, and Governance  
+**Status:** APPROVED WITH REQUIRED DESIGN AMENDMENTS  
+**Target Branches:** `phase-5-implementation` (SIREADER & SIREADER-Python-Backend)  
+**Security Level:** Air-Gapped Local Disposable Staging (Strictly Zero LIVE Supabase / Paid Provider Exposure)  
+**Lead Reviewer:** ChatGPT (Architecture & Review)  
+**Pair Programmer:** Antigravity (Implementation & Acceptance)  
+**Document Revision:** 1.1.0 (Incorporates Architectural Review Amendments)
 
 ---
 
 ## 1. Executive Summary & Vision
 
-Phase 5.1 established the foundational execution plane for human-supervised workforce operations (enqueue, cancel, worker scheduling pause/resume, and safe failed retry). 
+Phase 5.1 established secure local command orchestration (`TASK_ENQUEUE`, `TASK_CANCEL`, `TASK_RETRY`, `WORKER_SCHEDULING_SET`) via a loopback-isolated Command API (`127.0.0.1:8010`) and frontend BFF proxy.
 
-**Phase 5.2 (Review, Audit, Budgets & Governance)** introduces the authoritative governance and observability plane. In accordance with the [Product Vision](./PRODUCT_VISION.md), SIREADER is not an opaque autonomous agent platform; it is a disciplined, human-supervised workforce platform where every AI action is accountable, cost-controlled, inspectable, and auditable.
-
-Phase 5.2 delivers:
-1. **Canonical Task Lifecycle Audit:** Complete, immutable, reconstructed end-to-end provenance for any task from ingestion through attempts to terminal state.
-2. **Dedicated Human Output Review Subsystem:** A formal verification inbox where operators examine and adjudicate AI work outputs, strictly decoupled from trading signal approval and provider uncertainty reviews.
-3. **Authoritative Budget & Cost Governance:** Centralized spend control and real-time observability leveraging Phase 4 Cost Guard, tracking hard caps, actual spend, in-flight reservations, and unknown usage.
-4. **Model Escalation & Policy Engine:** Governed model tier progression (Haiku $\rightarrow$ Sonnet $\rightarrow$ Opus), deterministic provider fallbacks, sensitive-task rejection gates, and logged manual operator overrides.
-5. **Interactive Governance Console:** High-signal frontend docks for review inbox management, chronological task timeline visualization, budget meters, and policy history.
+Phase 5.2 advances the system from isolated task execution into **comprehensive operational governance**:
+1. **Lifecycle Audit Ledger & Timeline Reconstruction:** Deepening and hardening the existing `workforce_activity_events` ledger with deterministic identity sequence ordering, append-only database triggers, actor attribution, and explicit retry lineage.
+2. **Human Output Review Subsystem:** Establishing an operator review queue for non-trading AI outputs, strictly decoupled from financial trading approvals (`approval_decisions`) and provider network uncertainty (`WAITING_REVIEW`).
+3. **Budget Governance & Cost Guard Observability:** Unifying spend tracking through the Phase 4 `Cost Guard` using canonical statuses (`COMPLETED`, `RESERVED`, `UNKNOWN`) to prevent double-counting.
+4. **Governed Model Escalation & Policy Engine:** Defining deterministic capability routing across model tiers (Haiku $\rightarrow$ Sonnet $\rightarrow$ Opus) with pre-execution budget validation and an allowlist-driven sensitive task rejection gate.
 
 ---
 
 ## 2. Hard Boundaries & Invariants
 
-| Guardrail | Enforcement Mechanism |
-| :--- | :--- |
-| **No Supabase LIVE Migration** | All migrations and DDL target local disposable PostgreSQL (`sireader_local` on `127.0.0.1:5432`) during development and CI. |
-| **No Paid Provider Calls in Tests** | All CI and automated tests run against deterministic mock providers. Production provider remains disabled (`WORKER_LIVE_PROVIDER_ENABLED=false`). |
-| **Strict Separation from Trading Systems** | **Zero interaction** with MT5, HFM, broker connections, order execution, or the existing Signal Decision Engine (`app.trade_decision`). |
-| **Separation of Review Types** | `HUMAN_OUTPUT_REVIEW` (assessing AI work quality) is completely isolated from trading signal `approval_decisions` and from provider `WAITING_REVIEW` (unknown network outcomes). |
-| **Single Source of Truth for Costs** | The existing Phase 4 `Cost Guard` and `ai_usage_logs` remain the authoritative financial ledger. Phase 5.2 does **not** create a duplicate calculation engine. |
-| **No Merge to `main`** | All changes remain isolated on branch `phase-5-implementation`. |
+All designs and implementations must strictly adhere to the following invariants:
+1. **No Supabase LIVE Interaction:** Target only the local disposable PostgreSQL instance (`127.0.0.1:54322`). Supabase LIVE (`otinrvvfjnyxjvzcmdia`) must never receive migrations or connections.
+2. **No Paid Provider or Automated Dispatch:** All tests must execute against mock providers and simulated fixtures. Real Anthropic/OpenAI APIs remain deactivated.
+3. **Trading Boundary Isolation:** No changes to MT5/HFM bridge, trade execution, broker connectivity, or trading risk rules (`approval_decisions`).
+4. **No Git Merge to Main:** All work stays on `phase-5-implementation`.
+5. **No Secret or Credential Leakage:** No tokens, passwords, bearer keys, database URLs, or raw sensitive payloads may be logged, committed, or exposed to the frontend.
+6. **No Duplicate Ledgers or Guards:** Extend existing Phase 4 tables (`workforce_activity_events`, `workforce_tasks`, `workforce_task_attempts`, `workforce_command_audit`) and the Phase 4 `Cost Guard`.
 
 ---
 
-## 3. Subsystem Architecture
+## 3. Subsystem Architecture & Design Amendments
 
-### 3.1. Canonical Task Lifecycle Audit
+### 3.1. Canonical Task Lifecycle Audit & Ledger Hardening
 
-Every task executed by the workforce must produce a continuous, unbroken chain of custody. 
+Every task executed by the workforce maintains a continuous, unbroken, and immutable chain of custody.
 
+#### Task State Machine
 ```mermaid
 stateDiagram-v2
     [*] --> QUEUED : Enqueue (Operator / System)
     QUEUED --> CLAIMED : Worker Claim
     CLAIMED --> RUNNING : Attempt Started
-    RUNNING --> REVIEW_PENDING : Output Requires Review
-    RUNNING --> COMPLETED : Output Auto-Accepted
-    RUNNING --> FAILED : Execution Error (Pre-Provider)
-    RUNNING --> WAITING_REVIEW : Provider Outcome Unknown
-    REVIEW_PENDING --> COMPLETED : Operator Approved / Edited
-    REVIEW_PENDING --> REJECTED : Operator Rejected
-    FAILED --> QUEUED : Operator Retry (New Task Created)
+    RUNNING --> WAITING_REVIEW : Provider Network Timeout (504/Uncertain)
+    RUNNING --> COMPLETED : Execution Succeeded
+    RUNNING --> FAILED : Pre-Provider or Deterministic Error
+    FAILED --> DEAD_LETTERED : Max Retries Exhausted
     QUEUED --> CANCELLED : Operator Cancel (Pre-Provider)
     CLAIMED --> CANCELLED : Operator Cancel (Pre-Provider)
     COMPLETED --> [*]
     CANCELLED --> [*]
-    REJECTED --> [*]
+    DEAD_LETTERED --> [*]
 ```
 
-#### Monotonic Event Stream & Ledger
-1. **Activity Events:** Each lifecycle milestone generates an immutable `workforce_activity_events` record with:
-   - `event_id`: Monotonic UUIDv7.
-   - `task_id` & `correlation_id`: Linkage across retries and sub-tasks.
-   - `event_type`: `TASK_ENQUEUED`, `WORKER_CLAIMED`, `ATTEMPT_STARTED`, `COST_RESERVED`, `PROVIDER_COMPLETED`, `REVIEW_QUEUED`, `REVIEW_RESOLVED`, `TASK_FINALIZED`.
-   - `actor_type` & `actor_id`: `SYSTEM`, `WORKER:<worker_id>`, or `OPERATOR:<operator_id>`.
-   - `payload_snapshot`: SHA-256 fingerprint of input/output data.
-2. **Reconstruction Contract:** The API exposes `/api/v1/workforce/tasks/{task_id}/timeline`, returning the chronological timeline assembled deterministically from audit logs and task attempts.
+#### Deterministic Retry Lineage Principle
+- When an operator retries a failed task, the original task **remains in its terminal state (`FAILED`)**. Its history is never rewritten or cleared.
+- A **new task** is generated with `status = 'QUEUED'`.
+- The new task maintains an explicit link to the progenitor via `related_task_id` / `retry_of_task_id`.
+- An explicit audit event (`TASK_RETRIED`) is recorded atomically with the retry command, capturing the operator actor, old task ID, and newly queued task ID.
+
+#### Event Ledger Immutability & Determinism (Hardening `workforce_activity_events`)
+1. **Existing Infrastructure Extension:** Rather than creating a secondary event table, we reinforce `public.workforce_activity_events`.
+2. **Deterministic Sequence Ordering:** Add `event_seq BIGINT GENERATED ALWAYS AS IDENTITY` to provide strict monotonic event ordering across concurrent events sharing identical millisecond timestamps. The existing `event_id varchar(64)` is preserved.
+3. **Trusted Actor Attribution:** Add `actor_type` (`SYSTEM`, `WORKER`, `OPERATOR`, `LEGACY_UNKNOWN`) and `actor_id` (e.g. `supervisor`, `haiku`, `local_operator`). Actor identity is injected strictly by the backend trusted runtime context, never accepted blindly from client inputs.
+4. **Explicit Lineage Tracking:** Add `related_task_id varchar(64) REFERENCES public.workforce_tasks(task_id)` to trace retry relationships and multi-stage task lineage.
+5. **Database-Level Immutability:** An append-only PostgreSQL trigger denies all `UPDATE`, `DELETE`, and `TRUNCATE` operations on `workforce_activity_events`.
 
 ---
 
@@ -87,17 +86,17 @@ export type HumanReviewStatus =
   | 'PENDING'    // Task output ready, awaiting human operator
   | 'APPROVED'   // Operator confirmed output as valid and accepted
   | 'EDITED'     // Operator edited/corrected output before approval
-  | 'REJECTED';   // Operator rejected output (terminates task as REJECTED)
+  | 'REJECTED';  // Operator rejected output
 ```
 
-#### Review Record Schema
+#### Review Record Schema (`workforce_task_reviews`)
 ```sql
 CREATE TABLE IF NOT EXISTS public.workforce_task_reviews (
     review_id VARCHAR(64) PRIMARY KEY,
     task_id VARCHAR(64) NOT NULL REFERENCES public.workforce_tasks(task_id) ON DELETE RESTRICT,
     attempt_number INTEGER NOT NULL,
-    reviewer_id VARCHAR(64) NOT NULL, -- 'local_operator'
-    status VARCHAR(32) NOT NULL, -- PENDING, APPROVED, EDITED, REJECTED
+    reviewer_id VARCHAR(64) NOT NULL,
+    status VARCHAR(32) NOT NULL,
     original_output JSONB NOT NULL,
     adjusted_output JSONB,
     operator_notes TEXT,
@@ -116,115 +115,64 @@ ON public.workforce_task_reviews(created_at) WHERE status = 'PENDING';
 
 ### 3.3. Authoritative Budget & Cost Governance
 
-Building upon the Phase 4 `Cost Guard` (`app.ai.cost_guard`), Phase 5.2 establishes real-time operational budget governance.
+Leveraging the Phase 4 `Cost Guard` (`app.ai.cost_guard`), Phase 5.2 exposes real-time operational budget metrics.
 
-#### Five-Dimensional Budget Model
-1. **Configured Hard Caps:**
-   - Global daily limit (`WORKER_DAILY_BUDGET_USD` / `WORKER_DAILY_BUDGET_IDR`).
-   - Per-task maximum threshold (`WORKER_MAX_TASK_COST_USD` / `WORKER_MAX_TASK_COST_RP`).
-   - Per-worker monthly budget allocation.
-2. **Committed Actual Spend:** Sum of finalized costs from `ai_usage_logs` where `status = 'FINALIZED'`.
-3. **In-Flight Reservations:** Sum of active, unfinalized reservations (`status = 'RESERVED'`).
-4. **Unknown / At-Risk Exposure:** Sum of reservations associated with `WAITING_REVIEW` tasks awaiting external provider billing reconciliation.
-5. **Effective Available Capacity:**
-   $$\text{Capacity} = \text{Hard Cap} - (\text{Committed Spend} + \text{Active Reservations} + \text{At-Risk Exposure})$$
+#### Canonical Spend Statuses (No Double-Counting)
+- **`COMPLETED` Spend:** Actual finalized cost recorded upon successful provider response.
+- **`RESERVED` Spend:** In-flight allocations currently active in running attempts.
+- **`UNKNOWN` Exposure:** At-risk exposure from tasks stuck in `WAITING_REVIEW` where provider completion cannot be guaranteed.
+- **Invariant:** Attempt `cost_amount` and `ai_usage_logs` must never be summed simultaneously to prevent duplicate cost calculation.
 
-#### Pre-Execution Budget Gate
-Before any provider reservation is initiated, the Cost Guard validates:
-- `Estimated Task Cost` $\le$ `Effective Available Capacity`.
-- If capacity is exhausted, the task is **rejected pre-dispatch** with code `BUDGET_EXCEEDED` and transition to `BLOCKED_BUDGET`.
-- Under no circumstances does the system silently downgrade currencies or bypass limits.
+#### Budget Validation
+$$\text{Available Budget} = \text{Hard Cap} - (\text{COMPLETED} + \text{RESERVED} + \text{UNKNOWN})$$
+Before dispatching any provider request, the Cost Guard validates that the estimated request cost does not exceed `Available Budget`. If exceeded, dispatch is blocked with `BUDGET_EXCEEDED`.
 
 ---
 
 ### 3.4. Model Escalation & Policy Engine
 
-To optimize cost efficiency while ensuring high analytical quality, tasks follow a governed model escalation hierarchy.
+1. **Model Tier Hierarchy:**
+   - **Tier 1 — FAST (`haiku`):** Intake, preliminary data normalization, structured routing.
+   - **Tier 2 — REASONING (`sonnet`):** Deep quantitative analysis, synthesis, structural reports.
+   - **Tier 3 — ESCALATION (`opus`):** High-complexity edge cases, strategic conflict adjudication.
+2. **Policy-Driven Routing:**
+   - Capability and task allowlists dictate the baseline assigned worker and model tier.
+   - Escalation triggers (e.g. low confidence or operator request) must pass the budget gate before upgrading from Tier 1 to Tier 2 or Tier 3.
+   - Sensitive work rejection relies on deterministic capability allowlists and policy checks; keyword filtering serves as an auxiliary defense layer.
 
-#### Model Tier Hierarchy
-1. **Tier 1 — FAST (`haiku`):** Intake, lightweight research, structured classification, initial summarization.
-2. **Tier 2 — REASONING (`sonnet`):** Deep quantitative analysis, multi-document synthesis, cross-sectional evaluation.
-3. **Tier 3 — ESCALATION (`opus`):** High-complexity conflict resolution, strategic risk assessment, edge-case anomaly auditing.
+---
 
-#### Escalation Triggers
-- **Automated Quality Fallback:** If Tier 1 output fails validation constraints (e.g. low extraction confidence or schema parsing failure), the task is automatically escalated to Tier 2 with policy reason `LOW_CONFIDENCE_ESCALATION`.
-- **Operator-Directed Escalation:** An operator reviewing a Tier 1 output in the Review Inbox may reject with recommendation `ESCALATE_TO_REASONING`.
-- **Sensitive Work Rejection Gate:** Instructions matching high-risk keywords (e.g. prompt injection, unauthorized scraping, credentials, trading orders) are rejected immediately at the gateway with `POLICY_VIOLATION_SENSITIVE_WORK`.
+### 3.5. Timeline Read API & Security-Barrier View
+
+#### Architecture Boundary
+- **Observability Port 8000:** Timeline is an observability feature and is served exclusively by the read-only FastAPI application (`127.0.0.1:8000`).
+- **Command Port 8010:** Remains strictly write-only for idempotent operator commands. `sireader_workforce_cmd` role does not receive read grants for general database tables.
+- **Security-Barrier Database View (`workforce_task_timeline_view`):**
+  - Sanitizes sensitive contents: excludes raw input/output payloads, secrets, bearer tokens, lease tokens, request fingerprints, and idempotency keys.
+  - Exposes: `event_seq`, `event_id`, `task_id`, `event_type`, `occurred_at`, `actor_type`, `actor_id`, `worker_id`, `attempt_id`, `related_task_id`, and sanitized event summary metadata.
+  - Granted `SELECT` only to `sireader_api_ro`.
 
 ---
 
 ## 4. API Contracts & BFF Surface
 
-All new endpoints follow loopback same-origin security, requiring active operator session and CSRF verification.
-
-| Method | Endpoint | Description | Scope |
+| Method | Endpoint | Description | Port / Role |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/workforce/tasks/{id}/timeline` | Chronological task lifecycle audit trail | Read-Only |
-| `GET` | `/api/v1/governance/reviews/pending` | Operator review inbox queue | Read-Only |
-| `POST` | `/api/v1/commands/reviews/adjudicate` | Approve, edit, or reject a task output | Authenticated Command |
-| `GET` | `/api/v1/governance/budgets/status` | Real-time budget metrics and usage ledger | Read-Only |
-| `POST` | `/api/v1/commands/tasks/escalate` | Explicit model tier escalation | Authenticated Command |
-| `GET` | `/api/v1/governance/policies/history` | Audit log of policy decisions & escalations | Read-Only |
+| `GET` | `/api/v1/workforce/tasks/{id}/timeline` | Bounded chronological task timeline | Port 8000 (`sireader_api_ro`) |
+| `GET` | `/api/v1/governance/reviews/pending` | Operator review inbox queue | Port 8000 (`sireader_api_ro`) |
+| `POST` | `/api/v1/commands/reviews/adjudicate` | Approve, edit, or reject task output | Port 8010 (`sireader_workforce_cmd`) |
+| `GET` | `/api/v1/governance/budgets/status` | Real-time budget breakdown | Port 8000 (`sireader_api_ro`) |
+| `POST` | `/api/v1/commands/tasks/escalate` | Explicit tier escalation command | Port 8010 (`sireader_workforce_cmd`) |
 
 ---
 
-## 5. Frontend Presentation & UI Docks
-
-### 5.1. Human Review Inbox (`WorkforceReviewInbox.tsx`)
-- Integrated into `WorkforceLiveDock` as a dedicated **Review Queue** tab.
-- Displays pending task cards with:
-  - Worker attribution, execution latency, and token cost.
-  - Formatted output preview with Markdown/JSON rendering.
-  - Side-by-side editable diff view for corrections.
-  - Three action controls: **[Approve Output]**, **[Edit & Accept]**, **[Reject]**.
-
-### 5.2. Task Timeline Visualizer (`TaskTimelineModal.tsx`)
-- Clickable inspection view from any task row.
-- Renders an interactive vertical steplist showing timestamp, actor, event type, state change, and associated attempt cost.
-
-### 5.3. Budget & Cost Telemetry Meter
-- Visual spend meter displayed in `LiveObservabilityDock` and `WorkforceLiveDock`.
-- Color-coded progress bar: Green (<70%), Amber (70–90%), Crimson (>90%).
-- Real-time breakdown: *Committed* (solid), *Reserved* (striped), *At-Risk* (hatched).
-
----
-
-## 6. Implementation Checkpoints & Phasing
-
-```
-[Phase 5.1: COMPLETE]
-         |
-         v
-[5.2.0: Architecture Proposal & Signoff] (Current)
-         |
-         v
-[5.2.1: Lifecycle Audit Ledger & Timeline API]
-         |
-         v
-[5.2.2: Human Output Review Subsystem & Inbox]
-         |
-         v
-[5.2.3: Budget Governance & Cost Guard Observability]
-         |
-         v
-[5.2.4: Model Escalation & Policy Engine]
-         |
-         v
-[5.2.5: UI Integration, Security Audit & Browser Acceptance]
-```
+## 5. Implementation Checkpoints & Phasing
 
 | Checkpoint | Scope | Output Deliverables |
 | :--- | :--- | :--- |
-| **5.2.0** | Architecture, Contracts, & Governance Specs | `docs/PHASE_5_2_ARCHITECTURE_PROPOSAL.md` signed off. |
-| **5.2.1** | Lifecycle Audit & Reconstruction | DDL migrations, timeline route, timeline integration tests. |
+| **5.2.0** | Architecture Proposal & Amendments | `docs/PHASE_5_2_ARCHITECTURE_PROPOSAL.md` signed off. |
+| **5.2.1** | Lifecycle Audit Ledger & Timeline API | Event ledger hardening, identity seq, append-only trigger, sanitized view, timeline route, BFF, tests. |
 | **5.2.2** | Human Review Subsystem | `workforce_task_reviews` table, adjudication command, review inbox UI. |
-| **5.2.3** | Budget Governance | Authoritative spend aggregations, budget gauge UI, threshold alerts. |
-| **5.2.4** | Policy Engine & Escalation | Tier escalation routing, sensitive work gate, policy history audit. |
-| **5.2.5** | E2E Integration & Final Acceptance | Full browser acceptance test suite, zero console errors, acceptance report. |
-
----
-
-## 7. Next Steps & Approval Gate
-
-1. **Review & Sign-Off:** Submit this architecture proposal to the project lead (ChatGPT) for review and formal approval.
-2. **Begin 5.2.1 Execution:** Upon approval, proceed with checkpoint 5.2.1 (Lifecycle Audit Ledger and Timeline API contracts).
+| **5.2.3** | Budget Governance | Canonical spend aggregation (`COMPLETED`, `RESERVED`, `UNKNOWN`), budget gauge UI. |
+| **5.2.4** | Policy Engine & Escalation | Capability allowlist routing, sensitive work gate, policy history audit. |
+| **5.2.5** | UI Integration & Browser Acceptance | Integrated timeline modal, review dock, spend meter, zero-console-error browser acceptance. |
