@@ -77,13 +77,20 @@ The following results were reported and shown by the owner during local Windows/
 - Authenticated `GET /api/v1/events/stream` returned HTTP 200. The route is fail-closed and only serves a subscriber when `EventHub.listener_ready` is true; that state is set after PostgreSQL connect, `LISTEN`, and the six-row/six-TRUNCATE-trigger plus function-safety inventory checks.
 - A controlled `pg_notify('sireader_observability_v1', 'system')` produced a browser `resources.invalidated` event for `system`, followed by a fresh `GET /api/v1/system/status` returning 200. This proves the LISTEN → EventHub → BFF → EventSource → targeted snapshot-refresh path. It does **not** by itself prove table-trigger mapping.
 - After stopping and restarting the Python API, the owner observed snapshot requests returning 200 again and confirmed a new SSE request returned 200/remaining open in Chrome. This is owner-confirmed backend-restart recovery; a separate BFF restart has not been tested.
-- One app stream plus three temporary EventSource probes connected successfully (three `CONNECTED` console messages). The probes remained open for the five-minute test window and auto-closed without a reported `CONNECTION ERROR`; no CPU/heap measurements were captured. The app stream remained active.
-- The earlier general five-minute stability observation was also reported as safe, but no performance trace, heap time series, or heartbeat comment-frame capture was supplied.
+- One app stream plus three temporary EventSource probes connected successfully (three `CONNECTED` console messages). The probes remained open for the five-minute test window and auto-closed without a reported `CONNECTION ERROR`; the app stream remained active.
+- Owner-provided Windows process sampling ran for approximately five minutes at 10-second intervals while the four streams were active. No tracked process was reported missing. Results (CPU percentages normalized by logical processor count; peak is the maximum sampled 10-second interval average):
+  | Process | PID | Avg CPU | Max sampled interval CPU | Working Set start → end | Working Set peak | Private memory peak |
+  |---|---:|---:|---:|---:|---:|---:|
+  | Python Backend | 17428 | 0.01% | 0.05% | 88.44 → 88.61 MB | 88.65 MB | 66.07 MB |
+  | BFF | 18588 | 0.00% | 0.02% | 65.33 → 65.85 MB | 66.92 MB | 73.61 MB |
+  | Vite | 25304 | 0.00% | 0.04% | 178.55 → 176.78 MB | 178.77 MB | 249.73 MB |
+- Interpretation is limited to this owner-run sample: process CPU was very low and sampled Working Set stayed nearly flat. These are OS process metrics, not Chrome JavaScript heap or browser scene performance measurements; no formal numeric resource budget has yet been approved.
+- The earlier general five-minute stability observation was also reported as safe, but no performance trace, browser heap time series, or heartbeat comment-frame capture was supplied.
 
 ## Remaining acceptance gates
 
 1. Verify actual table-trigger-to-resource mapping with controlled row changes in a disposable/staging database. The manual `pg_notify` test validates the listener path, not the triggers; keep the live trading/message/audit rows untouched.
-2. Capture an idle heartbeat frame or equivalent server-side evidence, and measure CPU/heap for four concurrent streams plus sustained idle connections. Do not increase capacities without measurements.
+2. Process-level CPU/Working Set/Private-memory sampling for the four-stream five-minute smoke has been recorded above. Still capture an idle heartbeat frame or equivalent server-side evidence, measure Chrome JavaScript heap/browser performance under four concurrent streams and sustained idle connections, and define an explicit resource budget before calling performance acceptance complete. Do not increase capacities without measurements.
 3. Test BFF restart, browser/network interruption with polling fallback, logout/session expiry closing the EventSource, and no reconnect/late private-state writes after logout. Backend API restart recovery has passed by owner report.
 4. Keep duplicate IDs, sequence gaps, replay reset, subscriber overflow/capacity, and schema validation covered by CI tests; add manual checks only if a regression or production issue warrants them.
 5. Reconfirm SIMULATED activity cannot alter LIVE event/snapshot state; existing Phase 3.2 owner isolation acceptance and Phase 3.3 automated boundaries are evidence, but the post-SSE manual interaction was not separately demonstrated in this acceptance session.
