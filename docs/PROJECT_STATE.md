@@ -35,9 +35,9 @@ See [PHASE_4_EXECUTION_LOG.md](./PHASE_4_EXECUTION_LOG.md) for the implementatio
 - **4.1 runtime contract/registry:** implementation and backend CI PASS.
 - **4.2 provider/Cost Guard:** deterministic mock and fail-closed OmniRoute adapter implemented; backend CI PASS (including budget refusal, known-not-charged failure, timeout/unknown outcome, and missing usage). Live provider remains disabled.
 - **4.3 persistent orchestration:** migration, restricted API views, transactional claims/leases/retries/recovery, and API tests PASS on disposable PostgreSQL 16 in CI. Live Supabase migration has NOT been applied.
-- **4.4 frontend:** authenticated read-only workforce routes, strict BFF allowlist/DTO validation, task pagination, attempt history, SSE refresh, mode-aware WorkerRepository, separate DEMO/LIVE selection, worker state mapping, and 50/100-worker data fixtures implemented. Frontend CI PASS: 389/389 tests, TypeScript check, production build (864 ms).
+- **4.4 frontend:** authenticated read-only workforce routes, strict BFF allowlist/DTO validation, task pagination, attempt history, SSE refresh, mode-aware WorkerRepository, separate DEMO/LIVE selection, worker state mapping, active-mode-only roster/room/workstation selection, and 50/100-worker data fixtures implemented. Frontend CI PASS: 390/390 tests, TypeScript check, production build (637 ms).
 - Backend CI PASS: API/migration/privilege suite 111 passed and core regression suite 74 passed. Workflow: https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42586406591.
-- Frontend CI PASS: https://github.com/awandhani22-boop/SIREADER/actions/runs/42587248489.
+- Frontend CI PASS: https://github.com/awandhani22-boop/SIREADER/actions/runs/42588073811.
 - Phase 4 source and automated gates are PASS. Remaining owner gates: run local Windows/Chrome acceptance for LIVE login, 7-worker baseline, 50-worker roster, task pagination, offline/reconnect/session expiry, and verify no DEMO state mutation; review/apply migrations only after explicit Supabase approval. No paid live-provider canary or trading execution has been enabled.
 - The API-view migration temporarily grants CREATE on schema public to sireader_view_owner only for view ownership transfer, then revokes it; this path passed disposable PostgreSQL CI.
 
