@@ -874,7 +874,7 @@ test('31. TopBar displays queue counter and toggle button', () => {
   try {
     const text = collectDomText(container);
     assert.ok(text.includes('SIREADER Virtual Office'));
-    assert.ok(text.includes('SIMULATION MODE'));
+    assert.ok(text.includes('DEMO · SIMULATED'));
     assert.ok(!text.includes('SIMULATED PHASE 1'));
     assert.ok(text.includes('Queued Total (SIMULATED):'));
 
