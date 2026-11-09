@@ -151,6 +151,7 @@ test('LIVE display reports missing backend records instead of falling back to DE
 
 test('changing display mode does not mutate the deterministic office store', () => {
   const initialMode = useWorkerDisplayModeStore.getState().mode;
+  const initialLiveSelection = useWorkerDisplayModeStore.getState().selectedLiveWorkerId;
   const officeSnapshot = useOfficeStore.getState();
 
   useWorkerDisplayModeStore.getState().setMode('LIVE');
@@ -159,7 +160,7 @@ test('changing display mode does not mutate the deterministic office store', () 
   assert.equal(useWorkerDisplayModeStore.getState().selectedLiveWorkerId, 'haiku');
   assert.equal(useOfficeStore.getState(), officeSnapshot);
 
-  useWorkerDisplayModeStore.getState().setSelectedLiveWorkerId(null);
+  useWorkerDisplayModeStore.getState().setSelectedLiveWorkerId(initialLiveSelection);
   useWorkerDisplayModeStore.getState().setMode('DEMO');
   assert.equal(useOfficeStore.getState(), officeSnapshot);
   useWorkerDisplayModeStore.getState().setMode(initialMode);
