@@ -3,6 +3,7 @@ import test from 'node:test';
 import http from 'node:http';
 import type { AddressInfo, Server } from 'node:net';
 import { createBffApp } from './app.ts';
+import { shutdownHttpServer } from './shutdown.ts';
 import { SSE_UPSTREAM_PATH } from './sse.ts';
 
 const HEADERS = {
@@ -248,4 +249,82 @@ test('SSE BFF aborts upstream and releases stream capacity after browser disconn
   });
   recovered.response.destroy();
   await recoveredAbort;
+});
+
+
+test('BFF shutdown closes active SSE clients and aborts upstream streams', async (t) => {
+  const signals: AbortSignal[] = [];
+  let upstreamCancelCount = 0;
+  const encoder = new TextEncoder();
+
+  const app = createBffApp(undefined, {
+    requireOperatorSession: (_req, _res, next) => next(),
+    eventStreamOptions: {
+      tokenProvider: () => 'server-only-test-token',
+      fetchImpl: async (_input, init = {}) => {
+        if (!init.signal) throw new Error('Expected BFF AbortSignal.');
+        signals.push(init.signal);
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode('retry: 3000\\n\\n'));
+          },
+          cancel() {
+            upstreamCancelCount += 1;
+          },
+        });
+        return new Response(body, {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream; charset=utf-8' },
+        });
+      },
+    },
+  });
+
+  const proxy = http.createServer(app);
+  await listen(proxy);
+  t.after(async () => {
+    if (proxy.listening) await close(proxy);
+  });
+
+  const active = await openStreamRequest(proxy, SSE_UPSTREAM_PATH);
+  assert.equal(active.response.statusCode, 200);
+  assert.equal(signals.length, 1);
+  assert.equal(signals[0].aborted, false);
+
+  const upstreamAborted = new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error('BFF shutdown did not abort the active upstream SSE request.')),
+      1_500,
+    );
+    signals[0].addEventListener('abort', () => {
+      clearTimeout(timeout);
+      resolve();
+    }, { once: true });
+  });
+
+  const upstreamCancelled = new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error('BFF shutdown did not cancel the upstream SSE body.')),
+      1_500,
+    );
+    const check = () => {
+      if (upstreamCancelCount > 0) {
+        clearTimeout(timeout);
+        resolve();
+      } else {
+        setTimeout(check, 5);
+      }
+    };
+    check();
+  });
+
+  const serverClosed = new Promise<void>((resolve) => proxy.once('close', resolve));
+  const shutdownCompleted = new Promise<void>((resolve) => {
+    shutdownHttpServer(proxy, resolve);
+  });
+
+  await Promise.all([upstreamAborted, upstreamCancelled, serverClosed, shutdownCompleted]);
+  assert.equal(signals[0].aborted, true);
+  assert.equal(upstreamCancelCount, 1);
+  assert.equal(active.response.destroyed || active.response.complete, true);
 });
