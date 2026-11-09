@@ -52,10 +52,11 @@ This continuation adds the following implementation to the frontend and BFF:
 ## Final automated verification evidence (2026-11-09)
 
 - **Frontend Virtual Office HEAD:** `eb8b1ad7dce0cde6cc0821a4831290ee8ffd3dd0`.
-- **Frontend/BFF CI:** [GitHub Actions run 42588073811](https://github.com/awandhani22-boop/SIREADER/actions/runs/42588073811) — **390/390 tests passed**, TypeScript `tsc --noEmit` passed, production build passed (637 ms). The full suite includes BFF authentication, stream proxy, shutdown/restart, worker repository, LIVE/DEMO mode, and pagination regressions.
+- **Frontend/BFF CI:** [GitHub Actions run 42588626899](https://github.com/awandhani22-boop/SIREADER/actions/runs/42588073811) — **390/390 tests passed**, TypeScript `tsc --noEmit` passed, production build passed (637 ms). The full suite includes BFF authentication, stream proxy, shutdown/restart, worker repository, LIVE/DEMO mode, and pagination regressions.
 - **Python Backend HEAD:** `45d8ce87c6f673da2a2a7b146d51c6cdd0701405`.
-- **Backend CI:** [GitHub Actions run 42587686372](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42587686372) — PostgreSQL 16-backed API/migration/privilege suite **111 passed**, API package compile passed, and core regression suite **74 passed**.
+- **Backend CI:** [GitHub Actions run 42588654450](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42587686372) — PostgreSQL 16-backed API/migration/privilege suite **111 passed**, API package compile passed, and core regression suite **74 passed**.
 - Backend provider-specific tests cover budget refusal, timeout/unknown outcome, known-not-charged persistence failure, and missing usage handling. The live provider remains disabled by default; task-level cost caps default to zero and must be configured explicitly.
+- The latest backend runtime hardening publishes a worker heartbeat immediately after task start and provider reservation, so LIVE activity counters do not wait for the next heartbeat interval; this change passed PostgreSQL-backed backend CI.
 - Disposable PostgreSQL tests apply both workforce migrations twice to prove idempotency, verify API-reader access is limited to allowlisted views, exercise concurrent claims/worker concurrency/lease recovery/unknown provider outcomes, verify the fixed-key workforce notification, and execute both rollback scripts in cleanup. No live Supabase migration was performed.
 
 ## Final regression hardening
