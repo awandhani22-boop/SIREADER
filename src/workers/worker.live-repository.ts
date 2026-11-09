@@ -7,7 +7,6 @@
  * into the deterministic simulation store.
  */
 import type {
-  LiveApiResponseMap,
   WorkforceProcessStatus,
   WorkforceRuntimeResponseDto,
 } from '../live/live.contracts';
