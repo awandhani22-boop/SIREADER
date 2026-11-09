@@ -6,7 +6,7 @@ import { recordWorkerComponentRender } from '../utils/renderProfiler';
 import { useOfficeStore } from '../workers/worker.state';
 import { WorkerEntity, WorkerId } from '../workers/worker.types';
 import { useWorkerDisplayModeStore } from '../workers/worker.display-mode';
-import { createDemoWorkerRepository, createLiveWorkerRepository } from '../workers/worker.live-repository';
+import { createDemoWorkerDisplayRepository, createLiveWorkerDisplayRepository } from '../workers/worker.live-repository';
 import { useLiveStore } from '../live/live.state';
 import type { WorkforceRuntimeResponseDto } from '../live/live.contracts';
 import {
@@ -407,8 +407,8 @@ export const WorkerAvatarSceneItem = React.memo(function WorkerAvatarSceneItem({
 
   if (!worker) return null;
 
-  const liveRepository = createLiveWorkerRepository(liveSnapshot, liveResource.status, liveSession);
-  const demoRepository = createDemoWorkerRepository([worker]);
+  const liveRepository = createLiveWorkerDisplayRepository(liveSnapshot, liveResource.status, liveSession);
+  const demoRepository = createDemoWorkerDisplayRepository([worker]);
   const view = displayMode === 'LIVE'
     ? liveRepository.getWorker(workerId)
     : demoRepository.getWorker(workerId);
