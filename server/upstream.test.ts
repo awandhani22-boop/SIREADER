@@ -236,9 +236,24 @@ test('SIREADER bounded upstream proxy — local mock integration', async (t) => 
       path === '/api/v1/workforce/attempts' &&
       requestUrl.searchParams.get('task_id') === 'task_12345678' &&
       [...requestUrl.searchParams.keys()].length === 1;
+    const taskQueryValid =
+      path === '/api/v1/workforce/tasks' &&
+      [...requestUrl.searchParams.keys()].every((key) => key === 'limit' || key === 'offset') &&
+      [...requestUrl.searchParams.keys()].length === 2 &&
+      /^(?:[1-9]|[1-9][0-9]|100)$/.test(requestUrl.searchParams.get('limit') || '') &&
+      /^(?:0|[1-9][0-9]{0,5})$/.test(requestUrl.searchParams.get('offset') || '') &&
+      Number(requestUrl.searchParams.get('offset')) <= 100_000;
     const payload = path === '/api/v1/workforce/attempts'
       ? (attemptsQueryValid ? FIXTURES[path as UpstreamApiPath] : undefined)
-      : (requestUrl.search === '' ? FIXTURES[path as UpstreamApiPath] : undefined);
+      : path === '/api/v1/workforce/tasks'
+        ? (taskQueryValid
+          ? {
+              ...(FIXTURES[path] as Record<string, unknown>),
+              limit: Number(requestUrl.searchParams.get('limit')),
+              offset: Number(requestUrl.searchParams.get('offset')),
+            }
+          : undefined)
+        : (requestUrl.search === '' ? FIXTURES[path as UpstreamApiPath] : undefined);
     if (payload === undefined) {
       res.statusCode = 404;
       res.end();
@@ -288,7 +303,7 @@ test('SIREADER bounded upstream proxy — local mock integration', async (t) => 
         '/api/v1/market-watches/active',
         '/api/v1/audit/decisions',
         '/api/v1/workforce/runtime',
-        '/api/v1/workforce/tasks',
+        '/api/v1/workforce/tasks?limit=50&offset=0',
         '/api/v1/workforce/attempts?task_id=task_12345678',
         '/api/v1/workforce/activity',
       ],
@@ -303,6 +318,28 @@ test('SIREADER bounded upstream proxy — local mock integration', async (t) => 
     assert.equal(missing.status, 400);
     assert.equal(malformed.status, 400);
     assert.equal(received.length, before);
+  });
+
+  await t.test('workforce task pagination forwards only bounded limit and offset parameters', async () => {
+    mode = 'normal';
+    const valid = await request(proxy, '/api/v1/workforce/tasks?limit=25&offset=50');
+    assert.equal(valid.status, 200);
+    assert.equal(valid.json?.limit, 25);
+    assert.equal(valid.json?.offset, 50);
+    assert.equal(received[received.length - 1].path, '/api/v1/workforce/tasks?limit=25&offset=50');
+
+    const beforeInvalid = received.length;
+    const invalidLimit = await request(proxy, '/api/v1/workforce/tasks?limit=0&offset=0');
+    const excessiveLimit = await request(proxy, '/api/v1/workforce/tasks?limit=101&offset=0');
+    const excessiveOffset = await request(proxy, '/api/v1/workforce/tasks?limit=50&offset=100001');
+    const unapprovedFilter = await request(proxy, '/api/v1/workforce/tasks?limit=50&offset=0&payload=secret');
+    const duplicateParameter = await request(proxy, '/api/v1/workforce/tasks?limit=20&limit=30&offset=0');
+
+    for (const result of [invalidLimit, excessiveLimit, excessiveOffset, unapprovedFilter, duplicateParameter]) {
+      assert.equal(result.status, 400);
+      assert.equal(result.json?.error?.code, 'BAD_REQUEST');
+    }
+    assert.equal(received.length, beforeInvalid);
   });
 
   await t.test('outbound request replaces browser credentials and forwards only server auth plus Accept', async () => {
