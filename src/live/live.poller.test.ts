@@ -35,6 +35,37 @@ const session: AuthenticatedSessionDto = {
   csrfToken: 'B'.repeat(43),
 };
 
+const EMPTY_BUDGET = {
+  daily_idr: {
+    currency: 'IDR', window: 'DAILY', period_start: '2026-11-09', period_end: '2026-11-09',
+    budget_amount: '10000', hard_limit_amount: '50000', actual_cost: '0',
+    reserved_cost: '0', projected_cost: '0', remaining_budget: '10000',
+    remaining_hard_limit: '50000', percent_used: '0', warning_threshold_percent: null,
+    warning_level: 'NONE', status_counts: {},
+  },
+  rolling_month_idr: {
+    currency: 'IDR', window: 'ROLLING_MONTH', period_start: '2026-10-11', period_end: '2026-11-09',
+    budget_amount: '50000', hard_limit_amount: null, actual_cost: '0',
+    reserved_cost: '0', projected_cost: '0', remaining_budget: '50000',
+    remaining_hard_limit: null, percent_used: '0', warning_threshold_percent: null,
+    warning_level: 'NONE', status_counts: {},
+  },
+  monthly_anthropic_usd: {
+    currency: 'USD', window: 'MONTHLY', period_start: '2026-10-11', period_end: '2026-11-09',
+    budget_amount: '5', hard_limit_amount: null, actual_cost: '0',
+    reserved_cost: '0', projected_cost: '0', remaining_budget: '5',
+    remaining_hard_limit: null, percent_used: '0', warning_threshold_percent: null,
+    warning_level: 'NONE', status_counts: {},
+  },
+  idr_tiers: [
+    { tier: 'FAST', currency: 'IDR', budget_amount: '25000', actual_cost: '0', reserved_cost: '0', projected_cost: '0', remaining_budget: '25000', percent_used: '0', budget_reached: false },
+    { tier: 'REASONING', currency: 'IDR', budget_amount: '22500', actual_cost: '0', reserved_cost: '0', projected_cost: '0', remaining_budget: '22500', percent_used: '0', budget_reached: false },
+    { tier: 'ESCALATION', currency: 'IDR', budget_amount: '2500', actual_cost: '0', reserved_cost: '0', projected_cost: '0', remaining_budget: '2500', percent_used: '0', budget_reached: false },
+  ],
+  worker_breakdown: [],
+  recent_task_costs: [],
+} as const;
+
 const responses: LiveApiResponseMap = {
   '/api/v1/system/status': {
     api_status: 'HEALTHY',
@@ -49,6 +80,7 @@ const responses: LiveApiResponseMap = {
     period_days: 7,
     currencies: [],
     models: [],
+    budget: EMPTY_BUDGET,
   } satisfies TelemetryUsageDto,
   '/api/v1/pipeline/active': {
     server_time_utc: '2026-11-08T10:00:00Z',

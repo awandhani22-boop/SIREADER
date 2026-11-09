@@ -179,14 +179,19 @@ function validTaskCost(value: unknown): boolean {
     isDecimal(value.projected_cost) && isInteger(value.requests);
 }
 function validBudgetObservability(value: unknown): boolean {
-  return isObject(value) &&
-    hasExactKeys(value, ['daily_idr', 'rolling_month_idr', 'monthly_anthropic_usd', 'idr_tiers', 'worker_breakdown', 'recent_task_costs']) &&
-    validBudgetWindow(value.daily_idr) &&
-    validBudgetWindow(value.rolling_month_idr) &&
-    validBudgetWindow(value.monthly_anthropic_usd) &&
-    value.daily_idr.currency === 'IDR' && value.daily_idr.window === 'DAILY' &&
-    value.rolling_month_idr.currency === 'IDR' && value.rolling_month_idr.window === 'ROLLING_MONTH' &&
-    value.monthly_anthropic_usd.currency === 'USD' &&
+  if (!isObject(value) || !hasExactKeys(value, [
+    'daily_idr', 'rolling_month_idr', 'monthly_anthropic_usd',
+    'idr_tiers', 'worker_breakdown', 'recent_task_costs',
+  ])) return false;
+  const daily = value.daily_idr;
+  const rolling = value.rolling_month_idr;
+  const anthropic = value.monthly_anthropic_usd;
+  return validBudgetWindow(daily) && isObject(daily) &&
+    daily.currency === 'IDR' && daily.window === 'DAILY' &&
+    validBudgetWindow(rolling) && isObject(rolling) &&
+    rolling.currency === 'IDR' && rolling.window === 'ROLLING_MONTH' &&
+    validBudgetWindow(anthropic) && isObject(anthropic) &&
+    anthropic.currency === 'USD' &&
     Array.isArray(value.idr_tiers) && value.idr_tiers.length === 3 && value.idr_tiers.every(validBudgetTier) &&
     Array.isArray(value.worker_breakdown) && value.worker_breakdown.length <= 50 && value.worker_breakdown.every(validWorkerCost) &&
     Array.isArray(value.recent_task_costs) && value.recent_task_costs.length <= 25 && value.recent_task_costs.every(validTaskCost);
