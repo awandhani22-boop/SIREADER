@@ -112,7 +112,7 @@ Implementation commits on this branch:
 - `0af46ca1a0da2bbb4871585a7956b8ec1bdaaee6` — deterministic simulation-step setup for the isolation regression test.
 - `3beea06ee8f1b11a8640d7425e04fdf95834e5be` — operator re-authentication and fresh EventSource regression test.
 
-These commits have been pushed to the isolated implementation branch only. Their CI result must be checked before this code-level work is marked passing. They do not replace owner-run Windows/Chrome acceptance. In particular, numeric Chrome Performance Monitor values and the combined BFF process restart + browser session re-authentication flow are still not independently observed in the owner's local browser.
+These commits have been pushed to the isolated implementation branch only. Final GitHub Actions run `42574176356` on commit `007de084ee8d61db135cb9e0e4b8b1bc5b61643a` completed successfully: **373/373 tests passed, 0 failed; TypeScript check passed; production build passed** (736 ms). The three follow-up LIVE poller tests, BFF shutdown SSE integration test, full existing test suite, typecheck, and build all ran in this job. Earlier push-triggered runs were cancelled by the workflow concurrency policy; the final run on the latest commit is the authoritative result. The run emitted only runner notices about Node 20 action deprecation / Ubuntu image migration, not test or build failures. This does not replace owner-run Windows/Chrome acceptance. In particular, numeric Chrome Performance Monitor values and the combined BFF process restart + browser session re-authentication flow are still not independently observed in the owner's local browser.
 
 ## Remaining acceptance gates
 
