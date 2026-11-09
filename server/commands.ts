@@ -113,7 +113,7 @@ function expectedCommand(path: WorkforceCommandPath): string {
 
 function expectedTarget(path: WorkforceCommandPath, body: Record<string, unknown>, response: Record<string, unknown>): string | null {
   if (path === '/api/v1/commands/workers/scheduling') return String(body.worker_id);
-  if (path !== '/api/v1/commands/tasks/enqueue') return String(body.task_id);
+  if (path === '/api/v1/commands/tasks/cancel') return String(body.task_id);
   return typeof response.target_id === 'string' ? response.target_id : null;
 }
 

@@ -846,7 +846,7 @@ export function parseWorkforceCommandResponse(
     : 'WORKER_SCHEDULING_SET';
   const expectedTarget = path === '/api/v1/commands/workers/scheduling'
     ? (request as WorkerSchedulingRequest).worker_id
-    : path === '/api/v1/commands/tasks/enqueue'
+    : (path === '/api/v1/commands/tasks/enqueue' || path === '/api/v1/commands/tasks/retry')
       ? value.target_id
       : (request as TaskCommandRequest).task_id;
   if (
