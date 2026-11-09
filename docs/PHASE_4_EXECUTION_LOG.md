@@ -51,10 +51,20 @@ This continuation adds the following implementation to the frontend and BFF:
 
 ## Final automated verification evidence (2026-11-09)
 
-- **Frontend Virtual Office:** GitHub Actions run [42588073811](https://github.com/awandhani22-boop/SIREADER/actions/runs/42588073811) — **390/390 tests passed**, TypeScript `tsc --noEmit` passed, production build passed (637 ms).
-- **Python Backend:** GitHub Actions run [42586406591](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42586406591) — PostgreSQL 16-backed API/migration/privilege suite **111 passed**, core regression suite **74 passed**, API compile passed.
-- Backend provider-specific tests run [42586406591](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42586406591) include budget refusal, timeout/unknown outcome, known-not-charged persistence failure, and missing usage handling. The live provider remains disabled by default.
-- These CI runs verify disposable infrastructure only. They do not claim that local Windows/Chrome acceptance or a live Supabase migration has been performed.
+- **Frontend Virtual Office HEAD:** `eb8b1ad7dce0cde6cc0821a4831290ee8ffd3dd0`.
+- **Frontend/BFF CI:** [GitHub Actions run 42588073811](https://github.com/awandhani22-boop/SIREADER/actions/runs/42588073811) — **390/390 tests passed**, TypeScript `tsc --noEmit` passed, production build passed (637 ms). The full suite includes BFF authentication, stream proxy, shutdown/restart, worker repository, LIVE/DEMO mode, and pagination regressions.
+- **Python Backend HEAD:** `45d8ce87c6f673da2a2a7b146d51c6cdd0701405`.
+- **Backend CI:** [GitHub Actions run 42587686372](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42587686372) — PostgreSQL 16-backed API/migration/privilege suite **111 passed**, API package compile passed, and core regression suite **74 passed**.
+- Backend provider-specific tests cover budget refusal, timeout/unknown outcome, known-not-charged persistence failure, and missing usage handling. The live provider remains disabled by default; task-level cost caps default to zero and must be configured explicitly.
+- Disposable PostgreSQL tests apply both workforce migrations twice to prove idempotency, verify API-reader access is limited to allowlisted views, exercise concurrent claims/worker concurrency/lease recovery/unknown provider outcomes, verify the fixed-key workforce notification, and execute both rollback scripts in cleanup. No live Supabase migration was performed.
+
+## Final regression hardening
+
+- The BFF shutdown integration test now waits for the browser-side SSE response `close` event in addition to upstream abort/cancel, server close, and shutdown completion. This avoids checking the client stream state before its close event is delivered.
+- LIVE worker presentation now receives the authoritative connection state separately from resource freshness. Cached worker process status and counters remain suppressed while the LIVE source is connecting, stale, offline, or in error.
+- Roster, room signage, workstation, world badge, avatar, and background selection all route selection through the active DEMO/LIVE store. LIVE selection does not mutate the deterministic simulation worker/room selection.
+- The LIVE roster reads only the authenticated workforce snapshot; DEMO worker/task rows are not appended when no LIVE snapshot is available. The authored 3D floor plan still contains seven fixed station positions; additional backend workers remain in the data-driven roster until an explicit spatial-layout expansion is designed.
+- These are source/CI verified changes. They are not a substitute for local Windows/Chrome owner acceptance.
 
 ## Remaining acceptance gates
 
