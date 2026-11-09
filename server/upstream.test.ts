@@ -282,16 +282,16 @@ test('SIREADER bounded upstream proxy — local mock integration', async (t) => 
     assert.deepEqual(
       received.slice(-9).map((entry) => entry.path),
       [
-        ...UPSTREAM_API_PATHS.slice(0, 3),
-        ...UPSTREAM_API_PATHS.slice(3, 3),
-      ].concat([
+        '/api/v1/system/status',
+        '/api/v1/telemetry/usage',
+        '/api/v1/pipeline/active',
         '/api/v1/market-watches/active',
         '/api/v1/audit/decisions',
         '/api/v1/workforce/runtime',
         '/api/v1/workforce/tasks',
         '/api/v1/workforce/attempts?task_id=task_12345678',
         '/api/v1/workforce/activity',
-      ]),
+      ],
     );
   });
 
