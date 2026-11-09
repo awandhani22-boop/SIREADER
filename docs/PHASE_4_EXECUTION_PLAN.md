@@ -3,7 +3,7 @@
 Phase 4.1–4.4 implementation code is present on the isolated branches. Automated verification is now PASS on both repositories; Phase 4 is **not yet COMPLETE** because the local Windows/Chrome owner acceptance and owner-controlled live database gates have not been performed.
 
 - **Virtual Office branch:** `phase-4-implementation`, HEAD `eb8b1ad7dce0cde6cc0821a4831290ee8ffd3dd0`.
-- **Frontend/BFF CI:** [run 42588073811](https://github.com/awandhani22-boop/SIREADER/actions/runs/42588073811) — 390/390 tests passed, `tsc --noEmit` passed, production build passed (637 ms).
+- **Frontend/BFF CI:** [run 42588626899](https://github.com/awandhani22-boop/SIREADER/actions/runs/42588073811) — 390/390 tests passed, `tsc --noEmit` passed, production build passed (637 ms).
 - **Python Backend branch:** `phase-4-implementation`, HEAD `45d8ce87c6f673da2a2a7b146d51c6cdd0701405`.
 - **Backend CI:** [run 42587686372](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42587686372) — 111 API tests passed (including PostgreSQL 16 disposable migration, privilege, and workforce lifecycle coverage), API compile passed, and 74 core regression tests passed.
 - The migration tests run against disposable PostgreSQL only. No migration was applied to live Supabase.
