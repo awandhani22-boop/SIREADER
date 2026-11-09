@@ -3,6 +3,7 @@ import { Activity, Bot, Clock3, RefreshCw, X } from 'lucide-react';
 import { LiveApiError } from '../live/live.api';
 import { liveController } from '../live/live.controller';
 import { useLiveStore, type LiveResourceSnapshot } from '../live/live.state';
+import { useWorkerDisplayModeStore } from '../workers/worker.display-mode';
 import type {
   WorkforceActivityResponseDto,
   WorkforceAttemptsResponseDto,
@@ -51,6 +52,11 @@ export function WorkforceLiveDock() {
   const [attempts, setAttempts] = useState<WorkforceAttemptsResponseDto | null>(null);
   const [attemptError, setAttemptError] = useState<string | null>(null);
   const [attemptLoading, setAttemptLoading] = useState(false);
+  const displayMode = useWorkerDisplayModeStore((state) => state.mode);
+
+  useEffect(() => {
+    if (displayMode === 'LIVE') setIsOpen(true);
+  }, [displayMode]);
 
   const connection = useLiveStore((state) => state.connection);
   const session = useLiveStore((state) => state.session);
