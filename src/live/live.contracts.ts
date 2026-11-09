@@ -561,13 +561,14 @@ function validWorkforceWorker(value: unknown): value is WorkforceWorkerDto {
     isObject(value) &&
     hasExactKeys(value, [
       'worker_id', 'display_name', 'role', 'department', 'enabled',
-      'max_concurrency', 'model_tier', 'capability_ids', 'process_status',
+      'accepting_tasks', 'max_concurrency', 'model_tier', 'capability_ids', 'process_status',
       'heartbeat_at', 'active_task_count', 'in_flight_provider_requests',
       'schema_version', 'created_at', 'updated_at',
     ]) &&
     isString(value.worker_id) && value.worker_id.length >= 2 && value.worker_id.length <= 64 &&
     isString(value.display_name) && isString(value.role) && isString(value.department) &&
     isBoolean(value.enabled) &&
+    isBoolean(value.accepting_tasks) &&
     isInteger(value.max_concurrency, 1) && value.max_concurrency <= 32 &&
     (value.model_tier === 'NONE' || value.model_tier === 'FAST' ||
       value.model_tier === 'REASONING' || value.model_tier === 'ESCALATION') &&
