@@ -71,6 +71,7 @@ export function WorkforceLiveDock() {
     }
 
     let active = true;
+    setAttempts(null);
     setAttemptLoading(true);
     setAttemptError(null);
     void liveController.getWorkforceAttempts(selectedTaskId)
