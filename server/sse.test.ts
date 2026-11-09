@@ -143,3 +143,109 @@ test('SSE BFF fails closed for wrong content type and missing server token', asy
   assert.equal(missing.status, 503);
   assert.equal(JSON.parse(missing.body).error.code, 'UPSTREAM_AUTH_FAILED');
 });
+
+
+function openStreamRequest(
+  server: Server,
+  path: string,
+): Promise<{ request: http.ClientRequest; response: http.IncomingMessage }> {
+  return new Promise((resolve, reject) => {
+    const port = (server.address() as AddressInfo).port;
+    const req = http.request({
+      hostname: '127.0.0.1',
+      port,
+      path,
+      method: 'GET',
+      headers: { ...HEADERS, accept: 'text/event-stream' },
+    });
+    req.once('response', (response) => resolve({ request: req, response }));
+    req.once('error', reject);
+    req.end();
+  });
+}
+
+test('SSE BFF aborts upstream and releases stream capacity after browser disconnect', async (t) => {
+  const signals: AbortSignal[] = [];
+  let fetchCount = 0;
+  let upstreamCancelCount = 0;
+  const encoder = new TextEncoder();
+
+  const app = createBffApp(undefined, {
+    requireOperatorSession: (_req, _res, next) => next(),
+    eventStreamOptions: {
+      tokenProvider: () => 'server-only-test-token',
+      maxConcurrentStreams: 1,
+      fetchImpl: async (_input, init = {}) => {
+        fetchCount += 1;
+        if (!init.signal) throw new Error('Expected BFF AbortSignal.');
+        signals.push(init.signal);
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode('retry: 3000\\n\\n'));
+          },
+          cancel() {
+            upstreamCancelCount += 1;
+          },
+        });
+        return new Response(body, {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream; charset=utf-8' },
+        });
+      },
+    },
+  });
+
+  const proxy = http.createServer(app);
+  await listen(proxy);
+  t.after(async () => close(proxy));
+
+  const first = await openStreamRequest(proxy, SSE_UPSTREAM_PATH);
+  assert.equal(first.response.statusCode, 200);
+  assert.equal(fetchCount, 1);
+  assert.equal(signals.length, 1);
+
+  const atCapacity = await request(proxy, SSE_UPSTREAM_PATH);
+  assert.equal(atCapacity.status, 503);
+  assert.equal(atCapacity.headers['retry-after'], '3');
+  assert.equal(fetchCount, 1, 'capacity rejection must not open another upstream request');
+
+  const upstreamAborted = new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('BFF did not abort the upstream after browser disconnect.')), 1_000);
+    signals[0].addEventListener('abort', () => {
+      clearTimeout(timeout);
+      resolve();
+    }, { once: true });
+  });
+  first.response.destroy();
+  await upstreamAborted;
+  assert.equal(signals[0].aborted, true);
+
+  const upstreamCancelled = new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('BFF did not cancel the upstream response body.')), 1_000);
+    const check = () => {
+      if (upstreamCancelCount > 0) {
+        clearTimeout(timeout);
+        resolve();
+      } else {
+        setTimeout(check, 5);
+      }
+    };
+    check();
+  });
+  await upstreamCancelled;
+
+  const recovered = await openStreamRequest(proxy, SSE_UPSTREAM_PATH);
+  assert.equal(recovered.response.statusCode, 200, 'released capacity must accept a new stream');
+  assert.equal(fetchCount, 2);
+  assert.equal(signals.length, 2);
+
+  const recoveredAbort = new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Cleanup did not abort the recovered test stream.')), 1_000);
+    signals[1].addEventListener('abort', () => {
+      clearTimeout(timeout);
+      resolve();
+    }, { once: true });
+  });
+  recovered.response.destroy();
+  await recoveredAbort;
+});
