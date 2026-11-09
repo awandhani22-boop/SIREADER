@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ClipboardCheck, RefreshCw, X } from 'lucide-react';
 import { LiveApiError } from '../live/live.api';
 import { liveController } from '../live/live.controller';
@@ -41,13 +41,21 @@ export function ReviewInbox() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Invalidate in-flight read/write completions on logout or a newer selection.
+  const requestEpoch = useRef(0);
+  const isCurrentRequest = useCallback((epoch: number) =>
+    epoch === requestEpoch.current &&
+    useLiveStore.getState().session === 'AUTHENTICATED',
+  []);
 
   const load = useCallback(async (nextOffset = 0, preferredId: string | null = null) => {
     if (session !== 'AUTHENTICATED') return;
+    const epoch = ++requestEpoch.current;
     setLoading(true);
     setError(null);
     try {
       const page = await liveController.getPendingWorkforceReviews(25, nextOffset);
+      if (!isCurrentRequest(epoch)) return;
       setItems(page.reviews.filter((item) => item.status === 'PENDING'));
       setOffset(page.offset);
       setTotal(page.total_count);
@@ -57,6 +65,7 @@ export function ReviewInbox() {
       setSelectedId(nextId);
       if (nextId) {
         const record = await liveController.getWorkforceReview(nextId);
+        if (!isCurrentRequest(epoch)) return;
         setDetail(record);
         setEditText(jsonText(record.original_output));
       } else {
@@ -64,20 +73,30 @@ export function ReviewInbox() {
         setEditText('');
       }
     } catch (requestError) {
+      if (!isCurrentRequest(epoch)) return;
       setError(friendlyError(requestError));
       setDetail(null);
     } finally {
-      setLoading(false);
+      if (isCurrentRequest(epoch)) setLoading(false);
     }
-  }, [session]);
+  }, [isCurrentRequest, session]);
 
   useEffect(() => {
     if (session !== 'AUTHENTICATED') {
+      requestEpoch.current += 1;
       setItems([]);
       setSelectedId(null);
       setDetail(null);
+      setEditText('');
+      setNotes('');
+      setReasonCode('QUALITY_REJECTED');
+      setOffset(0);
+      setTotal(0);
+      setLoading(false);
+      setSubmitting(false);
       setOpen(false);
       setError(null);
+      setNotice(null);
     }
   }, [session]);
 
@@ -86,15 +105,19 @@ export function ReviewInbox() {
   }, [open, session, load]);
 
   async function selectReview(reviewId: string) {
+    const epoch = ++requestEpoch.current;
     setSelectedId(reviewId);
     setDetail(null);
+    setEditText('');
     setError(null);
     try {
       const record = await liveController.getWorkforceReview(reviewId);
+      if (!isCurrentRequest(epoch)) return;
       setDetail(record);
       setEditText(jsonText(record.original_output));
       setNotes('');
     } catch (requestError) {
+      if (!isCurrentRequest(epoch)) return;
       setError(friendlyError(requestError));
     }
   }
@@ -123,17 +146,20 @@ export function ReviewInbox() {
       reason_code: decision === 'REJECTED' ? reasonCode : null,
       notes: notes.trim() || null,
     };
+    const epoch = requestEpoch.current;
     setSubmitting(true);
     setError(null);
     setNotice(null);
     try {
       const result = await liveController.sendWorkforceCommand('/api/v1/commands/reviews/adjudicate', request);
+      if (!isCurrentRequest(epoch)) return;
       setNotice('Review ' + decision + ' berhasil dicatat. Audit command: ' + result.command_id);
       await load(offset, null);
     } catch (requestError) {
+      if (!isCurrentRequest(epoch)) return;
       setError(friendlyError(requestError));
     } finally {
-      setSubmitting(false);
+      if (isCurrentRequest(epoch)) setSubmitting(false);
     }
   }
 
