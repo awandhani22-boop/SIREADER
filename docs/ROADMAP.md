@@ -337,32 +337,35 @@ Exit gate:
 - Reconnect and missing-worker behavior are tested.
 
 ## Phase 5.1 — Human-Supervised Worker and Task Operations
-**Status: PLANNED.**
+**Status: IMPLEMENTATION + AUTOMATED CI PASS — OWNER LOCAL ACCEPTANCE PENDING.**
 
-Goal: add authenticated, narrowly scoped operations for managing AI worker tasks.
+Goal: provide authenticated, narrowly scoped operations for generic non-trading workforce tasks.
 
-Possible commands, subject to separate API contract and security review:
-- Enqueue an approved non-trading work task.
-- Pause/resume an eligible worker or task.
-- Cancel a task safely.
-- Request retry for a failed task when idempotency rules allow.
+Implemented command surface:
+- Enqueue a bounded task from an explicit non-trading task/capability/worker allowlist.
+- Pause/resume scheduling intake for Supervisor, Haiku, Sonnet, Opus, and Data Archivist. This does not stop the process or interrupt in-flight work.
+- Cancel an eligible task safely. If provider reservation may already have occurred, the task becomes WAITING_REVIEW and the attempt becomes UNKNOWN.
+- Retry only a known pre-provider FAILED task with an intact payload. Retry creates a new task and preserves the original failure record.
 
-Requirements:
-- Every command has authentication, authorization, validation, idempotency, rate limits, and audit history.
-- UI shows pending, accepted, rejected, and completed command outcomes distinctly.
-- Commands are unavailable in DEMO mode unless explicitly labelled as local simulation controls.
-- Read-only observability credentials are never reused for command endpoints.
+Security boundary:
+- Dedicated command API on 127.0.0.1:8010, separate bearer token and dedicated PostgreSQL role sireader_workforce_cmd; existing read-only observability API on 127.0.0.1:8000 remains unchanged.
+- PostgreSQL grants and RLS restrict the command role to the five general-purpose workers and explicit non-trading capabilities/task types. Trading-adjacent workforce rows are invisible and not writable through direct SQL.
+- BFF command paths are fixed and require the existing operator session, CSRF token, exact same-origin Origin, JSON content type, bounded body, and separate server-only command token.
+- Commands are idempotent and append an immutable audit entry. An ambiguous browser timeout retains the same idempotency key for a safe retry.
+- LIVE-only controls exist in the Workforce panel; DEMO mode does not call the command API.
 
-Explicit prohibition:
-- No place/close/modify MT5 order, SL/TP, or bypass of the existing trading approval process.
+Automated evidence (2026-11-09):
+- Backend commit de1d16be631418fe17d61524d1b63e479374f1fb; CI run 42604536800 PASS: 144 API/command/PostgreSQL tests, compile check, 75 core regression tests.
+- Frontend commit 884eabfcee884ae31e9d0dd06d8b9f79663441fd; CI run 42604707497 PASS: 398 tests, TypeScript check, production build.
+- Owner local setup and Windows/Chrome acceptance are still required. No production migration, paid provider call, or trading operation is included in this PASS.
 
-Exit gate:
-- Negative authorization and replay tests pass.
-- Every command is traceable to an actor and task.
-- Safe failure and cancellation behavior are verified.
+Exit gate (still open):
+- Owner provisions the dedicated role/token and migration on a disposable local DB, starts the extra loopback command process, and validates authenticated LIVE controls in Chrome/Antigravity.
+- Owner records that DEMO remains local-only, no credentials are exposed in browser storage/bundle, the command audit appears, and logout clears private LIVE state.
+- Do not begin Phase 5.2 until this owner acceptance is recorded.
 
 ## Phase 5.2 — Review, Audit, Budgets & Governance
-**Status: PLANNED.**
+**Status: PLANNED — BLOCKED until Phase 5.1 owner local acceptance passes.**
 
 Goal: make real worker operation understandable, bounded, and reviewable.
 

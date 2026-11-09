@@ -1,4 +1,19 @@
-## Current status override — 2026-11-09
+## Current status override — 2026-11-09 (Phase 5.1)
+
+- **Phase 5.1 source implementation and automated CI: PASS.** The remaining Phase 5.1 exit gate is owner-side Windows/Chrome/Antigravity acceptance after local command DB role/token setup. The project is not yet operator-ready for LIVE writes.
+- **Current working branch:** phase-5-implementation in both repositories. This branch is isolated from main; no merge was performed.
+- **Virtual Office HEAD:** 884eabfcee884ae31e9d0dd06d8b9f79663441fd; [CI run 42604707497 PASS](https://github.com/awandhani22-boop/SIREADER/actions/runs/42604707497): 398 tests, TypeScript, production build.
+- **Python Backend HEAD:** de1d16be631418fe17d61524d1b63e479374f1fb; [CI run 42604536800 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42604536800): 144 API/command/PostgreSQL tests, compile check, 75 core regression tests.
+- Phase 5.1 adds a dedicated loopback command API, a dedicated PostgreSQL login with row-level non-trading policies, four fixed operator commands, BFF session+CSRF protection, LIVE-only UI controls, and idempotent append-only audit.
+- **Owner action pending:** create sireader_workforce_cmd only in a disposable local PostgreSQL database, apply 2026_11_09_workforce_commands_v1.sql locally, add a distinct command token to both ignored local environment files, start the command API, and complete the Windows/Chrome acceptance in the runbook. Never paste or commit secrets.
+- **Phase 5.2 remains PLANNED and BLOCKED** until owner acceptance of Phase 5.1. No live Supabase migration, paid provider invocation, MT5/HFM operation, trading order, or trading approval change was performed.
+
+See PHASE_5_EXECUTION_PLAN.md and PHASE_5_EXECUTION_LOG.md.
+
+---
+
+## Historical Phase 4 acceptance snapshot — 2026-11-09
+
 
 - **Phase 3.3 — COMPLETE:** the project owner confirmed all remaining acceptance checks were safe.
 - **Phase 4 — COMPLETE (owner acceptance recorded 2026-11-09):** 4.1–4.4 implementation, automated CI, and owner-run Windows/Chrome browser acceptance are recorded PASS. Live Supabase migration was intentionally not applied; paid provider and trading actions remain disabled.
@@ -12,7 +27,7 @@ See [PHASE_4_EXECUTION_LOG.md](./PHASE_4_EXECUTION_LOG.md) for the implementatio
 
 # SIREADER Virtual Office — Project State
 
-## Current phase
+## Phase 4 acceptance snapshot (historical)
 **Phase 4 — COMPLETE (2026-11-09):** implementation, automated verification, and owner-reported Windows/Chrome acceptance are recorded PASS. See the owner acceptance report. Phase 3.3 was owner-confirmed safe/accepted on 2026-11-09; see the explicit evidence qualification below.
 
 - Phase 3.2 — Secure BFF & Frontend Observability Integration: **COMPLETE — owner acceptance confirmed 2026-11-09**.

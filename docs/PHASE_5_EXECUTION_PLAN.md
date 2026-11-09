@@ -1,6 +1,6 @@
 # Phase 5 — Human-Supervised Operations & Governance
 
-**Status:** IN PROGRESS  
+**Status:** Phase 5.1 implementation + automated CI PASS; owner local acceptance pending  
 **Working branch:** `phase-5-implementation`  
 **Baseline:** accepted Phase 4 branch; no merge to `main`.
 
@@ -77,16 +77,32 @@ Trading-adjacent capabilities (Decision Engineer / Market Monitor task categorie
 - Update project state, roadmap, execution log, and runbooks as each milestone is verified.
 - Commit each coherent unit on `phase-5-implementation`; never merge to `main` without explicit authorization.
 
+
+## Automated implementation evidence — 2026-11-09
+
+Backend source HEAD: de1d16be631418fe17d61524d1b63e479374f1fb  
+Backend CI: https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42604536800 — PASS  
+Frontend source HEAD: 884eabfcee884ae31e9d0dd06d8b9f79663441fd  
+Frontend CI: https://github.com/awandhani22-boop/SIREADER/actions/runs/42604707497 — tests, typecheck and build passed
+
+- Backend: 144 API/command and PostgreSQL tests passed; compileall passed; 75 core regression tests passed.
+- PostgreSQL tests cover dedicated role privileges, required RLS policies, append-only audit, allowed generic workers, and direct-SQL denial for Decision Engineer / Market Monitor rows.
+- Frontend: 398/398 automated tests passed, TypeScript check passed, production build passed.
+- The browser keeps the command bearer server-side. Browser writes use the existing operator session + CSRF and a stable idempotency key. An ambiguous timeout preserves the same key for retry; unresolved keys are never evicted to make room for a new command.
+- These runs use test SQLite / disposable PostgreSQL and local BFF mocks. They do not prove the owner's local environment files, PostgreSQL instance, Windows process topology, or real browser session is configured.
+
+Source and CI for checkpoints 5.1.0–5.1.4 are complete. The Phase 5.1 exit gate remains open until owner-side local setup and Windows/Chrome/Antigravity acceptance is recorded. Phase 5.2 must not start before that acceptance.
+
 ## Implementation checkpoints
 
-- [ ] 5.1.0 — command security design and isolated branch baseline
-- [ ] 5.1.1 — backend command service, dedicated DB boundary, audited/idempotent commands
-- [ ] 5.1.2 — BFF fixed routes, operator session + CSRF, separate server-side token
-- [ ] 5.1.3 — frontend LIVE-only controls and explicit command outcomes
-- [ ] 5.1.4 — negative authorization, replay, lifecycle and PostgreSQL privilege verification
+- [x] 5.1.0 — command security design and isolated branch baseline
+- [x] 5.1.1 — backend command service, dedicated DB boundary, audited/idempotent commands
+- [x] 5.1.2 — BFF fixed routes, operator session + CSRF, separate server-side token
+- [x] 5.1.3 — frontend LIVE-only controls and explicit command outcomes
+- [x] 5.1.4 — negative authorization, replay, lifecycle and PostgreSQL privilege verification
 - [ ] 5.1 owner browser acceptance
 - [ ] 5.2 — review, budgets, escalation and governance
 
 ## Known owner-side setup that will be required before local LIVE use
 
-The owner will need to provision the dedicated `sireader_workforce_cmd` DB login/password and separate command API token in local ignored `.env`, then start the additional command process. Never paste the secret values into chat or commit them. The SQL migration is not a production/Supabase instruction; apply it only after a separate review and explicit approval.
+The owner must follow the local command API runbook in the Python Backend repository: provision the dedicated sireader_workforce_cmd login on a disposable local database, keep the DB URL and independently generated command token in ignored local environment files, apply the additive migration only to that local database, then start the command API on loopback. Never paste secret values into chat or commit them. Do not apply this migration to Supabase LIVE.
