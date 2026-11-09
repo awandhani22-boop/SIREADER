@@ -154,9 +154,12 @@ test('changing display mode does not mutate the deterministic office store', () 
   const officeSnapshot = useOfficeStore.getState();
 
   useWorkerDisplayModeStore.getState().setMode('LIVE');
+  useWorkerDisplayModeStore.getState().setSelectedLiveWorkerId('haiku');
   assert.equal(useWorkerDisplayModeStore.getState().mode, 'LIVE');
+  assert.equal(useWorkerDisplayModeStore.getState().selectedLiveWorkerId, 'haiku');
   assert.equal(useOfficeStore.getState(), officeSnapshot);
 
+  useWorkerDisplayModeStore.getState().setSelectedLiveWorkerId(null);
   useWorkerDisplayModeStore.getState().setMode('DEMO');
   assert.equal(useOfficeStore.getState(), officeSnapshot);
   useWorkerDisplayModeStore.getState().setMode(initialMode);
