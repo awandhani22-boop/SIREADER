@@ -1,3 +1,15 @@
+## Current status override — 2026-11-09
+
+- **Phase 3.3 — COMPLETE:** the project owner confirmed all remaining acceptance checks were safe.
+- **Phase 4 — NOT COMPLETE:** existing 4.1–4.3 implementation is retained; Phase 4.4 LIVE presentation/pagination code is being completed and validated.
+- **Current implementation branch:** `phase-4-implementation` in both Virtual Office and Python Backend repositories.
+- **No merge to `main`, no live Supabase migration, no real provider canary, and no trading execution were performed.
+- Phase 4 completion still requires full branch CI (frontend + BFF + Python/migration tests) and local Windows/Chrome owner acceptance.
+
+See [PHASE_4_EXECUTION_LOG.md](./PHASE_4_EXECUTION_LOG.md) for the implementation details, tests added, and remaining gates.
+
+---
+
 # SIREADER Virtual Office — Project State
 
 ## Current phase
