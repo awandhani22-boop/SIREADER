@@ -17,6 +17,7 @@ import {
   useOfficeStore,
 } from '../workers/worker.state';
 import { LiveObservabilityDock } from './LiveObservabilityDock';
+import { WorkforceLiveDock } from './WorkforceLiveDock';
 
 /**
  * TopBar Component (Single-Row Command Center Header)
@@ -179,6 +180,8 @@ export function TopBar() {
             <span>Feed</span>
           </button>
         </div>
+
+        <WorkforceLiveDock />
 
         {/* Simulation Clock Controls */}
         <div role="group" aria-label="Simulation controls" className="flex flex-wrap sm:flex-nowrap items-center gap-1 bg-slate-900/90 p-0.5 rounded-md border border-slate-800">
