@@ -73,6 +73,7 @@ Use three separate terminals and do not start duplicate processes.
 **Terminal A — Python API**
 
 ```powershell
+Set-Location $back
 & "C:\SIREADER\.venv\Scripts\python.exe" -m app.api.server
 ```
 
