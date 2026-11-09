@@ -1,7 +1,7 @@
 # SIREADER Virtual Office — Project State
 
 ## Current phase
-**Phase 3.3 — IMPLEMENTATION IN PROGRESS: Real-Time Observability (SSE).**
+**Phase 3.3 — IMPLEMENTATION IN PROGRESS: core owner manual SSE acceptance passed; supplementary acceptance gates remain open.**
 
 - Phase 3.2 — Secure BFF & Frontend Observability Integration: **COMPLETE — owner acceptance confirmed 2026-11-09**.
 
@@ -9,12 +9,12 @@
 - Active Python Backend implementation branch: `phase-3-3-sse-implementation` (isolated from `phase-3-1-api-gateway`).
 - Phase 3.2 implementation baseline remains `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5`; Phase 3.3 code is isolated in the two branches above.
 - Virtual Office Phase 3.3 code commit: `57e3f2d1d1eb3a616eb6792f69294f0d3072e261`; GitHub Actions run `42534082388` passed 367/367 tests, TypeScript check, and production build.
-- Python Backend Phase 3.3 code commit: `9c76a804eb6bb1c7c6838bc5ba0dcb8f7d677fb1`; GitHub Actions run `42534573937` passed 98 API tests, compileall, and 50 core regression tests, including migration inventory/read-only LISTEN validation.
-- Phase 3.3 work covers backend event hub/listener/route/migration, BFF streaming proxy, and frontend EventSource invalidation/fallback. Supabase migration and local owner end-to-end acceptance remain pending.
+- Python Backend Phase 3.3 latest implementation commit: `b596de70e5f6dacb847fcd6bdf432907cf5e5f34`; GitHub Actions run `42537576568` completed successfully (API tests, API compile checks, and core regressions).
+- Phase 3.3 work covers the backend EventHub/listener/route/migration, BFF streaming proxy, and frontend EventSource invalidation/fallback. Owner-reported local manual acceptance now confirms PostgreSQL NOTIFY delivery through the SSE stream, targeted system snapshot refresh, backend restart recovery, and four concurrent SSE streams held open for five minutes without reported errors. Live trigger-driven table mapping, explicit heartbeat-frame observation, BFF restart/session-expiry/fallback cases, and measured CPU/heap evidence remain open; see the execution log.
 - Batch 1 — BFF Foundation & Security Guards: implementation pushed; port and security changes source-audited.
 - Batch 2 — Fixed Upstream Proxy: implementation pushed; GitHub Actions run `42482847460` passed (323/323).
 - Batch 3 — Operator Authentication & Session Lifecycle: implementation pushed; GitHub Actions run `42483616073` passed (331/331), typecheck and production build passed.
-- Next work unit: owner-controlled Supabase migration and local end-to-end acceptance for Phase 3.3. Do not start Phase 4 until Phase 3.3 gates pass.
+- Next work unit: close the remaining Phase 3.3 acceptance gates (trigger-driven mapping verification, BFF/session/fallback failure paths, heartbeat observation, and measured four-stream CPU/heap evidence). Do not start Phase 4 until all Phase 3.3 gates pass.
 - Phases 1, 2.1, 2.2 and 2.3 remain complete with historical evidence and documented deferrals.
 - Phase 3.1 is implemented in the separate Python Backend repo. Owner-provided local report confirms the dedicated read-only database/API configuration and five authenticated GET smoke checks; a documentation-only status reconciliation remains for the backend runbook.
 
@@ -143,7 +143,7 @@ Before every substantial task, re-read the three canonical docs in order, verify
 
 ## Next
 
-**Phase 3.3 — Real-Time Observability (SSE): implementation in progress on isolated branches; Supabase migration and local owner acceptance pending.**
+**Phase 3.3 — Real-Time Observability (SSE): implementation in progress on isolated branches; core owner manual SSE acceptance passed, with supplementary acceptance gates still pending.**
 
 - Architecture document: [`docs/PHASE_3_3_SSE_ARCHITECTURE.md`](PHASE_3_3_SSE_ARCHITECTURE.md).
 - Proposed source: PostgreSQL LISTEN/NOTIFY from tightly scoped triggers on the existing observability source tables; Python API consumes notifications through a dedicated Psycopg 3 async listener.
@@ -152,6 +152,6 @@ Before every substantial task, re-read the three canonical docs in order, verify
 - Proposed topology: authenticated Python SSE endpoint -> authenticated Express BFF streaming proxy -> same-origin browser EventSource. The Bearer token never enters browser code.
 - Existing polling remains the fallback and periodic snapshot reconciliation. Simulation stays isolated.
 - Code is implemented on separate backend and Virtual Office branches. Current CI evidence and remaining acceptance gates are recorded in the Phase 3.3 execution log.
-- The migration has not been applied to Supabase by this work. Owner/DBA must review and apply it through the approved process; the runtime API role remains read-only.
+- The implementation did not apply the migration to Supabase. The running local listener passed its startup migration-inventory checks (the SSE route returned 200; it is designed to return 503 until the listener is ready), which is evidence that the required trigger inventory is present. A direct owner-run trigger-to-resource mapping check against a disposable/staging database remains a separate acceptance item. The runtime API role remains read-only.
 - Phase 4.1–6.3 remain planned and must be completed in roadmap order. v1.0 remains unreleased.
 
