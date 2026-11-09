@@ -597,4 +597,54 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
     useLiveStore.getState().reset();
   });
 
+  await t.test('network interruption falls back to polling and resumes SSE reconciliation after reconnect', async () => {
+    useLiveStore.getState().reset();
+    const clock = new FakeClock();
+    const counts = new Map<LiveApiPath, number>();
+    const sources: FakeEventSource[] = [];
+    const api = createApi(async (path) => {
+      counts.set(path, (counts.get(path) ?? 0) + 1);
+      return responses[path];
+    });
+    const poller = createLivePoller(createLiveController(api), {
+      clock,
+      random: () => 0.5,
+      eventSourceFactory: () => {
+        const source = new FakeEventSource();
+        sources.push(source);
+        return source;
+      },
+    });
+
+    assert.equal(await poller.start(), true);
+    assert.equal(sources.length, 1);
+    sources[0].open();
+    await clock.flushMicrotasks();
+
+    sources[0].fail();
+    await clock.flushMicrotasks();
+    assert.equal(counts.get('/api/v1/system/status'), 2, 'disconnect must reconcile snapshots immediately');
+    assert.equal(counts.get('/api/v1/telemetry/usage'), 2);
+    assert.equal(sources[0].closed, false, 'one network error leaves native EventSource reconnect enabled');
+
+    await clock.advanceBy(10_000);
+    assert.equal(counts.get('/api/v1/system/status'), 3, 'normal 10-second polling must resume during outage');
+    assert.equal(counts.get('/api/v1/pipeline/active'), 3);
+    assert.equal(counts.get('/api/v1/telemetry/usage'), 2, '30-second resources keep their slower fallback cadence');
+
+    sources[0].open();
+    await clock.flushMicrotasks();
+    assert.equal(sources.length, 1, 'native EventSource reconnect reuses the same source');
+    await clock.advanceBy(59_999);
+    assert.equal(counts.get('/api/v1/system/status'), 3);
+    await clock.advanceBy(1);
+
+    assert.equal(counts.get('/api/v1/system/status'), 4, 'healthy SSE restores 60-second reconciliation');
+    assert.equal(counts.get('/api/v1/telemetry/usage'), 3);
+    assert.equal(useLiveStore.getState().connection, 'LIVE');
+
+    poller.stop();
+    assert.equal(sources[0].closed, true);
+  });
+
 });
