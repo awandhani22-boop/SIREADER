@@ -6,11 +6,39 @@ import { useLiveStore, type LiveResourceSnapshot } from '../live/live.state';
 import { useWorkerDisplayModeStore } from '../workers/worker.display-mode';
 import { createLiveWorkerRepository } from '../workers/worker.live-repository';
 import type {
+  WorkforceCommandPath,
+  WorkforceCommandRequest,
   WorkforceActivityResponseDto,
   WorkforceAttemptsResponseDto,
   WorkforceRuntimeResponseDto,
   WorkforceTasksResponseDto,
 } from '../live/live.contracts';
+
+
+const NON_TRADING_TASK_OPTIONS = [
+  { worker: 'supervisor', capability: 'instruction_intake', taskType: 'INSTRUCTION_INTAKE', label: 'Supervisor · Instruction intake' },
+  { worker: 'supervisor', capability: 'task_decomposition', taskType: 'TASK_DECOMPOSITION', label: 'Supervisor · Task decomposition' },
+  { worker: 'supervisor', capability: 'workflow_supervision', taskType: 'WORKFLOW_SUPERVISION', label: 'Supervisor · Workflow supervision' },
+  { worker: 'supervisor', capability: 'task_assignment_oversight', taskType: 'TASK_ASSIGNMENT_OVERSIGHT', label: 'Supervisor · Assignment oversight' },
+  { worker: 'supervisor', capability: 'result_review', taskType: 'RESULT_REVIEW', label: 'Supervisor · Result review' },
+  { worker: 'haiku', capability: 'quick_research', taskType: 'QUICK_RESEARCH', label: 'Haiku · Quick research' },
+  { worker: 'haiku', capability: 'information_extraction', taskType: 'INFORMATION_EXTRACTION', label: 'Haiku · Information extraction' },
+  { worker: 'haiku', capability: 'summarization', taskType: 'SUMMARIZATION', label: 'Haiku · Summarization' },
+  { worker: 'haiku', capability: 'lightweight_classification', taskType: 'LIGHTWEIGHT_CLASSIFICATION', label: 'Haiku · Classification' },
+  { worker: 'sonnet', capability: 'data_analysis', taskType: 'DATA_ANALYSIS', label: 'Sonnet · Data analysis' },
+  { worker: 'sonnet', capability: 'comparison', taskType: 'COMPARISON', label: 'Sonnet · Comparison' },
+  { worker: 'sonnet', capability: 'evaluation', taskType: 'EVALUATION', label: 'Sonnet · Evaluation' },
+  { worker: 'sonnet', capability: 'structured_reasoning', taskType: 'STRUCTURED_REASONING', label: 'Sonnet · Structured reasoning' },
+  { worker: 'opus', capability: 'complex_reasoning', taskType: 'COMPLEX_REASONING', label: 'Opus · Complex reasoning' },
+  { worker: 'opus', capability: 'strategic_analysis', taskType: 'STRATEGIC_ANALYSIS', label: 'Opus · Strategic analysis' },
+  { worker: 'opus', capability: 'deep_review', taskType: 'DEEP_REVIEW', label: 'Opus · Deep review' },
+  { worker: 'data_archivist', capability: 'data_archiving', taskType: 'DATA_ARCHIVING', label: 'Archivist · Data archiving' },
+  { worker: 'data_archivist', capability: 'artifact_indexing', taskType: 'ARTIFACT_INDEXING', label: 'Archivist · Artifact indexing' },
+  { worker: 'data_archivist', capability: 'historical_retrieval_simulation', taskType: 'HISTORICAL_RETRIEVAL_SIMULATION', label: 'Archivist · Historical retrieval' },
+  { worker: 'data_archivist', capability: 'data_organization', taskType: 'DATA_ORGANIZATION', label: 'Archivist · Data organization' },
+] as const;
+const NON_TRADING_WORKERS = new Set(['supervisor', 'haiku', 'sonnet', 'opus', 'data_archivist']);
+const FINAL_TASK_STATUSES = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'DEAD_LETTERED']);
 
 function statusTone(status: string): string {
   if (status === 'READY' || status === 'COMPLETED' || status === 'LIVE') return 'border-emerald-500/40 bg-emerald-950/60 text-emerald-300';
@@ -57,6 +85,11 @@ export function WorkforceLiveDock() {
   const [taskPageData, setTaskPageData] = useState<WorkforceTasksResponseDto | null>(null);
   const [taskPageLoading, setTaskPageLoading] = useState(false);
   const [taskPageError, setTaskPageError] = useState<string | null>(null);
+  const [commandPending, setCommandPending] = useState(false);
+  const [commandError, setCommandError] = useState<string | null>(null);
+  const [commandNotice, setCommandNotice] = useState<string | null>(null);
+  const [taskInstruction, setTaskInstruction] = useState('');
+  const [taskOptionKey, setTaskOptionKey] = useState('haiku|summarization|SUMMARIZATION');
   const taskPageRequestGeneration = useRef(0);
   const displayMode = useWorkerDisplayModeStore((state) => state.mode);
 
@@ -80,6 +113,15 @@ export function WorkforceLiveDock() {
   const activityData = activity.data as WorkforceActivityResponseDto | null;
   const workerRepository = createLiveWorkerRepository(runtimeData, runtime.status, session, connection);
   const workerRows = workerRepository.listWorkers();
+
+  useEffect(() => {
+    if (session !== 'AUTHENTICATED' || displayMode !== 'LIVE') {
+      setCommandPending(false);
+      setCommandError(null);
+      setCommandNotice(null);
+      setTaskInstruction('');
+    }
+  }, [session, displayMode]);
 
   useEffect(() => {
     if (session !== 'AUTHENTICATED') {
@@ -153,6 +195,84 @@ export function WorkforceLiveDock() {
     };
   }, [isOpen, selectedTaskId, session]);
 
+
+  const runWorkforceCommand = async (
+    path: WorkforceCommandPath,
+    request: WorkforceCommandRequest,
+  ): Promise<Record<string, unknown> | null> => {
+    if (displayMode !== 'LIVE' || session !== 'AUTHENTICATED' || commandPending) return null;
+    setCommandPending(true);
+    setCommandError(null);
+    setCommandNotice(null);
+    try {
+      const result = await liveController.sendWorkforceCommand(path, request);
+      const outcome = result.outcome;
+      setCommandNotice(path === '/api/v1/commands/tasks/enqueue'
+        ? 'Task accepted · ' + String(outcome.task_id)
+        : path === '/api/v1/commands/tasks/cancel'
+          ? outcome.status === 'WAITING_REVIEW'
+            ? 'Provider outcome unknown · routed to WAITING_REVIEW'
+            : 'Task cancelled before a provider request'
+          : path === '/api/v1/commands/tasks/retry'
+            ? 'New retry task created · ' + String(outcome.task_id)
+            : 'Worker scheduling · ' + String(outcome.schedule_state));
+      await Promise.allSettled([
+        liveController.loadResource('/api/v1/workforce/runtime'),
+        liveController.loadResource('/api/v1/workforce/tasks'),
+        liveController.loadResource('/api/v1/workforce/activity'),
+      ]);
+      return outcome;
+    } catch (error) {
+      const code = error instanceof LiveApiError ? error.code : 'REQUEST_FAILED';
+      setCommandError(code);
+      return null;
+    } finally {
+      setCommandPending(false);
+    }
+  };
+
+  const submitTask = async (): Promise<void> => {
+    const instruction = taskInstruction.trim();
+    const selected = NON_TRADING_TASK_OPTIONS.find((option) =>
+      option.worker + '|' + option.capability + '|' + option.taskType === taskOptionKey,
+    );
+    if (!selected || !instruction || instruction.length > 180) {
+      setCommandError('BAD_REQUEST');
+      return;
+    }
+    const outcome = await runWorkforceCommand('/api/v1/commands/tasks/enqueue', {
+      task_type: selected.taskType,
+      title: instruction,
+      required_capability: selected.capability,
+      requested_worker_id: selected.worker,
+      input_payload: { instruction, source: 'virtual_office_operator_console' },
+      priority: 50,
+      max_attempts: 2,
+      non_trading_acknowledged: true,
+    });
+    if (outcome) setTaskInstruction('');
+  };
+
+  const isOperatorTask = (task: WorkforceTasksResponseDto['tasks'][number]): boolean =>
+    NON_TRADING_TASK_OPTIONS.some((option) =>
+      option.taskType === task.task_type && option.capability === task.required_capability,
+    ) && (task.requested_worker_id === null || NON_TRADING_WORKERS.has(task.requested_worker_id));
+
+  const cancelTask = async (taskId: string): Promise<void> => {
+    await runWorkforceCommand('/api/v1/commands/tasks/cancel', { task_id: taskId });
+  };
+
+  const retryTask = async (taskId: string): Promise<void> => {
+    await runWorkforceCommand('/api/v1/commands/tasks/retry', { task_id: taskId });
+  };
+
+  const setWorkerScheduling = async (workerId: string, acceptingTasks: boolean): Promise<void> => {
+    await runWorkforceCommand('/api/v1/commands/workers/scheduling', {
+      worker_id: workerId,
+      accepting_tasks: acceptingTasks,
+    });
+  };
+
   function closeOnBackdrop(event: MouseEvent<HTMLDivElement>) {
     if (event.target === event.currentTarget) setIsOpen(false);
   }
@@ -219,6 +339,56 @@ export function WorkforceLiveDock() {
                 </div>
               ) : (
                 <>
+                  {displayMode === 'LIVE' && (
+                    <section aria-label="Human-supervised workforce commands" className="rounded-xl border border-cyan-500/25 bg-cyan-950/10 p-3">
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h3 className="text-[11px] font-bold uppercase tracking-wider text-cyan-200">Operator command console</h3>
+                          <p className="mt-1 text-[10px] text-slate-500">Non-trading work only · every command is authenticated and audited</p>
+                        </div>
+                        <span className="rounded border border-amber-500/30 bg-amber-950/20 px-2 py-1 font-mono text-[9px] text-amber-200">HUMAN SUPERVISED</span>
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto]">
+                        <select
+                          aria-label="Non-trading task type"
+                          data-testid="workforce-command-task-type"
+                          value={taskOptionKey}
+                          disabled={commandPending}
+                          onChange={(event) => setTaskOptionKey(event.target.value)}
+                          className="min-w-0 rounded border border-slate-700 bg-slate-950 px-2 py-2 text-[11px] text-slate-200"
+                        >
+                          {NON_TRADING_TASK_OPTIONS.map((option) => (
+                            <option key={option.worker + option.taskType} value={option.worker + '|' + option.capability + '|' + option.taskType}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          aria-label="Task instruction"
+                          data-testid="workforce-command-instruction"
+                          value={taskInstruction}
+                          maxLength={180}
+                          disabled={commandPending}
+                          onChange={(event) => setTaskInstruction(event.target.value)}
+                          placeholder="Describe the non-trading task (max 180 characters)"
+                          className="min-w-0 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-[11px] text-white placeholder:text-slate-600"
+                        />
+                        <button
+                          type="button"
+                          data-testid="workforce-command-enqueue"
+                          disabled={commandPending || taskInstruction.trim().length === 0}
+                          onClick={() => void submitTask()}
+                          className="rounded border border-cyan-500/40 bg-cyan-500/15 px-3 py-2 text-[10px] font-bold text-cyan-100 disabled:opacity-40"
+                        >
+                          {commandPending ? 'Submitting…' : 'Create task'}
+                        </button>
+                      </div>
+                      {commandPending && <p role="status" className="mt-2 text-[10px] text-cyan-200">Command is being processed. No UI state is assumed until the backend responds.</p>}
+                      {commandError && <p role="alert" className="mt-2 text-[10px] text-rose-300">Command rejected or unavailable: {commandError}</p>}
+                      {commandNotice && <p role="status" className="mt-2 text-[10px] text-emerald-200">{commandNotice}</p>}
+                    </section>
+                  )}
+
                   <section aria-label="Workforce runtime metrics">
                     <div className="mb-2 flex items-center justify-between">
                       <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Runtime overview</h3>
@@ -268,6 +438,22 @@ export function WorkforceLiveDock() {
                               </span>
                             ))}
                           </div>
+                          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-2">
+                            <span className="text-[9px] text-slate-400">Scheduling: {worker.acceptingTasks === null ? 'UNKNOWN' : worker.acceptingTasks ? 'ACCEPTING' : 'PAUSED'}</span>
+                            {displayMode === 'LIVE' && session === 'AUTHENTICATED' &&
+                              NON_TRADING_WORKERS.has(worker.workerId) && worker.enabled === true &&
+                              worker.acceptingTasks !== null && (
+                                <button
+                                  type="button"
+                                  data-testid={'worker-scheduling-' + worker.workerId}
+                                  disabled={commandPending}
+                                  onClick={() => void setWorkerScheduling(worker.workerId, !worker.acceptingTasks)}
+                                  className="rounded border border-slate-700 px-2 py-1 text-[9px] font-semibold text-slate-300 disabled:opacity-40"
+                                >
+                                  {worker.acceptingTasks ? 'Pause new tasks' : 'Resume tasks'}
+                                </button>
+                              )}
+                          </div>
                           <p className="mt-2 text-[9px] text-slate-600">Heartbeat: {timeLabel(worker.heartbeatAt)}</p>
                         </article>
                       ))}
@@ -287,25 +473,42 @@ export function WorkforceLiveDock() {
                     </div>
                     <div className="overflow-hidden rounded-lg border border-slate-800">
                       {taskRows.map((task) => (
-                        <button
-                          key={task.task_id}
-                          type="button"
-                          onClick={() => setSelectedTaskId(task.task_id)}
-                          className={'flex w-full items-center justify-between gap-3 border-b border-slate-800 px-3 py-2.5 text-left last:border-b-0 hover:bg-slate-900 ' + (selectedTaskId === task.task_id ? 'bg-cyan-950/30' : 'bg-slate-950/30')}
-                        >
-                          <span className="min-w-0">
+                        <div key={task.task_id} className="flex items-center gap-2 border-b border-slate-800 bg-slate-950/30 px-2 py-2 last:border-b-0">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTaskId(task.task_id)}
+                            className={'min-w-0 flex-1 rounded px-1 py-1 text-left hover:bg-slate-900 ' + (selectedTaskId === task.task_id ? 'bg-cyan-950/30' : '')}
+                          >
                             <span className="block truncate text-xs font-medium text-slate-200">{task.title}</span>
                             <span className="mt-0.5 block truncate font-mono text-[9px] text-slate-500">
                               {task.task_type} · {task.assigned_worker_id ?? 'Unassigned'} · {task.attempts}/{task.max_attempts} attempts
                             </span>
-                          </span>
+                          </button>
                           <span className="flex shrink-0 items-center gap-2">
                             <span className="font-mono text-[9px] text-slate-500">P{task.priority}</span>
-                            <span className={'rounded border px-1.5 py-0.5 font-mono text-[9px] ' + statusTone(task.status)}>
-                              {task.status}
-                            </span>
+                            <span className={'rounded border px-1.5 py-0.5 font-mono text-[9px] ' + statusTone(task.status)}>{task.status}</span>
+                            {displayMode === 'LIVE' && session === 'AUTHENTICATED' && isOperatorTask(task) &&
+                              ['QUEUED', 'CLAIMED', 'RUNNING', 'RETRY_WAIT'].includes(task.status) && (
+                                <button
+                                  type="button"
+                                  data-testid={'workforce-task-cancel-' + task.task_id}
+                                  disabled={commandPending}
+                                  onClick={() => void cancelTask(task.task_id)}
+                                  className="rounded border border-rose-500/30 px-2 py-1 text-[9px] text-rose-200 disabled:opacity-40"
+                                >Cancel</button>
+                              )}
+                            {displayMode === 'LIVE' && session === 'AUTHENTICATED' && isOperatorTask(task) &&
+                              task.status === 'FAILED' && (
+                                <button
+                                  type="button"
+                                  data-testid={'workforce-task-retry-' + task.task_id}
+                                  disabled={commandPending}
+                                  onClick={() => void retryTask(task.task_id)}
+                                  className="rounded border border-amber-500/30 px-2 py-1 text-[9px] text-amber-200 disabled:opacity-40"
+                                >Retry</button>
+                              )}
                           </span>
-                        </button>
+                        </div>
                       ))}
                       {visibleTaskData?.tasks.length === 0 && (
                         <p className="p-3 text-xs text-slate-500">Belum ada task backend.</p>
