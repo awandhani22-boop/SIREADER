@@ -115,9 +115,13 @@ export function rawPathGuard(req: Request, res: Response, next: NextFunction): v
   const attemptsQueryAllowed =
     rawUrl.startsWith('/api/v1/workforce/attempts?') &&
     /^\/api\/v1\/workforce\/attempts\?task_id=[A-Za-z0-9_-]{8,64}$/.test(rawUrl);
+  const taskQueryIndex = rawUrl.indexOf('?');
+  const taskQueryParts = taskQueryIndex >= 0 ? rawUrl.slice(taskQueryIndex + 1).split('&') : [];
   const workforceTaskPageQueryAllowed =
-    rawUrl.startsWith('/api/v1/workforce/tasks?') &&
-    /^\/api\/v1\/workforce\/tasks\?limit=(?:[1-9]\d?|100)&offset=(?:0|[1-9]\d{0,4}|100000)$/.test(rawUrl);
+    rawUrl.slice(0, taskQueryIndex) === '/api/v1/workforce/tasks' &&
+    taskQueryParts.length === 2 &&
+    /^limit=(?:[1-9]|[1-9][0-9]|100)$/.test(taskQueryParts[0] ?? '') &&
+    /^offset=(?:0|[1-9][0-9]{0,4}|100000)$/.test(taskQueryParts[1] ?? '');
   if (rawUrl.includes('?') && !attemptsQueryAllowed && !workforceTaskPageQueryAllowed) {
     sendBffError(res, 400, 'BAD_REQUEST', 'Query strings are not permitted on this API route.');
     return;
