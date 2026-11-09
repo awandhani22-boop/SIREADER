@@ -366,8 +366,15 @@ export function createLivePoller(
 
     source.onopen = () => {
       if (!isCurrent(runGeneration) || eventSource !== source) return;
+      const recoveringFromStreamFailure = eventStreamFailures > 0;
       eventStreamFailures = 0;
       setEventStreamHealth(true, runGeneration);
+      // A reopened EventSource proves transport recovery, not snapshot freshness.
+      // Reconcile all five authoritative snapshots immediately instead of waiting
+      // for the now-longer 60-second healthy-SSE cadence.
+      if (recoveringFromStreamFailure) {
+        void refreshPaths(LIVE_API_PATHS, runGeneration);
+      }
     };
 
     source.onerror = () => {
