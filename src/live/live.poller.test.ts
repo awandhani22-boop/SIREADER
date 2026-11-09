@@ -690,13 +690,18 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
     sources[0].open();
     await clock.flushMicrotasks();
     assert.equal(sources.length, 1, 'native EventSource reconnect reuses the same source');
+    assert.equal(counts.get('/api/v1/system/status'), 4, 'SSE reconnect immediately refreshes all snapshots');
+    assert.equal(counts.get('/api/v1/pipeline/active'), 4);
+    assert.equal(counts.get('/api/v1/telemetry/usage'), 3);
+    assert.equal(counts.get('/api/v1/audit/decisions'), 3);
+    assert.equal(useLiveStore.getState().connection, 'LIVE', 'LIVE status returns as soon as all refreshed snapshots validate');
+
     await clock.advanceBy(59_999);
-    assert.equal(counts.get('/api/v1/system/status'), 3);
+    assert.equal(counts.get('/api/v1/system/status'), 4);
     await clock.advanceBy(1);
 
-    assert.equal(counts.get('/api/v1/system/status'), 4, 'healthy SSE restores 60-second reconciliation');
-    assert.equal(counts.get('/api/v1/telemetry/usage'), 3);
-    assert.equal(useLiveStore.getState().connection, 'LIVE');
+    assert.equal(counts.get('/api/v1/system/status'), 5, 'healthy SSE then uses the 60-second reconciliation interval');
+    assert.equal(counts.get('/api/v1/telemetry/usage'), 4);
 
     poller.stop();
     assert.equal(sources[0].closed, true);
