@@ -229,6 +229,39 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
     }
   });
 
+  await t.test('workforce task pagination uses bounded integers and the same-origin BFF route', async () => {
+    const calls: Array<{ input: RequestInfo | URL; init: RequestInit }> = [];
+    const api = createLiveApiClient({
+      fetchImpl: async (input, init = {}) => {
+        calls.push({ input, init });
+        return jsonResponse({
+          server_time_utc: '2026-11-09T10:00:00Z',
+          total_count: 125,
+          limit: 25,
+          offset: 50,
+          tasks: [],
+        });
+      },
+    });
+
+    await assert.rejects(api.getWorkforceTasks(0, 0), (error: unknown) =>
+      error instanceof LiveApiError && error.code === 'BAD_REQUEST');
+    await assert.rejects(api.getWorkforceTasks(101, 0), (error: unknown) =>
+      error instanceof LiveApiError && error.code === 'BAD_REQUEST');
+    await assert.rejects(api.getWorkforceTasks(50, 100_001), (error: unknown) =>
+      error instanceof LiveApiError && error.code === 'BAD_REQUEST');
+    assert.equal(calls.length, 0);
+
+    const result = await api.getWorkforceTasks(25, 50);
+    assert.equal(result.total_count, 125);
+    assert.equal(result.limit, 25);
+    assert.equal(result.offset, 50);
+    assert.equal(String(calls[0].input), '/api/v1/workforce/tasks?limit=25&offset=50');
+    assert.equal(calls[0].init.credentials, 'same-origin');
+    assert.equal(calls[0].init.cache, 'no-store');
+    assert.equal(new Headers(calls[0].init.headers).get('authorization'), null);
+  });
+
   await t.test('workforce attempts require a bounded task ID and use the authenticated fixed BFF route', async () => {
     const calls: Array<{ input: RequestInfo | URL; init: RequestInit }> = [];
     const api = createLiveApiClient({
@@ -281,7 +314,7 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
     assert.equal(calls[2].init.body, JSON.stringify({ password: 'transient-test-password' }));
     assert.equal(calls[3].init.body, '{}');
     assert.equal(calls.every((call) => !new Headers(call.init.headers).has('authorization')), true);
-    assert.equal(Object.keys(api).sort().join(','), 'clearCsrfToken,get,getSession,getWorkforceAttempts,login,logout');
+    assert.equal(Object.keys(api).sort().join(','), 'clearCsrfToken,get,getSession,getWorkforceAttempts,getWorkforceTasks,login,logout');
   });
 
   await t.test('missing operator session maps to SESSION_REQUIRED', async () => {
