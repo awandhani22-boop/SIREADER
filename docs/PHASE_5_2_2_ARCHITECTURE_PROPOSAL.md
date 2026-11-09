@@ -117,7 +117,46 @@ To prevent semantic confusion:
 
 ---
 
-## 5. Data Model & Storage Lifecycle
+## 5. Authorization & Data-Flow Architecture
+
+### 5.1. End-to-End Governance Data-Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operator as Operator (Browser)
+    participant BFF as Frontend BFF (Port 3000)
+    participant ReadAPI as Read API (Port 8000 / sireader_api_ro)
+    participant CmdAPI as Command API (Port 8010 / sireader_workforce_cmd)
+    participant DB as PostgreSQL Disposable
+
+    Note over Operator,DB: 1. Review Discovery & Inspection (Read Path)
+    Operator->>BFF: GET /api/live/governance/reviews/pending (Session Cookie)
+    BFF->>BFF: Validate Session & Rate Limits
+    BFF->>ReadAPI: GET /api/v1/governance/reviews/pending (Bearer RO Token)
+    ReadAPI->>DB: SELECT * FROM v_api_workforce_task_reviews WHERE status = 'PENDING'
+    DB-->>ReadAPI: Sanitized review records
+    ReadAPI-->>BFF: JSON (Masked credentials)
+    BFF-->>Operator: 200 OK (Render in Review Inbox)
+
+    Note over Operator,DB: 2. Review Adjudication (Command Path)
+    Operator->>BFF: POST /api/live/commands/reviews/adjudicate (CSRF + Session)
+    BFF->>BFF: Verify CSRF & Loopback Bound
+    BFF->>CmdAPI: POST /api/v1/commands/reviews/adjudicate (X-Command-Token)
+    CmdAPI->>DB: BEGIN TRANSACTION (SERIALIZABLE / REPEATABLE READ)
+    CmdAPI->>DB: SELECT * FROM workforce_task_reviews WHERE review_id = :id FOR UPDATE
+    CmdAPI->>DB: Check status == 'PENDING' & SHA-256 integrity match
+    CmdAPI->>DB: UPDATE workforce_task_reviews & workforce_tasks
+    CmdAPI->>DB: INSERT INTO workforce_activity_events (HUMAN_REVIEW_*)
+    CmdAPI->>DB: INSERT INTO workforce_command_audit (Idempotency-Key)
+    CmdAPI->>DB: COMMIT
+    CmdAPI-->>BFF: 200 OK {"command_type": "REVIEW_ADJUDICATE", ...}
+    BFF-->>Operator: 200 OK (Update Review Dock UI)
+```
+
+---
+
+## 6. Data Model & Storage Lifecycle
 
 ### 5.1. Database Schema (`public.workforce_task_reviews`)
 
@@ -313,7 +352,41 @@ GRANT SELECT ON public.v_api_workforce_task_reviews TO sireader_api_ro;
 
 ---
 
-## 10. Sub-unit Implementation Breakdown & Acceptance Roadmap
+## 10. Migration & Rollback Outline
+
+### 10.1. Forward Migration (`migrations/2026_11_09_workforce_reviews_v1.sql`)
+1. Create table `public.workforce_task_reviews` with constraints (`status`, `sha256`, `adjudication`).
+2. Create indexes `ix_workforce_task_reviews_status_created` and `ix_workforce_task_reviews_attempt`.
+3. Create security-barrier view `public.v_api_workforce_task_reviews`.
+4. Grant `SELECT` to `sireader_api_ro`.
+5. Grant `SELECT, INSERT, UPDATE` on `workforce_task_reviews` to `sireader_workforce_cmd`.
+
+### 10.2. Rollback Script (`migrations/2026_11_09_workforce_reviews_v1_rollback.sql`)
+1. Revoke grants on `v_api_workforce_task_reviews` and `workforce_task_reviews`.
+2. Drop view `public.v_api_workforce_task_reviews`.
+3. Drop table `public.workforce_task_reviews`.
+
+---
+
+## 11. Comprehensive Test Matrix
+
+| Layer | Test Scope | Scenarios | Target Verification |
+| :--- | :--- | :--- | :--- |
+| **Backend Unit & Models (5.2.2-B)** | Review Schema & Integrity | Table constraints, FK cascades, check constraints on status/notes/adjusted output. | Invalid status rejected; missing notes on reject fails; missing adjusted output on edit fails. |
+| **Backend Repository (5.2.2-B)** | SHA-256 Calculation | Canonical JSON serialization hashing; deterministic output fingerprint. | Same payload yields identical hash; altered whitespace/order yields stable hash. |
+| **Command API (5.2.2-C)** | Adjudication Port 8010 | Positive: `APPROVE`, `EDIT`, `REJECT` transitions with valid token and session. | Review transitions to terminal; task completed/failed; events emitted. |
+| **Command API (5.2.2-C)** | Concurrency & Races | Two concurrent adjudication requests on identical `review_id`. | First succeeds; second fails with `409 REVIEW_ALREADY_ADJUDICATED` (row lock). |
+| **Command API (5.2.2-C)** | Anti-Stale Fingerprint | Adjudication with mismatched `expected_original_sha256`. | Fails immediately with `409 STALE_REVIEW_SNAPSHOT`. |
+| **Command API (5.2.2-C)** | Security Boundaries | Calls to 8010 without command token, invalid token, or trading task ID. | 401/403 unauthorized; trading tasks rejected with 400/409. |
+| **Read API (5.2.2-D)** | Read Port 8000 | `GET /pending` and `GET /{id}` via `sireader_api_ro`. | Bounded pagination; zero base table direct access; sanitized credentials. |
+| **Frontend BFF (5.2.2-D)** | Proxy Handlers | Loopback validation, CSRF verification, DTO validation. | Rejects SSRF; blocks requests without valid session cookie. |
+| **Frontend UI (5.2.2-E)** | Safe Markdown | Render LLM output containing `<script>`, `<iframe>`, markdown images, etc. | Scripts completely stripped; zero execution; inert syntax blocks. |
+| **Frontend UI (5.2.2-E)** | DEMO Isolation | Switch to DEMO mode in Virtual Office; inspect review inbox. | Displays simulated reviews only; zero HTTP calls to 8010/8000; commands disabled. |
+| **Frontend UI (5.2.2-E)** | Logout Hygiene | Adjudicate/draft review, then click Logout. | All draft text and private review cache wiped from memory. |
+
+---
+
+## 12. Sub-unit Implementation Breakdown & Acceptance Roadmap
 
 Checkpoint 5.2.2 is structured into four subsequent implementation units following this architectural review:
 
