@@ -394,13 +394,16 @@ export const WorkerAvatarSceneItem = React.memo(function WorkerAvatarSceneItem({
   workerId: WorkerId;
 }) {
   const worker = useOfficeStore((state) => state.workers[workerId]);
-  const isSelected = useOfficeStore((state) => state.selectedWorkerId === workerId);
+  const displayMode = useWorkerDisplayModeStore((state) => state.mode);
+  const isSelected = displayMode === 'LIVE'
+    ? useWorkerDisplayModeStore((state) => state.selectedLiveWorkerId === workerId)
+    : useOfficeStore((state) => state.selectedWorkerId === workerId);
   const reducedMotion = useOfficeStore((state) => state.reducedMotion);
   const avatarLoadError = useOfficeStore((state) => state.avatarLoadErrors[workerId]);
-  const selectWorker = useOfficeStore((state) => state.selectWorker);
+  const selectDemoWorker = useOfficeStore((state) => state.selectWorker);
+  const setSelectedLiveWorkerId = useWorkerDisplayModeStore((state) => state.setSelectedLiveWorkerId);
   const recordAvatarModelError = useOfficeStore((state) => state.recordAvatarModelError);
 
-  const displayMode = useWorkerDisplayModeStore((state) => state.mode);
   const liveResource = useLiveStore((state) => state.resources['/api/v1/workforce/runtime']);
   const liveSession = useLiveStore((state) => state.session);
   const liveConnection = useLiveStore((state) => state.connection);
@@ -431,7 +434,10 @@ export const WorkerAvatarSceneItem = React.memo(function WorkerAvatarSceneItem({
       isSelected={isSelected}
       reducedMotion={reducedMotion || displayMode === 'LIVE'}
       avatarLoadError={avatarLoadError}
-      onSelectWorker={selectWorker}
+      onSelectWorker={(selectedWorkerId) => {
+        if (displayMode === 'LIVE') setSelectedLiveWorkerId(selectedWorkerId);
+        else selectDemoWorker(selectedWorkerId);
+      }}
       onModelError={recordAvatarModelError}
     />
   );
