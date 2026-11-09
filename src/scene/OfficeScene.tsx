@@ -168,18 +168,24 @@ const RoomSceneItem = React.memo(function RoomSceneItem({
   const workerStatus = displayMode === 'LIVE'
     ? liveRepository.getWorker(room.primaryWorkerId).visualStatus
     : demoRepository.getWorker(room.primaryWorkerId).visualStatus;
-  const isSelected = useOfficeStore(
-    (s) =>
-      s.selectedRoomId === room.id || s.selectedWorkerId === room.primaryWorkerId,
-  );
-  const selectRoom = useOfficeStore((s) => s.selectRoom);
+  const selectedDemoRoomId = useOfficeStore((s) => s.selectedRoomId);
+  const selectedDemoWorkerId = useOfficeStore((s) => s.selectedWorkerId);
+  const selectDemoRoom = useOfficeStore((s) => s.selectRoom);
+  const selectedLiveWorkerId = useWorkerDisplayModeStore((s) => s.selectedLiveWorkerId);
+  const setSelectedLiveWorkerId = useWorkerDisplayModeStore((s) => s.setSelectedLiveWorkerId);
+  const isSelected = displayMode === 'LIVE'
+    ? selectedLiveWorkerId === room.primaryWorkerId
+    : selectedDemoRoomId === room.id || selectedDemoWorkerId === room.primaryWorkerId;
 
   return (
     <Room
       room={room}
       isSelected={isSelected}
       workerStatus={workerStatus}
-      onSelectRoom={selectRoom}
+      onSelectRoom={(roomId, workerId) => {
+        if (displayMode === 'LIVE') setSelectedLiveWorkerId(workerId);
+        else selectDemoRoom(roomId, workerId);
+      }}
     />
   );
 });
@@ -193,7 +199,8 @@ const RoomSceneItem = React.memo(function RoomSceneItem({
 function OfficeSceneContent() {
   const workerOrder = useOfficeStore((s) => s.workerOrder);
   const graphicsPreset = useOfficeStore((s) => s.graphicsPreset);
-  const selectWorker = useOfficeStore((s) => s.selectWorker);
+  const selectDemoWorker = useOfficeStore((s) => s.selectWorker);
+  const setSelectedLiveWorkerId = useWorkerDisplayModeStore((s) => s.setSelectedLiveWorkerId);
 
   const enableShadows = !IS_SOFTWARE_GL && graphicsPreset === 'high';
 
@@ -226,7 +233,10 @@ function OfficeSceneContent() {
       <pointLight position={[8.2, 3.8, 0]} intensity={1.2} distance={16} color="#8B5CF6" />
 
       {/* 1. Static Office Building & Spine Corridor */}
-      <OfficeBuilding onBackgroundClick={() => selectWorker(null)} />
+      <OfficeBuilding onBackgroundClick={() => {
+        if (useWorkerDisplayModeStore.getState().mode === 'LIVE') setSelectedLiveWorkerId(null);
+        else selectDemoWorker(null);
+      }} />
 
       {/* 2. Seven Department Rooms (Granular Memoized Items) */}
       <group name="DepartmentRoomsGroup">
