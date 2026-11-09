@@ -705,6 +705,7 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
     await clock.advanceBy(10_000);
     const systemCallsDuringOutage = counts.get('/api/v1/system/status') ?? 0;
     const telemetryCallsDuringOutage = counts.get('/api/v1/telemetry/usage') ?? 0;
+    const callsDuringOutage = new Map(counts);
     assert.ok(systemCallsDuringOutage >= 4, 'normal 10-second system polling/retries must continue during outage');
     assert.ok(telemetryCallsDuringOutage >= 4, 'telemetry retries must continue while the network is unavailable');
     assert.equal(useLiveStore.getState().connection, 'OFFLINE');
@@ -721,6 +722,12 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
       (counts.get('/api/v1/telemetry/usage') ?? 0) > telemetryCallsDuringOutage,
       'SSE reconnect must immediately refresh the telemetry snapshot',
     );
+    for (const path of LIVE_API_PATHS) {
+      assert.ok(
+        (counts.get(path) ?? 0) > (callsDuringOutage.get(path) ?? 0),
+        `SSE reconnect must immediately refresh ${path}`,
+      );
+    }
     assert.equal(useLiveStore.getState().connection, 'LIVE', 'LIVE returns after all eight refreshed snapshots validate');
 
     const recoveredSystemCalls = counts.get('/api/v1/system/status') ?? 0;
