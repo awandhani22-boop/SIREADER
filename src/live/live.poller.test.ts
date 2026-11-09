@@ -22,6 +22,7 @@ import {
   type LivePollerClock,
 } from './live.poller';
 import { useLiveStore } from './live.state';
+import { useOfficeStore } from '../workers/worker.state';
 import type { LiveEventSourceLike } from './live.events';
 import { LIVE_SSE_RECONCILIATION_INTERVAL_MS } from './live.events';
 
@@ -532,3 +533,69 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
   });
 
 });
+
+
+  await t.test('SSE LIVE invalidations and SIMULATED controls remain isolated in both directions', async () => {
+    useLiveStore.getState().reset();
+    useOfficeStore.getState().resetSimulationWithSeed(20_261_109);
+
+    const clock = new FakeClock();
+    const sources: FakeEventSource[] = [];
+    const api = createApi(async (path) => responses[path]);
+    const poller = createLivePoller(createLiveController(api), {
+      clock,
+      random: () => 0.5,
+      eventSourceFactory: () => {
+        const source = new FakeEventSource();
+        sources.push(source);
+        return source;
+      },
+    });
+
+    assert.equal(await poller.start(), true);
+    assert.equal(sources.length, 1);
+    sources[0].open();
+
+    const simulatedBeforeEvent = useOfficeStore.getState();
+    const liveBeforeEvent = useLiveStore.getState();
+    sources[0].emit(
+      'resources.invalidated',
+      JSON.stringify({
+        schema_version: 1,
+        occurred_at: '2026-11-09T00:00:00Z',
+        resources: ['pipeline'],
+      }),
+      '123e4567-e89b-12d3-a456-426614174000:1',
+    );
+    await clock.flushMicrotasks();
+
+    const simulatedAfterEvent = useOfficeStore.getState();
+    assert.equal(simulatedAfterEvent.simTimeMs, simulatedBeforeEvent.simTimeMs);
+    assert.equal(simulatedAfterEvent.tickCount, simulatedBeforeEvent.tickCount);
+    assert.strictEqual(simulatedAfterEvent.workers, simulatedBeforeEvent.workers);
+    assert.strictEqual(simulatedAfterEvent.tasks, simulatedBeforeEvent.tasks);
+    assert.strictEqual(simulatedAfterEvent.events, simulatedBeforeEvent.events);
+
+    const liveAfterEvent = useLiveStore.getState();
+    assert.notStrictEqual(liveAfterEvent.resources, liveBeforeEvent.resources);
+    assert.equal(
+      liveAfterEvent.resources['/api/v1/pipeline/active'].status,
+      'LIVE',
+    );
+    const liveResourcesBeforeSimulation = liveAfterEvent.resources;
+
+    useOfficeStore.getState().advanceByWallClock(500);
+
+    const simulatedAfterControl = useOfficeStore.getState();
+    assert.equal(simulatedAfterControl.simTimeMs, simulatedBeforeEvent.simTimeMs + 500);
+    assert.equal(simulatedAfterControl.tickCount, simulatedBeforeEvent.tickCount + 1);
+    assert.strictEqual(
+      useLiveStore.getState().resources,
+      liveResourcesBeforeSimulation,
+      'SIMULATED clock advancement must not mutate LIVE API snapshots',
+    );
+
+    poller.stop();
+    useOfficeStore.getState().resetSimulationWithSeed();
+    useLiveStore.getState().reset();
+  });
