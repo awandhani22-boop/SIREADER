@@ -53,6 +53,39 @@ const telemetry: TelemetryUsageDto = {
     status_counts: { COMPLETED: 2 },
   }],
   models: [],
+  budget: {
+    daily_idr: {
+      currency: 'IDR', window: 'DAILY', period_start: '2026-11-09', period_end: '2026-11-09',
+      budget_amount: '10000', hard_limit_amount: '50000', actual_cost: '1000',
+      reserved_cost: '250', projected_cost: '1250', remaining_budget: '8750',
+      remaining_hard_limit: '48750', percent_used: '12.5', warning_threshold_percent: null,
+      warning_level: 'NONE', status_counts: { COMPLETED: 1, RESERVED: 1 },
+    },
+    rolling_month_idr: {
+      currency: 'IDR', window: 'ROLLING_MONTH', period_start: '2026-10-11', period_end: '2026-11-09',
+      budget_amount: '50000', hard_limit_amount: null, actual_cost: '1000',
+      reserved_cost: '250', projected_cost: '1250', remaining_budget: '48750',
+      remaining_hard_limit: null, percent_used: '2.5', warning_threshold_percent: null,
+      warning_level: 'NONE', status_counts: { COMPLETED: 1, RESERVED: 1 },
+    },
+    monthly_anthropic_usd: {
+      currency: 'USD', window: 'MONTHLY', period_start: '2026-10-11', period_end: '2026-11-09',
+      budget_amount: '5', hard_limit_amount: null, actual_cost: '0', reserved_cost: '0',
+      projected_cost: '0', remaining_budget: '5', remaining_hard_limit: null,
+      percent_used: '0', warning_threshold_percent: null, warning_level: 'NONE', status_counts: {},
+    },
+    idr_tiers: [
+      { tier: 'FAST', currency: 'IDR', budget_amount: '25000', actual_cost: '1000', reserved_cost: '250', projected_cost: '1250', remaining_budget: '23750', percent_used: '5', budget_reached: false },
+      { tier: 'REASONING', currency: 'IDR', budget_amount: '22500', actual_cost: '0', reserved_cost: '0', projected_cost: '0', remaining_budget: '22500', percent_used: '0', budget_reached: false },
+      { tier: 'ESCALATION', currency: 'IDR', budget_amount: '2500', actual_cost: '0', reserved_cost: '0', projected_cost: '0', remaining_budget: '2500', percent_used: '0', budget_reached: false },
+    ],
+    worker_breakdown: [
+      { worker_id: 'haiku', currency: 'IDR', actual_cost: '1000', reserved_cost: '250', projected_cost: '1250', requests: 2 },
+    ],
+    recent_task_costs: [
+      { task_id: 'task_12345678', worker_id: 'haiku', tier: 'FAST', model: 'haiku-test', currency: 'IDR', actual_cost: '1000', reserved_cost: '250', projected_cost: '1250', requests: 2 },
+    ],
+  },
 };
 
 const pipeline: ActivePipelineDto = {

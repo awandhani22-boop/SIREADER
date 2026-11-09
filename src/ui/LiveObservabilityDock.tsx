@@ -360,6 +360,64 @@ export function LiveObservabilityDock() {
                         <p className="text-[10px] text-slate-400">{displayNumber(item.total_requests)} requests</p>
                       </div>
                     ))}
+                    {telemetry.data?.budget && (
+                      <div className="mt-3 space-y-2 border-t border-slate-800 pt-2" data-testid="live-budget-observability">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-semibold text-slate-200">Daily IDR budget</span>
+                          <span className={'text-[9px] font-semibold ' + (telemetry.data.budget.daily_idr.warning_level === 'NONE' ? 'text-emerald-300' : 'text-amber-300')}>
+                            {telemetry.data.budget.daily_idr.warning_level}
+                          </span>
+                        </div>
+                        <p className="text-[11px] tabular-nums text-white">
+                          Rp {displayAmount(telemetry.data.budget.daily_idr.projected_cost)} / Rp {displayAmount(telemetry.data.budget.daily_idr.budget_amount)}
+                        </p>
+                        <div className="h-1.5 overflow-hidden rounded bg-slate-800">
+                          <div className="h-full rounded bg-cyan-500" style={{ width: Math.min(100, Number(telemetry.data.budget.daily_idr.percent_used)) + '%' }} />
+                        </div>
+                        <p className="text-[9px] text-slate-500">
+                          Actual {displayAmount(telemetry.data.budget.daily_idr.actual_cost)} · reserved {displayAmount(telemetry.data.budget.daily_idr.reserved_cost)} · hard limit Rp {displayAmount(telemetry.data.budget.daily_idr.hard_limit_amount ?? 0)}
+                        </p>
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <div>
+                            <p className="text-[9px] text-slate-500">Rolling 30-day IDR</p>
+                            <p className="text-[10px] font-semibold text-white">Rp {displayAmount(telemetry.data.budget.rolling_month_idr.projected_cost)} / {displayAmount(telemetry.data.budget.rolling_month_idr.budget_amount)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] text-slate-500">Anthropic monthly USD</p>
+                            <p className="text-[10px] font-semibold text-white">$ {displayAmount(telemetry.data.budget.monthly_anthropic_usd.projected_cost)} / {displayAmount(telemetry.data.budget.monthly_anthropic_usd.budget_amount)}</p>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="mb-1 text-[9px] text-slate-500">IDR tier allocation</p>
+                          <div className="space-y-1">
+                            {telemetry.data.budget.idr_tiers.map((tier) => (
+                              <div key={tier.tier} className="flex items-center justify-between gap-2 text-[9px]">
+                                <span className="text-slate-400">{tier.tier}</span>
+                                <span className="tabular-nums text-slate-200">{displayAmount(tier.projected_cost)} / {displayAmount(tier.budget_amount)} {tier.budget_reached ? '· LIMIT' : ''}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="mb-1 text-[9px] text-slate-500">Workforce cost attribution</p>
+                          {telemetry.data.budget.worker_breakdown.slice(0, 4).map((worker) => (
+                            <div key={worker.worker_id + worker.currency} className="flex items-center justify-between text-[9px]">
+                              <span className="text-slate-400">{worker.worker_id} · {worker.currency}</span>
+                              <span className="tabular-nums text-slate-200">{displayAmount(worker.projected_cost)}</span>
+                            </div>
+                          ))}
+                          {telemetry.data.budget.recent_task_costs.slice(0, 3).map((task) => (
+                            <div key={task.task_id + task.currency} className="flex items-center justify-between gap-2 text-[9px]">
+                              <span className="truncate text-slate-500">{task.task_id} · {task.worker_id}</span>
+                              <span className="shrink-0 tabular-nums text-slate-300">{task.currency} {displayAmount(task.projected_cost)}</span>
+                            </div>
+                          ))}
+                          {telemetry.data.budget.worker_breakdown.length === 0 && (
+                            <p className="text-[9px] text-slate-600">No workforce-attributed provider cost yet.</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     {telemetry.data?.currencies.length === 0 && (
                       <p className="text-[10px] text-slate-500">No usage records returned.</p>
                     )}

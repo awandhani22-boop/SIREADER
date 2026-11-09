@@ -133,16 +133,76 @@ function validModelTelemetry(value: unknown): boolean {
     validTokenBreakdown(value.tokens)
   );
 }
+function validBudgetWindow(value: unknown): boolean {
+  return isObject(value) &&
+    hasExactKeys(value, [
+      'currency', 'window', 'period_start', 'period_end', 'budget_amount',
+      'hard_limit_amount', 'actual_cost', 'reserved_cost', 'projected_cost',
+      'remaining_budget', 'remaining_hard_limit', 'percent_used',
+      'warning_threshold_percent', 'warning_level', 'status_counts',
+    ]) &&
+    hasCurrency(value.currency) &&
+    ['DAILY', 'ROLLING_MONTH', 'MONTHLY'].includes(String(value.window)) &&
+    isIsoDate(value.period_start) && isIsoDate(value.period_end) &&
+    isDecimal(value.budget_amount) &&
+    isDecimal(value.hard_limit_amount, true) &&
+    isDecimal(value.actual_cost) && isDecimal(value.reserved_cost) &&
+    isDecimal(value.projected_cost) && isDecimal(value.remaining_budget) &&
+    isDecimal(value.remaining_hard_limit, true) && isDecimal(value.percent_used) &&
+    (value.warning_threshold_percent === null || isInteger(value.warning_threshold_percent, 1)) &&
+    ['NONE', 'SOFT', 'WARNING', 'CRITICAL', 'HARD_LIMIT'].includes(String(value.warning_level)) &&
+    isObject(value.status_counts) && Object.values(value.status_counts).every((count) => isInteger(count));
+}
+function validBudgetTier(value: unknown): boolean {
+  return isObject(value) &&
+    hasExactKeys(value, ['tier', 'currency', 'budget_amount', 'actual_cost', 'reserved_cost', 'projected_cost', 'remaining_budget', 'percent_used', 'budget_reached']) &&
+    ['FAST', 'REASONING', 'ESCALATION'].includes(String(value.tier)) &&
+    value.currency === 'IDR' &&
+    isDecimal(value.budget_amount) && isDecimal(value.actual_cost) &&
+    isDecimal(value.reserved_cost) && isDecimal(value.projected_cost) &&
+    isDecimal(value.remaining_budget) && isDecimal(value.percent_used) &&
+    isBoolean(value.budget_reached);
+}
+function validWorkerCost(value: unknown): boolean {
+  return isObject(value) &&
+    hasExactKeys(value, ['worker_id', 'currency', 'actual_cost', 'reserved_cost', 'projected_cost', 'requests']) &&
+    isString(value.worker_id) && hasCurrency(value.currency) &&
+    isDecimal(value.actual_cost) && isDecimal(value.reserved_cost) &&
+    isDecimal(value.projected_cost) && isInteger(value.requests);
+}
+function validTaskCost(value: unknown): boolean {
+  return isObject(value) &&
+    hasExactKeys(value, ['task_id', 'worker_id', 'tier', 'model', 'currency', 'actual_cost', 'reserved_cost', 'projected_cost', 'requests']) &&
+    isString(value.task_id) && isString(value.worker_id) && isString(value.tier) &&
+    isString(value.model) && hasCurrency(value.currency) &&
+    isDecimal(value.actual_cost) && isDecimal(value.reserved_cost) &&
+    isDecimal(value.projected_cost) && isInteger(value.requests);
+}
+function validBudgetObservability(value: unknown): boolean {
+  return isObject(value) &&
+    hasExactKeys(value, ['daily_idr', 'rolling_month_idr', 'monthly_anthropic_usd', 'idr_tiers', 'worker_breakdown', 'recent_task_costs']) &&
+    validBudgetWindow(value.daily_idr) &&
+    validBudgetWindow(value.rolling_month_idr) &&
+    validBudgetWindow(value.monthly_anthropic_usd) &&
+    value.daily_idr.currency === 'IDR' && value.daily_idr.window === 'DAILY' &&
+    value.rolling_month_idr.currency === 'IDR' && value.rolling_month_idr.window === 'ROLLING_MONTH' &&
+    value.monthly_anthropic_usd.currency === 'USD' &&
+    Array.isArray(value.idr_tiers) && value.idr_tiers.length === 3 && value.idr_tiers.every(validBudgetTier) &&
+    Array.isArray(value.worker_breakdown) && value.worker_breakdown.length <= 50 && value.worker_breakdown.every(validWorkerCost) &&
+    Array.isArray(value.recent_task_costs) && value.recent_task_costs.length <= 25 && value.recent_task_costs.every(validTaskCost);
+}
+
 const validateTelemetryUsage: Validator = (value) =>
   isObject(value) &&
-  hasExactKeys(value, ['period_start', 'period_end', 'period_days', 'currencies', 'models']) &&
+  hasExactKeys(value, ['period_start', 'period_end', 'period_days', 'currencies', 'models', 'budget']) &&
   isIsoDate(value.period_start) &&
   isIsoDate(value.period_end) &&
   isInteger(value.period_days, 1) &&
   Array.isArray(value.currencies) &&
   value.currencies.every(validCurrencyTelemetry) &&
   Array.isArray(value.models) &&
-  value.models.every(validModelTelemetry);
+  value.models.every(validModelTelemetry) &&
+  validBudgetObservability(value.budget);
 
 function validInFlightTask(value: unknown): boolean {
   return (

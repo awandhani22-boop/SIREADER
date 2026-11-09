@@ -64,12 +64,71 @@ export interface ModelTelemetryDto {
   readonly tokens: TokenBreakdownDto;
 }
 
+export type BudgetWarningLevel = 'NONE' | 'SOFT' | 'WARNING' | 'CRITICAL' | 'HARD_LIMIT';
+export type BudgetWindowKind = 'DAILY' | 'ROLLING_MONTH' | 'MONTHLY';
+export interface BudgetWindowDto {
+  readonly currency: CurrencyCode;
+  readonly window: BudgetWindowKind;
+  readonly period_start: string;
+  readonly period_end: string;
+  readonly budget_amount: number | string;
+  readonly hard_limit_amount: number | string | null;
+  readonly actual_cost: number | string;
+  readonly reserved_cost: number | string;
+  readonly projected_cost: number | string;
+  readonly remaining_budget: number | string;
+  readonly remaining_hard_limit: number | string | null;
+  readonly percent_used: number | string;
+  readonly warning_threshold_percent: number | null;
+  readonly warning_level: BudgetWarningLevel;
+  readonly status_counts: Readonly<Record<string, number>>;
+}
+export interface BudgetTierDto {
+  readonly tier: 'FAST' | 'REASONING' | 'ESCALATION';
+  readonly currency: 'IDR';
+  readonly budget_amount: number | string;
+  readonly actual_cost: number | string;
+  readonly reserved_cost: number | string;
+  readonly projected_cost: number | string;
+  readonly remaining_budget: number | string;
+  readonly percent_used: number | string;
+  readonly budget_reached: boolean;
+}
+export interface WorkerCostBreakdownDto {
+  readonly worker_id: string;
+  readonly currency: CurrencyCode;
+  readonly actual_cost: number | string;
+  readonly reserved_cost: number | string;
+  readonly projected_cost: number | string;
+  readonly requests: number;
+}
+export interface TaskCostBreakdownDto {
+  readonly task_id: string;
+  readonly worker_id: string;
+  readonly tier: string;
+  readonly model: string;
+  readonly currency: CurrencyCode;
+  readonly actual_cost: number | string;
+  readonly reserved_cost: number | string;
+  readonly projected_cost: number | string;
+  readonly requests: number;
+}
+export interface BudgetObservabilityDto {
+  readonly daily_idr: BudgetWindowDto;
+  readonly rolling_month_idr: BudgetWindowDto;
+  readonly monthly_anthropic_usd: BudgetWindowDto;
+  readonly idr_tiers: readonly BudgetTierDto[];
+  readonly worker_breakdown: readonly WorkerCostBreakdownDto[];
+  readonly recent_task_costs: readonly TaskCostBreakdownDto[];
+}
+
 export interface TelemetryUsageDto {
   readonly period_start: string;
   readonly period_end: string;
   readonly period_days: number;
   readonly currencies: readonly CurrencyTelemetryDto[];
   readonly models: readonly ModelTelemetryDto[];
+  readonly budget: BudgetObservabilityDto;
 }
 
 export interface InFlightAnalysisDto {
@@ -479,17 +538,72 @@ function validModelTelemetry(value: unknown): value is ModelTelemetryDto {
   );
 }
 
+function validBudgetWindow(value: unknown): value is BudgetWindowDto {
+  return isObject(value) &&
+    hasExactKeys(value, [
+      'currency', 'window', 'period_start', 'period_end', 'budget_amount',
+      'hard_limit_amount', 'actual_cost', 'reserved_cost', 'projected_cost',
+      'remaining_budget', 'remaining_hard_limit', 'percent_used',
+      'warning_threshold_percent', 'warning_level', 'status_counts',
+    ]) && hasCurrency(value.currency) &&
+    ['DAILY', 'ROLLING_MONTH', 'MONTHLY'].includes(String(value.window)) &&
+    isIsoDate(value.period_start) && isIsoDate(value.period_end) &&
+    isDecimal(value.budget_amount) && isDecimal(value.hard_limit_amount, true) &&
+    isDecimal(value.actual_cost) && isDecimal(value.reserved_cost) &&
+    isDecimal(value.projected_cost) && isDecimal(value.remaining_budget) &&
+    isDecimal(value.remaining_hard_limit, true) && isDecimal(value.percent_used) &&
+    (value.warning_threshold_percent === null || isInteger(value.warning_threshold_percent, 1)) &&
+    ['NONE', 'SOFT', 'WARNING', 'CRITICAL', 'HARD_LIMIT'].includes(String(value.warning_level)) &&
+    isObject(value.status_counts) && Object.values(value.status_counts).every((item) => isInteger(item));
+}
+function validBudgetTier(value: unknown): value is BudgetTierDto {
+  return isObject(value) &&
+    hasExactKeys(value, ['tier', 'currency', 'budget_amount', 'actual_cost', 'reserved_cost', 'projected_cost', 'remaining_budget', 'percent_used', 'budget_reached']) &&
+    ['FAST', 'REASONING', 'ESCALATION'].includes(String(value.tier)) && value.currency === 'IDR' &&
+    isDecimal(value.budget_amount) && isDecimal(value.actual_cost) && isDecimal(value.reserved_cost) &&
+    isDecimal(value.projected_cost) && isDecimal(value.remaining_budget) && isDecimal(value.percent_used) &&
+    isBoolean(value.budget_reached);
+}
+function validWorkerCost(value: unknown): value is WorkerCostBreakdownDto {
+  return isObject(value) &&
+    hasExactKeys(value, ['worker_id', 'currency', 'actual_cost', 'reserved_cost', 'projected_cost', 'requests']) &&
+    isString(value.worker_id) && hasCurrency(value.currency) &&
+    isDecimal(value.actual_cost) && isDecimal(value.reserved_cost) &&
+    isDecimal(value.projected_cost) && isInteger(value.requests);
+}
+function validTaskCost(value: unknown): value is TaskCostBreakdownDto {
+  return isObject(value) &&
+    hasExactKeys(value, ['task_id', 'worker_id', 'tier', 'model', 'currency', 'actual_cost', 'reserved_cost', 'projected_cost', 'requests']) &&
+    isString(value.task_id) && isString(value.worker_id) && isString(value.tier) &&
+    isString(value.model) && hasCurrency(value.currency) &&
+    isDecimal(value.actual_cost) && isDecimal(value.reserved_cost) &&
+    isDecimal(value.projected_cost) && isInteger(value.requests);
+}
+function validBudgetObservability(value: unknown): value is BudgetObservabilityDto {
+  return isObject(value) &&
+    hasExactKeys(value, ['daily_idr', 'rolling_month_idr', 'monthly_anthropic_usd', 'idr_tiers', 'worker_breakdown', 'recent_task_costs']) &&
+    validBudgetWindow(value.daily_idr) && validBudgetWindow(value.rolling_month_idr) &&
+    validBudgetWindow(value.monthly_anthropic_usd) &&
+    value.daily_idr.currency === 'IDR' && value.daily_idr.window === 'DAILY' &&
+    value.rolling_month_idr.currency === 'IDR' && value.rolling_month_idr.window === 'ROLLING_MONTH' &&
+    value.monthly_anthropic_usd.currency === 'USD' &&
+    Array.isArray(value.idr_tiers) && value.idr_tiers.length === 3 && value.idr_tiers.every(validBudgetTier) &&
+    Array.isArray(value.worker_breakdown) && value.worker_breakdown.length <= 50 && value.worker_breakdown.every(validWorkerCost) &&
+    Array.isArray(value.recent_task_costs) && value.recent_task_costs.length <= 25 && value.recent_task_costs.every(validTaskCost);
+}
+
 function validTelemetryUsage(value: unknown): value is TelemetryUsageDto {
   return (
     isObject(value) &&
-    hasExactKeys(value, ['period_start', 'period_end', 'period_days', 'currencies', 'models']) &&
+    hasExactKeys(value, ['period_start', 'period_end', 'period_days', 'currencies', 'models', 'budget']) &&
     isIsoDate(value.period_start) &&
     isIsoDate(value.period_end) &&
     isInteger(value.period_days, 1) &&
     Array.isArray(value.currencies) &&
     value.currencies.every(validCurrencyTelemetry) &&
     Array.isArray(value.models) &&
-    value.models.every(validModelTelemetry)
+    value.models.every(validModelTelemetry) &&
+    validBudgetObservability(value.budget)
   );
 }
 
