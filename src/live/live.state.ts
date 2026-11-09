@@ -53,6 +53,9 @@ export function createEmptyLiveResources(): LiveResources {
     '/api/v1/pipeline/active': emptyResource(),
     '/api/v1/market-watches/active': emptyResource(),
     '/api/v1/audit/decisions': emptyResource(),
+    '/api/v1/workforce/runtime': emptyResource(),
+    '/api/v1/workforce/tasks': emptyResource(),
+    '/api/v1/workforce/activity': emptyResource(),
   };
 }
 
