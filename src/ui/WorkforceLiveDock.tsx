@@ -31,7 +31,7 @@ function ResourceState({ resource }: { resource: LiveResourceSnapshot<unknown> }
   );
 }
 
-function Metric({ label, value, detail }: { label: string; value: number; detail?: string }) {
+function Metric({ label, value, detail }: { label: string; value: number | string; detail?: string }) {
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
       <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
@@ -52,6 +52,10 @@ export function WorkforceLiveDock() {
   const [attempts, setAttempts] = useState<WorkforceAttemptsResponseDto | null>(null);
   const [attemptError, setAttemptError] = useState<string | null>(null);
   const [attemptLoading, setAttemptLoading] = useState(false);
+  const [taskPageOffset, setTaskPageOffset] = useState(0);
+  const [taskPageData, setTaskPageData] = useState<WorkforceTasksResponseDto | null>(null);
+  const [taskPageLoading, setTaskPageLoading] = useState(false);
+  const [taskPageError, setTaskPageError] = useState<string | null>(null);
   const displayMode = useWorkerDisplayModeStore((state) => state.mode);
 
   useEffect(() => {
@@ -66,7 +70,42 @@ export function WorkforceLiveDock() {
 
   const runtimeData = runtime.data as WorkforceRuntimeResponseDto | null;
   const taskData = tasks.data as WorkforceTasksResponseDto | null;
+  const visibleTaskData = taskPageOffset === 0 ? taskData : taskPageData;
+  const taskRows = visibleTaskData?.tasks ?? [];
+  const taskTotal = visibleTaskData?.total_count ?? taskData?.total_count ?? 0;
+  const taskPageStart = taskRows.length > 0 && visibleTaskData ? visibleTaskData.offset + 1 : 0;
+  const taskPageEnd = taskRows.length > 0 && visibleTaskData ? visibleTaskData.offset + taskRows.length : 0;
   const activityData = activity.data as WorkforceActivityResponseDto | null;
+
+  useEffect(() => {
+    if (session !== 'AUTHENTICATED') {
+      setTaskPageOffset(0);
+      setTaskPageData(null);
+      setTaskPageError(null);
+      setTaskPageLoading(false);
+    }
+  }, [session]);
+
+  const loadTaskPage = async (offset: number): Promise<void> => {
+    if (taskPageLoading) return;
+    if (offset <= 0) {
+      setTaskPageOffset(0);
+      setTaskPageData(null);
+      setTaskPageError(null);
+      return;
+    }
+    setTaskPageLoading(true);
+    setTaskPageError(null);
+    try {
+      const page = await liveController.getWorkforceTasks(50, offset);
+      setTaskPageData(page);
+      setTaskPageOffset(offset);
+    } catch (error) {
+      setTaskPageError(error instanceof LiveApiError ? error.code : 'REQUEST_FAILED');
+    } finally {
+      setTaskPageLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen || !selectedTaskId || session !== 'AUTHENTICATED') {
@@ -172,14 +211,14 @@ export function WorkforceLiveDock() {
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                      <Metric label="Configured workers" value={runtimeData?.runtime.configured_workers ?? 0} detail={runtime.status} />
-                      <Metric label="Ready workers" value={runtimeData?.runtime.ready_workers ?? 0} />
-                      <Metric label="Active tasks" value={runtimeData?.runtime.active_tasks ?? 0} />
-                      <Metric label="Queued tasks" value={runtimeData?.runtime.queued_tasks ?? 0} />
-                      <Metric label="Waiting review" value={runtimeData?.runtime.waiting_review_tasks ?? 0} />
-                      <Metric label="Dead-lettered" value={runtimeData?.runtime.dead_lettered_tasks ?? 0} />
-                      <Metric label="Completed 24h" value={runtimeData?.runtime.completed_last_24h ?? 0} />
-                      <Metric label="Offline / stale" value={(runtimeData?.runtime.offline_workers ?? 0) + (runtimeData?.runtime.stale_workers ?? 0)} />
+                      <Metric label="Configured workers" value={runtimeData?.runtime.configured_workers ?? '—'} detail={runtime.status} />
+                      <Metric label="Ready workers" value={runtimeData?.runtime.ready_workers ?? '—'} />
+                      <Metric label="Active tasks" value={runtimeData?.runtime.active_tasks ?? '—'} />
+                      <Metric label="Queued tasks" value={runtimeData?.runtime.queued_tasks ?? '—'} />
+                      <Metric label="Waiting review" value={runtimeData?.runtime.waiting_review_tasks ?? '—'} />
+                      <Metric label="Dead-lettered" value={runtimeData?.runtime.dead_lettered_tasks ?? '—'} />
+                      <Metric label="Completed 24h" value={runtimeData?.runtime.completed_last_24h ?? '—'} />
+                      <Metric label="Offline / stale" value={runtimeData ? runtimeData.runtime.offline_workers + runtimeData.runtime.stale_workers : '—'} />
                     </div>
                     <ResourceError resource={runtime as LiveResourceSnapshot<unknown>} />
                   </section>
@@ -219,6 +258,9 @@ export function WorkforceLiveDock() {
                       {runtimeData?.workers.length === 0 && (
                         <p className="rounded border border-slate-800 p-3 text-xs text-slate-500">Belum ada worker terdaftar.</p>
                       )}
+                      {!runtimeData && (
+                        <p data-testid="workforce-runtime-waiting" className="rounded border border-slate-800 p-3 text-xs text-slate-500">Belum ada snapshot workforce yang tervalidasi.</p>
+                      )}
                     </div>
                   </section>
 
@@ -228,7 +270,7 @@ export function WorkforceLiveDock() {
                       <ResourceState resource={tasks as LiveResourceSnapshot<unknown>} />
                     </div>
                     <div className="overflow-hidden rounded-lg border border-slate-800">
-                      {(taskData?.tasks ?? []).map((task) => (
+                      {taskRows.map((task) => (
                         <button
                           key={task.task_id}
                           type="button"
@@ -249,11 +291,43 @@ export function WorkforceLiveDock() {
                           </span>
                         </button>
                       ))}
-                      {taskData?.tasks.length === 0 && (
+                      {visibleTaskData?.tasks.length === 0 && (
                         <p className="p-3 text-xs text-slate-500">Belum ada task backend.</p>
                       )}
-                      {!taskData && <p className="p-3 text-xs text-slate-500">Menunggu snapshot task…</p>}
+                      {!visibleTaskData && <p className="p-3 text-xs text-slate-500">Menunggu snapshot task…</p>}
                     </div>
+                    {visibleTaskData && visibleTaskData.total_count > visibleTaskData.limit && (
+                      <div className="flex items-center justify-between gap-2 border-t border-slate-800 px-3 py-2">
+                        <span className="font-mono text-[10px] text-slate-500">
+                          {taskPageStart}–{taskPageEnd} of {taskTotal}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            data-testid="workforce-task-page-previous"
+                            disabled={taskPageOffset === 0 || taskPageLoading}
+                            onClick={() => void loadTaskPage(Math.max(0, taskPageOffset - 50))}
+                            className="rounded border border-slate-700 px-2 py-1 text-[10px] text-slate-300 disabled:opacity-30"
+                          >
+                            Previous
+                          </button>
+                          <button
+                            type="button"
+                            data-testid="workforce-task-page-next"
+                            disabled={taskPageEnd >= taskTotal || taskPageLoading}
+                            onClick={() => void loadTaskPage(taskPageOffset + 50)}
+                            className="rounded border border-slate-700 px-2 py-1 text-[10px] text-slate-300 disabled:opacity-30"
+                          >
+                            {taskPageLoading ? 'Loading…' : 'Next'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {taskPageError && (
+                      <p role="alert" className="border-t border-rose-800/60 p-2 text-[10px] text-rose-300">
+                        Task page failed: {taskPageError}
+                      </p>
+                    )}
                     <ResourceError resource={tasks as LiveResourceSnapshot<unknown>} />
                     {selectedTaskId && (
                       <div className="mt-2 rounded-lg border border-slate-800 bg-slate-900/50 p-3">
