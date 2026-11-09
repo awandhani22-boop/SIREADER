@@ -24,11 +24,15 @@ const RoomSignageItem = React.memo(function RoomSignageItem({
 }: {
   room: RoomDefinition;
 }) {
-  const isSelected = useOfficeStore(
-    (s) =>
-      s.selectedRoomId === room.id || s.selectedWorkerId === room.primaryWorkerId,
-  );
-  const selectRoom = useOfficeStore((s) => s.selectRoom);
+  const displayMode = useWorkerDisplayModeStore((s) => s.mode);
+  const selectedDemoRoomId = useOfficeStore((s) => s.selectedRoomId);
+  const selectedDemoWorkerId = useOfficeStore((s) => s.selectedWorkerId);
+  const selectDemoRoom = useOfficeStore((s) => s.selectRoom);
+  const selectedLiveWorkerId = useWorkerDisplayModeStore((s) => s.selectedLiveWorkerId);
+  const setSelectedLiveWorkerId = useWorkerDisplayModeStore((s) => s.setSelectedLiveWorkerId);
+  const isSelected = displayMode === 'LIVE'
+    ? selectedLiveWorkerId === room.primaryWorkerId
+    : selectedDemoRoomId === room.id || selectedDemoWorkerId === room.primaryWorkerId;
 
   return (
     <div
@@ -42,7 +46,8 @@ const RoomSignageItem = React.memo(function RoomSignageItem({
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          selectRoom(room.id, room.primaryWorkerId);
+          if (displayMode === 'LIVE') setSelectedLiveWorkerId(room.primaryWorkerId);
+          else selectDemoRoom(room.id, room.primaryWorkerId);
         }}
         className={`-translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5 px-2 py-0.5 rounded border text-left transition-colors cursor-pointer whitespace-nowrap select-none ${
           isSelected
