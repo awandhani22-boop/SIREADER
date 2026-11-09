@@ -56,7 +56,7 @@ The existing React/Three.js project is the product. Preserve and extend it; do n
 | 2.3 | Browser QA, Visual Closure & Simulation UX Stabilization | COMPLETE WITH DEFERRED ITEM |
 | 3.1 | Read-Only Observability API Gateway | COMPLETE in Python backend repository |
 | 3.2 | Secure BFF & Frontend Observability Integration | COMPLETE — Batches 1–6 CI-passed; owner-reported local development, LIVE, auth/session, isolation, logout, and production-like acceptance confirmed 2026-11-09 |
-| 3.3 | Real-Time Observability (SSE) | IMPLEMENTATION IN PROGRESS — code branches created; Supabase migration and owner E2E acceptance pending |
+| 3.3 | Real-Time Observability (SSE) | IMPLEMENTATION IN PROGRESS — core owner manual event-delivery, targeted refresh, backend-restart recovery, and four-stream five-minute smoke passed; supplementary gates remain open |
 | 4.1 | Real Worker Runtime Contract & Registry | PLANNED |
 | 4.2 | AI Provider Routing, Execution & Cost Guard | PLANNED |
 | 4.3 | Persistent Backend Task Orchestration | PLANNED |
@@ -221,13 +221,13 @@ Exit gate:
 - Frontend typecheck, tests, build, security checks, and manual browser acceptance pass.
 
 ## Phase 3.3 — Real-Time Observability (SSE)
-**Status: IMPLEMENTATION IN PROGRESS — code is present on isolated backend and Virtual Office branches; owner acceptance is pending.**
+**Status: IMPLEMENTATION IN PROGRESS — core owner manual SSE acceptance passed on 2026-11-09; supplementary acceptance gates remain open.**
 
 Design reference: [`docs/PHASE_3_3_SSE_ARCHITECTURE.md`](PHASE_3_3_SSE_ARCHITECTURE.md). Durable implementation ledger: [`docs/PHASE_3_3_SSE_EXECUTION_LOG.md`](PHASE_3_3_SSE_EXECUTION_LOG.md). Owner setup: [`docs/PHASE_3_3_SSE_SETUP.md`](PHASE_3_3_SSE_SETUP.md).
 
 Current implementation includes a bounded Python EventHub and Psycopg LISTEN listener, six-table invalidation migration (including TRUNCATE notifications), authenticated Python SSE route, fixed authenticated BFF streaming proxy, and browser EventSource resource invalidation with the existing snapshot polling as fallback. Virtual Office CI run `42534082388` passed 367/367 tests, TypeScript, and production build. The final backend migration/keepalive CI run is tracked in the execution log; do not mark the phase complete until it passes.
 
-The owner-reported Supabase connection uses the Session pooler on port 5432. Supabase distinguishes Session mode from Transaction mode (commonly port 6543); the listener requires session semantics for LISTEN. The migration has not been applied to the live Supabase database by this work. The existing read-only role is not granted write or trigger privileges.
+The owner-reported Supabase connection uses the Session pooler on port 5432. Supabase distinguishes Session mode from Transaction mode (commonly port 6543); the listener requires session semantics for LISTEN. The implementation did not apply the live migration itself. During local owner acceptance, the SSE route returned 200; by code contract this requires the listener to have passed its database connection, LISTEN, and migration-inventory/security checks. The runtime `sireader_api_ro` role remains read-only. A manual `pg_notify` test reached the browser and triggered the system snapshot refresh; table-trigger mapping still needs explicit disposable/staging verification.
 
 Goal: replace frequent client polling with bounded, server-mediated event updates where they add meaningful value.
 
@@ -242,7 +242,8 @@ Requirements:
 Exit gate:
 - Reconnect, duplicate/out-of-order event, network interruption, stale connection, and fallback behavior are tested.
 - Snapshot and stream state reconcile correctly.
-- No measurable scene performance regression.
+- Four simultaneous streams remain stable under sustained idle heartbeat; CPU/heap measurements and browser scene performance show no regression.
+- Owner manual evidence and residual gates are recorded in `docs/PHASE_3_3_SSE_EXECUTION_LOG.md`.
 
 ## Phase 4.1 — Real Worker Runtime Contract & Registry
 **Status: PLANNED.**
