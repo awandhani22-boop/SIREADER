@@ -57,10 +57,10 @@ The existing React/Three.js project is the product. Preserve and extend it; do n
 | 3.1 | Read-Only Observability API Gateway | COMPLETE in Python backend repository |
 | 3.2 | Secure BFF & Frontend Observability Integration | COMPLETE — Batches 1–6 CI-passed; owner-reported local development, LIVE, auth/session, isolation, logout, and production-like acceptance confirmed 2026-11-09 |
 | 3.3 | Real-Time Observability (SSE) | IMPLEMENTATION IN PROGRESS — core owner manual event-delivery, targeted refresh, backend-restart recovery, and four-stream five-minute smoke passed; supplementary gates remain open |
-| 4.1 | Real Worker Runtime Contract & Registry | PLANNED |
-| 4.2 | AI Provider Routing, Execution & Cost Guard | PLANNED |
-| 4.3 | Persistent Backend Task Orchestration | PLANNED |
-| 4.4 | Frontend Live Runtime Adapter & Demo/Live Separation | PLANNED |
+| 4.1 | Real Worker Runtime Contract & Registry | IMPLEMENTED IN CODE — VERIFICATION PENDING |
+| 4.2 | AI Provider Routing, Execution & Cost Guard | IMPLEMENTED WITH FAIL-CLOSED DEFAULTS — VERIFICATION PENDING |
+| 4.3 | Persistent Backend Task Orchestration | IMPLEMENTED IN CODE — DISPOSABLE POSTGRES VERIFICATION PENDING |
+| 4.4 | Frontend Live Runtime Adapter & Demo/Live Separation | PARTIAL — SCENE ADAPTER / DEMO-LIVE BOUNDARY / SCALE GATES OPEN |
 | 5.1 | Human-Supervised Worker and Task Operations | PLANNED |
 | 5.2 | Review, Audit, Budgets & Governance | PLANNED |
 | 6.1 | Security, Reliability & Failure Recovery | PLANNED |
