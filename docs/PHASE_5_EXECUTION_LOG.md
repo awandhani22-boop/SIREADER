@@ -88,3 +88,29 @@ Frontend implementation head: `9919ef90a9464cc0e093e288353634884b6d3992`.
 ## Remaining Phase 5 release gate
 
 A single comprehensive owner-run Chrome/Windows acceptance remains required after automated validation is green. The CI and this source log do not claim that the local browser, local command/read API environment, or local maintenance schedule has been operated in this session. No Supabase LIVE migration, paid provider call, MT5/HFM action, trading execution, or main merge was performed.
+
+
+---
+
+# Phase 5.2 — Final Security & Operations Hardening (2026-11-10)
+
+## Review creation boundary v3
+
+- Added incremental migration `2026_11_10_workforce_review_creation_boundary_v3.sql` with rollback.
+- New review metadata can only be inserted in PENDING with no adjudication fields.
+- The command DB role `sireader_workforce_cmd` has no INSERT privilege on `workforce_task_reviews` or `workforce_task_review_payloads`; review creation remains on the worker completion boundary.
+- Adjudication still uses the existing audited command API and restricted UPDATE privileges.
+- PostgreSQL integration tests verify privilege revocation, v3 rollback/reapply, and review lifecycle. The terminal immutability fixture now transitions from PENDING before testing terminal-state rejection.
+- [Backend CI run 42700267022 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42700267022): 190 API tests and 76 core tests passed.
+
+## Maintenance database safety boundary
+
+- `validate_maintenance_database_url()` requires PostgreSQL hosted on `localhost`, `127.0.0.1`, or `::1` before the maintenance command imports/opens the core DB engine.
+- The PowerShell registration script validates the project `.env` plus Process/User/Machine `DATABASE_URL` overrides; remote, Supabase, and production targets are rejected without printing any connection strings.
+- Maintenance is destructive with respect to expired task/review payloads. No scheduler was registered and no maintenance cycle was run because the owner's effective local `DATABASE_URL` has not been inspected.
+- [Backend CI run 42700636167 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42700636167): 196 API tests and 76 core tests passed.
+- Final Task Scheduler script revision: [CI run 42700770005 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42700770005): 196 API tests, 76 core tests, and compile passed.
+
+## Final owner-side gates
+
+The only remaining activities require the owner's actual Windows/Chrome/browser and local PostgreSQL environment: verify that `DATABASE_URL` resolves to an intended local loopback database, register the maintenance schedule only after that check, and perform one comprehensive browser acceptance of review and budget UI. No Supabase LIVE migration, paid provider, MT5/HFM, trading execution, or main merge was performed.

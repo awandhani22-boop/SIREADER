@@ -20,14 +20,14 @@
 - Phase 5.2.3: single-ledger Cost Guard observability and task/worker attribution.
 - Phase 5.2.4: deterministic capability-to-model-tier selection, sensitive-data redaction/review, and fail-closed trading/execution exclusions. This selects one tier before one provider call; it does not perform quality-driven multi-call escalation during an attempt.
 - Phase 5.2.5: transactional one-shot maintenance command, Windows runner and Task Scheduler registration/removal helper, operations runbook, PostgreSQL migration/retention integration coverage.
-- Backend implementation and Task Scheduler helper commit: `5b00acc83fc7ac738a26d188fe8851a30c2a0ce8`.
-- Latest backend code CI [42698878591](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42698878591) PASS: 188 API tests, 76 core regression tests, and API compile step passed.
-- Subsequent backend operations-runbook documentation commit: `f50d6e43353ebeb4ed6326de515feccd6c035362`; [backend CI #200 / 42699386851 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42699386851): 189 API tests and 76 core tests passed, compile successful.
+- Backend review-creation boundary v3, terminal lifecycle fixture, and privilege tests: [CI 42700267022 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42700267022): 190 API tests and 76 core tests.
+- Backend maintenance database guard: [CI 42700636167 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42700636167): 196 API tests and 76 core tests.
+- Latest backend commit `1c8277ea1ccf0ff0b81966b0d8bd6516829e1494`; [CI 42700770005 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42700770005): 196 API tests, 76 core tests, compile passed.
 
 ## Important operational qualifications
 
 - The current BFF uses the verified single-operator session and injects the existing `local_operator` actor ID server-side. A multi-operator deployment needs a separately designed mapping from authenticated session subject to backend actor ID.
-- The Windows Task Scheduler helper is committed at `scripts/register_workforce_maintenance.ps1`, but it only checks that `.env` exists and does not validate its database target. Maintenance expires and purges payloads. The backend connection module documents a Supabase Shared Pooler; because `.env` was not inspected, the target is unverified. Do not register or run maintenance until `DATABASE_URL` is privately confirmed to point to an isolated non-LIVE local/development database. No OS-level task is registered.
+- The Windows Task Scheduler helper is committed at `scripts/register_workforce_maintenance.ps1`. It checks `.env` and every Process/User/Machine `DATABASE_URL` override and refuses non-loopback hosts. The Python maintenance entry point independently allows only loopback PostgreSQL before opening the DB engine. Because the owner's effective local database URL has not been inspected, no OS-level task is registered and no maintenance cycle has been run.
 - Model tier is selected deterministically before the single provider request according to capability and worker ceiling. An UNKNOWN provider outcome is not automatically replayed at a different tier.
 - Worker provider and worker runtime remain MOCK/OFF by default. No real paid provider calls were made.
 - No migration was applied to Supabase LIVE. No main merge, Telegram trading change, MT5/HFM, or trading execution was performed.
@@ -35,3 +35,11 @@
 ## Final acceptance still required
 
 With the latest backend and frontend code CI green, the remaining gates are: (1) privately inspect `DATABASE_URL` without exposing credentials and prove that it points to an isolated non-LIVE local/development database. The backend connection source documents Supabase Shared Pooler, so do not run `scripts\\register_workforce_maintenance.ps1` or the one-shot maintenance command while the target is unknown or points to Supabase LIVE/production; only register the task after that target is independently verified and authorized. (2) Perform one comprehensive Windows/Chrome browser acceptance covering authenticated Review Inbox read/detail, APPROVE/EDIT/REJECT, stale hash/concurrency behavior, logout/session expiry, budget metrics, DEMO/LIVE isolation, no credential leakage, and no trading/MT5/HFM side effects. Record owner approval before closing Phase 5.
+
+
+## Final review database boundary
+
+- Incremental migration v2 guards the initial quarantined output INSERT: the review must be PENDING, original output must exist, and adjusted/purge fields must be NULL.
+- Incremental migration v3 guards initial metadata INSERT: review must begin PENDING with no adjudication fields. The command DB role has no INSERT on review metadata or payload tables.
+- The worker completion boundary remains the only review creation path; adjudication remains an audited command operation.
+- v1/v2/v3 PostgreSQL forward/rollback/forward tests and privilege tests pass in CI.
