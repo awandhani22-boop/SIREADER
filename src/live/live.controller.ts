@@ -15,6 +15,9 @@ import type {
   LiveApiResponseMap,
   WorkforceAttemptsResponseDto,
   WorkforceTasksResponseDto,
+  WorkforceCommandPath,
+  WorkforceCommandRequest,
+  WorkforceCommandResponseDto,
 } from './live.contracts';
 import { useLiveStore } from './live.state';
 
@@ -33,6 +36,7 @@ export interface LiveController {
   getResource<K extends LiveApiPath>(path: K): Promise<LiveApiResponseMap[K]>;
   getWorkforceAttempts(taskId: string): Promise<WorkforceAttemptsResponseDto>;
   getWorkforceTasks(limit?: number, offset?: number): Promise<WorkforceTasksResponseDto>;
+  sendWorkforceCommand(path: WorkforceCommandPath, request: WorkforceCommandRequest): Promise<WorkforceCommandResponseDto>;
   loadResource<K extends LiveApiPath>(path: K): Promise<LiveApiResponseMap[K]>;
 }
 
@@ -111,6 +115,27 @@ export function createLiveController(
         return await api.getWorkforceTasks(limit, offset);
       } catch (error) {
         if (error instanceof LiveApiError && error.code === 'SESSION_REQUIRED') {
+          api.clearCsrfToken();
+          applySessionRequired();
+        }
+        throw error;
+      }
+    },
+
+
+    async sendWorkforceCommand(
+      path: WorkforceCommandPath,
+      request: WorkforceCommandRequest,
+    ): Promise<WorkforceCommandResponseDto> {
+      if (useLiveStore.getState().session !== 'AUTHENTICATED') {
+        throw new LiveApiError('SESSION_REQUIRED');
+      }
+      try {
+        return await api.sendWorkforceCommand(path, request);
+      } catch (error) {
+        if (error instanceof LiveApiError && (
+          error.code === 'SESSION_REQUIRED' || error.code === 'CSRF_INVALID'
+        )) {
           api.clearCsrfToken();
           applySessionRequired();
         }

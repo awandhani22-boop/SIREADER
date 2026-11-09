@@ -13,6 +13,10 @@ import {
   parseLiveApiResponse,
   parseLoggedOut,
   parseWorkforceAttemptsResponse,
+  parseWorkforceCommandResponse,
+  type WorkforceCommandPath,
+  type WorkforceCommandRequest,
+  type WorkforceCommandResponseDto,
   type AuthenticatedSessionDto,
   type WorkforceAttemptsResponseDto,
   type WorkforceTasksResponseDto,
@@ -46,12 +50,14 @@ export interface LiveApiClient {
   get<K extends LiveApiPath>(path: K): Promise<LiveApiResponseMap[K]>;
   getWorkforceAttempts(taskId: string): Promise<WorkforceAttemptsResponseDto>;
   getWorkforceTasks(limit?: number, offset?: number): Promise<WorkforceTasksResponseDto>;
+  sendWorkforceCommand(path: WorkforceCommandPath, request: WorkforceCommandRequest): Promise<WorkforceCommandResponseDto>;
   clearCsrfToken(): void;
 }
 
 export interface LiveApiClientOptions {
   readonly fetchImpl?: typeof fetch;
   readonly timeoutMs?: number;
+  readonly idempotencyKeyFactory?: () => string;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -253,6 +259,46 @@ export function createLiveApiClient(options: LiveApiClientOptions = {}): LiveApi
         }
       } catch (error) {
         if (error instanceof LiveApiError && error.code === 'SESSION_REQUIRED') csrfToken = null;
+        throw error;
+      }
+    },
+
+
+    async sendWorkforceCommand(
+      path: WorkforceCommandPath,
+      command: WorkforceCommandRequest,
+    ): Promise<WorkforceCommandResponseDto> {
+      if (!csrfToken) throw new LiveApiError('CSRF_MISSING');
+      const idempotencyKey = idempotencyKeyFactory();
+      if (!/^[A-Za-z0-9._~-]{8,128}$/.test(idempotencyKey)) throw new LiveApiError('BAD_REQUEST');
+      if (![
+        '/api/v1/commands/tasks/enqueue',
+        '/api/v1/commands/tasks/cancel',
+        '/api/v1/commands/tasks/retry',
+        '/api/v1/commands/workers/scheduling',
+      ].includes(path)) throw new LiveApiError('NOT_FOUND');
+      try {
+        const response = await request(path, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken,
+            'Idempotency-Key': idempotencyKey,
+          },
+          body: JSON.stringify(command),
+        });
+        await requireSuccess(response);
+        const payload = await readSuccessfulJson(response);
+        try {
+          return parseWorkforceCommandResponse(payload, path, command);
+        } catch {
+          throw new LiveApiError('SCHEMA_INVALID');
+        }
+      } catch (error) {
+        if (error instanceof LiveApiError && (
+          error.code === 'SESSION_REQUIRED' || error.code === 'CSRF_INVALID'
+        )) csrfToken = null;
         throw error;
       }
     },

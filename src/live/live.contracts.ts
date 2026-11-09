@@ -155,6 +155,7 @@ export interface WorkforceWorkerDto {
   readonly role: string;
   readonly department: string;
   readonly enabled: boolean;
+  readonly accepting_tasks: boolean;
   readonly max_concurrency: number;
   readonly model_tier: 'NONE' | 'FAST' | 'REASONING' | 'ESCALATION';
   readonly capability_ids: readonly string[];
@@ -787,4 +788,96 @@ export function parseBffErrorCode(value: unknown): BffErrorCode | null {
   const error = value.error;
   if (!isObject(error) || !hasExactKeys(error, ['code', 'message']) || !isString(error.message)) return null;
   return BFF_ERROR_CODES.includes(error.code as BffErrorCode) ? error.code as BffErrorCode : null;
+}
+
+
+export type WorkforceCommandPath =
+  | '/api/v1/commands/tasks/enqueue'
+  | '/api/v1/commands/tasks/cancel'
+  | '/api/v1/commands/tasks/retry'
+  | '/api/v1/commands/workers/scheduling';
+
+export interface EnqueueWorkforceTaskRequest {
+  readonly task_type: string;
+  readonly title: string;
+  readonly required_capability: string;
+  readonly requested_worker_id: string;
+  readonly input_payload: Readonly<Record<string, unknown>>;
+  readonly priority: number;
+  readonly max_attempts: number;
+  readonly non_trading_acknowledged: true;
+}
+export interface TaskCommandRequest {
+  readonly task_id: string;
+}
+export interface WorkerSchedulingRequest {
+  readonly worker_id: string;
+  readonly accepting_tasks: boolean;
+}
+export type WorkforceCommandRequest =
+  | EnqueueWorkforceTaskRequest
+  | TaskCommandRequest
+  | WorkerSchedulingRequest;
+
+export interface WorkforceCommandResponseDto {
+  readonly command_id: string;
+  readonly actor_id: 'local_operator';
+  readonly command_type: 'TASK_ENQUEUE' | 'TASK_CANCEL' | 'TASK_RETRY' | 'WORKER_SCHEDULING_SET';
+  readonly target_id: string;
+  readonly correlation_id: string;
+  readonly outcome: Readonly<Record<string, unknown>>;
+  readonly created_at: string;
+  readonly replayed: boolean;
+}
+
+export function parseWorkforceCommandResponse(
+  value: unknown,
+  path: WorkforceCommandPath,
+  request: WorkforceCommandRequest,
+): WorkforceCommandResponseDto {
+  if (!isObject(value) || !hasExactKeys(value, [
+    'command_id', 'actor_id', 'command_type', 'target_id',
+    'correlation_id', 'outcome', 'created_at', 'replayed',
+  ])) throw new LiveContractError();
+  const expectedCommand = path === '/api/v1/commands/tasks/enqueue' ? 'TASK_ENQUEUE'
+    : path === '/api/v1/commands/tasks/cancel' ? 'TASK_CANCEL'
+    : path === '/api/v1/commands/tasks/retry' ? 'TASK_RETRY'
+    : 'WORKER_SCHEDULING_SET';
+  const expectedTarget = path === '/api/v1/commands/workers/scheduling'
+    ? (request as WorkerSchedulingRequest).worker_id
+    : path === '/api/v1/commands/tasks/enqueue'
+      ? value.target_id
+      : (request as TaskCommandRequest).task_id;
+  if (
+    !isString(value.command_id) || value.command_id.length < 8 || value.command_id.length > 64 ||
+    value.actor_id !== 'local_operator' || value.command_type !== expectedCommand ||
+    !isString(value.target_id) || value.target_id !== expectedTarget ||
+    !isString(value.correlation_id) || value.correlation_id.length < 8 || value.correlation_id.length > 64 ||
+    !isObject(value.outcome) || !isIsoDateTime(value.created_at) ||
+    typeof value.replayed !== 'boolean'
+  ) throw new LiveContractError();
+  const outcome = value.outcome;
+  if (path === '/api/v1/commands/tasks/enqueue') {
+    if (!hasExactKeys(outcome, ['accepted', 'created', 'status', 'task_id']) ||
+        outcome.accepted !== true || typeof outcome.created !== 'boolean' ||
+        outcome.status !== 'QUEUED' || outcome.task_id !== value.target_id) throw new LiveContractError();
+  } else if (path === '/api/v1/commands/tasks/cancel') {
+    if (!hasExactKeys(outcome, ['accepted', 'status', 'provider_outcome_unknown', 'cancelled']) ||
+        outcome.accepted !== true ||
+        (outcome.status !== 'CANCELLED' && outcome.status !== 'WAITING_REVIEW') ||
+        outcome.provider_outcome_unknown !== (outcome.status === 'WAITING_REVIEW') ||
+        outcome.cancelled !== (outcome.status === 'CANCELLED')) throw new LiveContractError();
+  } else if (path === '/api/v1/commands/tasks/retry') {
+    if (!hasExactKeys(outcome, ['accepted', 'created', 'status', 'task_id', 'retry_of_task_id']) ||
+        outcome.accepted !== true || outcome.created !== true || outcome.status !== 'QUEUED' ||
+        outcome.task_id !== value.target_id ||
+        outcome.retry_of_task_id !== (request as TaskCommandRequest).task_id) throw new LiveContractError();
+  } else {
+    const scheduling = request as WorkerSchedulingRequest;
+    if (!hasExactKeys(outcome, ['accepted', 'worker_id', 'accepting_tasks', 'schedule_state']) ||
+        outcome.accepted !== true || outcome.worker_id !== scheduling.worker_id ||
+        outcome.accepting_tasks !== scheduling.accepting_tasks ||
+        outcome.schedule_state !== (scheduling.accepting_tasks ? 'ACCEPTING' : 'PAUSED')) throw new LiveContractError();
+  }
+  return value as unknown as WorkforceCommandResponseDto;
 }
