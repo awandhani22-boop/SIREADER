@@ -12,7 +12,7 @@
 - Budget dashboard inside LIVE observability: daily IDR target/hard limit, rolling 30-day IDR, monthly Anthropic USD, tier allocations, worker/task usage.
 - Frontend feature implementation commit: `9919ef90a9464cc0e093e288353634884b6d3992`.
 - Follow-up Review Inbox race/submission-state fix: `47b8ed9376c9ead1e5cc47d1addc5ad93416e232`.
-- Latest frontend CI [42698857209](https://github.com/awandhani22-boop/SIREADER/actions/runs/42698857209) PASS: complete automated test suite, TypeScript check, and Vite production build all succeeded. The build continues to emit a non-blocking large JavaScript chunk warning.
+- Latest frontend source CI [42698857209](https://github.com/awandhani22-boop/SIREADER/actions/runs/42698857209) PASS: complete automated test suite, TypeScript check, and Vite production build all succeeded. The subsequent frontend documentation closeout [42701156054](https://github.com/awandhani22-boop/SIREADER/actions/runs/42701156054) also PASS: 415 tests, TypeScript, and production build. The build continues to emit a non-blocking large JavaScript chunk warning.
 
 ## Completed backend work / current validation
 
@@ -22,7 +22,7 @@
 - Phase 5.2.5: transactional one-shot maintenance command, Windows runner and Task Scheduler registration/removal helper, operations runbook, PostgreSQL migration/retention integration coverage.
 - Backend review-creation boundary v3, terminal lifecycle fixture, and privilege tests: [CI 42700267022 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42700267022): 190 API tests and 76 core tests.
 - Backend maintenance database guard: [CI 42700636167 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42700636167): 196 API tests and 76 core tests.
-- Latest backend commit `1c8277ea1ccf0ff0b81966b0d8bd6516829e1494`; [CI 42700770005 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42700770005): 196 API tests, 76 core tests, compile passed.
+- Latest backend code commit `1c8277ea1ccf0ff0b81966b0d8bd6516829e1494`; [CI 42700770005 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42700770005): 196 API tests, 76 core tests, compile passed. Backend docs closeout [CI 42701310022 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42701310022): 196 API tests and 76 core tests.
 
 ## Important operational qualifications
 
