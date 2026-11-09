@@ -1,3 +1,20 @@
+## Current execution status — 2026-11-09
+
+| Workstream | Status |
+|---|---|
+| Phase 3.3 — SSE observability | COMPLETE (owner confirmed) |
+| Phase 4.1 — Worker contracts and registry | Existing implementation retained; include in full Phase 4 verification |
+| Phase 4.2 — Provider and Cost Guard integration | Existing implementation retained; real provider canary remains explicitly gated |
+| Phase 4.3 — Durable task runtime | Existing implementation retained; PostgreSQL migration verification remains required |
+| Phase 4.4 — LIVE presentation and workforce operations | Implementation in progress; branch CI and local browser acceptance pending |
+| Phase 4 overall | NOT COMPLETE until every acceptance gate is recorded |
+
+No Phase 5 work should begin before Phase 4 is accepted. No live database migration, paid provider request, trading order, or merge to `main` is implied by this roadmap status.
+
+See [PHASE_4_EXECUTION_LOG.md](./PHASE_4_EXECUTION_LOG.md).
+
+---
+
 # SIREADER Virtual Office — Master Roadmap to v1.0
 
 **Document status:** ROADMAP LOCKED — source of truth for phase order, scope, and acceptance gates  
