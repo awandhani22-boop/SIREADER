@@ -69,3 +69,71 @@ Expected result: twelve trigger rows across the six source tables.
 ## Rollback
 
 Use migrations/2026_11_09_observability_events_rollback.sql through the same approved database-owner process. This removes only the SIREADER observability triggers and function. It does not change tables, rows, role grants, or the existing snapshot API.
+
+## Final Windows / Chrome acceptance (after syncing the latest branch)
+
+### Start services separately for a BFF-only restart
+
+The npm run dev launcher intentionally stops Vite when the BFF process exits. For this acceptance, run the two frontend services in separate PowerShell windows so restarting BFF does not intentionally take Vite down.
+
+PowerShell window A — Python API (leave running):
+~~~powershell
+& "C:\SIREADER\.venv\Scripts\python.exe" -m app.api.server
+~~~
+
+PowerShell window B — BFF:
+~~~powershell
+Set-Location "$env:USERPROFILE\.gemini\antigravity\scratch\SIREADER"
+npm run dev:bff
+~~~
+
+PowerShell window C — Vite:
+~~~powershell
+Set-Location "$env:USERPROFILE\.gemini\antigravity\scratch\SIREADER"
+npm run dev:vite
+~~~
+
+Confirm listeners are on loopback ports 8000, 3001, and 3000. Do not start another copy if a port is already occupied. Open http://127.0.0.1:3000 in Chrome and authenticate the operator.
+
+### Browser Offline → Online
+
+1. Open Chrome DevTools → Network.
+2. Select **Offline** from the network throttling menu.
+3. Wait until the LIVE connection indicator becomes OFFLINE. Snapshot polling must continue attempting recovery; stale private values must not be presented as freshly validated.
+4. Select **No throttling**.
+5. Wait for the LIVE connection indicator to return to LIVE. On EventSource reconnect, the frontend must immediately fetch all five authoritative snapshots; it must not wait 60 seconds.
+6. Confirm the browser still has only one active /api/v1/events/stream request. Ignore completed/failed historical Network rows; check only the live pending stream.
+
+### BFF restart + re-authentication in the real browser
+
+1. Keep Vite and Python API running, and keep the LIVE panel open.
+2. In PowerShell window B, press Ctrl+C once. The BFF should exit without hanging on the long-lived SSE connection.
+3. Restart BFF in the same window with npm run dev:bff.
+4. In Chrome, the previous operator cookie must be rejected by the new BFF process. The LIVE panel should clear private data and request operator login again.
+5. Log in again through the panel. Confirm all five snapshots return to LIVE and a new EventSource stream opens.
+6. Check the BFF terminal for a clean start and no repeated request/error loop. Do not copy cookies, passwords, bearer tokens, or environment values into logs or chat.
+
+### Five-minute Chrome resource budget
+
+Run this only after the browser has recovered to LIVE. Pause the deterministic simulation and leave the LIVE panel open, with no manual interactions for five minutes. Open Chrome DevTools → More tools → Performance monitor. Record the baseline, then one reading each minute through minute 5 for CPU, JS heap size, DOM nodes, and JS event listeners.
+
+Acceptance thresholds for this isolated idle window:
+- Average Chrome page CPU: **≤10%**.
+- JS heap at minute 5: **≤15% above baseline**.
+- DOM nodes at minute 5: **≤5% above baseline**.
+- JS event listeners at minute 5: **≤5% above baseline**.
+- No sustained upward trend across the final three one-minute samples.
+
+These are project acceptance limits, not previously measured results. A threshold breach means investigate and repeat the sample; do not relabel it PASS because the UI looks normal. Windows process Working Set is a separate metric and cannot substitute for Chrome JS heap, DOM, or listener counts.
+
+### Evidence to record
+
+Keep only non-sensitive evidence:
+- UTC/local timestamp and branch commit.
+- Network Offline → Online result and time until LIVE returns.
+- BFF shutdown/restart result, old session rejected, login again, five snapshots LIVE, one active SSE stream.
+- Chrome Performance Monitor readings at minute 0, 1, 2, 3, 4, and 5.
+- Any error text with credentials, cookies, authorization headers, and secrets redacted.
+
+Once the above browser checks pass and the six measurements are recorded, update this runbook and the Phase 3.3 execution log, then request owner sign-off. Only then may Phase 3.3 be marked COMPLETE. Do not merge to main automatically.
+
