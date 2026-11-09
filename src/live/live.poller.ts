@@ -373,7 +373,7 @@ export function createLivePoller(
       eventStreamFailures = 0;
       setEventStreamHealth(true, runGeneration);
       // A reopened EventSource proves transport recovery, not snapshot freshness.
-      // Reconcile all five authoritative snapshots immediately instead of waiting
+      // Reconcile all configured authoritative snapshots immediately instead of waiting
       // for the now-longer 60-second healthy-SSE cadence.
       if (recoveringFromStreamFailure) {
         void refreshPaths(LIVE_API_PATHS, runGeneration);
