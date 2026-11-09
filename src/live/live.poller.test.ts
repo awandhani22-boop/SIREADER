@@ -64,6 +64,24 @@ const responses: LiveApiResponseMap = {
     offset: 0,
     decisions: [],
   } satisfies AuditDecisionsDto,
+  '/api/v1/workforce/runtime': {
+    server_time_utc: '2026-11-09T10:00:00Z',
+    runtime: {
+      observed_at: '2026-11-09T10:00:00Z', configured_workers: 7,
+      ready_workers: 0, stale_workers: 0, offline_workers: 7,
+      active_tasks: 0, queued_tasks: 0, waiting_review_tasks: 0,
+      dead_lettered_tasks: 0, completed_last_24h: 0,
+    },
+    workers: [],
+  },
+  '/api/v1/workforce/tasks': {
+    server_time_utc: '2026-11-09T10:00:00Z',
+    total_count: 0, limit: 50, offset: 0, tasks: [],
+  },
+  '/api/v1/workforce/activity': {
+    server_time_utc: '2026-11-09T10:00:00Z',
+    total_count: 0, limit: 50, offset: 0, events: [],
+  },
 };
 
 class FakeClock implements LivePollerClock {
@@ -199,7 +217,7 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
     poller.stop();
   });
 
-  await t.test('global connection is LIVE only after all five endpoint snapshots are validated', async () => {
+  await t.test('global connection is LIVE only after all eight endpoint snapshots are validated', async () => {
     useLiveStore.getState().reset();
     const clock = new FakeClock();
     let resolveSystem: ((value: SystemStatusDto) => void) | undefined;
@@ -703,7 +721,7 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
       (counts.get('/api/v1/telemetry/usage') ?? 0) > telemetryCallsDuringOutage,
       'SSE reconnect must immediately refresh the telemetry snapshot',
     );
-    assert.equal(useLiveStore.getState().connection, 'LIVE', 'LIVE returns after all five refreshed snapshots validate');
+    assert.equal(useLiveStore.getState().connection, 'LIVE', 'LIVE returns after all eight refreshed snapshots validate');
 
     const recoveredSystemCalls = counts.get('/api/v1/system/status') ?? 0;
     const recoveredTelemetryCalls = counts.get('/api/v1/telemetry/usage') ?? 0;
