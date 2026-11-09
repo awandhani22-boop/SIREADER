@@ -395,9 +395,11 @@ export const WorkerAvatarSceneItem = React.memo(function WorkerAvatarSceneItem({
 }) {
   const worker = useOfficeStore((state) => state.workers[workerId]);
   const displayMode = useWorkerDisplayModeStore((state) => state.mode);
+  const selectedLiveWorkerId = useWorkerDisplayModeStore((state) => state.selectedLiveWorkerId);
+  const selectedDemoWorkerId = useOfficeStore((state) => state.selectedWorkerId);
   const isSelected = displayMode === 'LIVE'
-    ? useWorkerDisplayModeStore((state) => state.selectedLiveWorkerId === workerId)
-    : useOfficeStore((state) => state.selectedWorkerId === workerId);
+    ? selectedLiveWorkerId === workerId
+    : selectedDemoWorkerId === workerId;
   const reducedMotion = useOfficeStore((state) => state.reducedMotion);
   const avatarLoadError = useOfficeStore((state) => state.avatarLoadErrors[workerId]);
   const selectDemoWorker = useOfficeStore((state) => state.selectWorker);
