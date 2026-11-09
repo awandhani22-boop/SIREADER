@@ -487,6 +487,8 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
         limit,
         offset,
       }),
+      getPendingWorkforceReviews: async () => { throw new LiveApiError('NOT_FOUND'); },
+      getWorkforceReview: async () => { throw new LiveApiError('NOT_FOUND'); },
       sendWorkforceCommand: async (_path: WorkforceCommandPath, _request: WorkforceCommandRequest): Promise<WorkforceCommandResponseDto> => ({
         command_id: 'cmd_12345678', actor_id: 'local_operator', command_type: 'WORKER_SCHEDULING_SET',
         target_id: 'haiku', correlation_id: 'corr_12345678',
@@ -527,6 +529,8 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
         limit,
         offset,
       }),
+      getPendingWorkforceReviews: async () => { throw new LiveApiError('NOT_FOUND'); },
+      getWorkforceReview: async () => { throw new LiveApiError('NOT_FOUND'); },
       sendWorkforceCommand: async (_path: WorkforceCommandPath, _request: WorkforceCommandRequest): Promise<WorkforceCommandResponseDto> => ({
         command_id: 'cmd_12345678', actor_id: 'local_operator', command_type: 'WORKER_SCHEDULING_SET',
         target_id: 'haiku', correlation_id: 'corr_12345678',
@@ -557,6 +561,8 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
         limit,
         offset,
       }),
+      getPendingWorkforceReviews: async () => { throw new LiveApiError('NOT_FOUND'); },
+      getWorkforceReview: async () => { throw new LiveApiError('NOT_FOUND'); },
       sendWorkforceCommand: async (_path: WorkforceCommandPath, _request: WorkforceCommandRequest): Promise<WorkforceCommandResponseDto> => ({
         command_id: 'cmd_12345678', actor_id: 'local_operator', command_type: 'WORKER_SCHEDULING_SET',
         target_id: 'haiku', correlation_id: 'corr_12345678',
