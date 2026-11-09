@@ -3,6 +3,7 @@ import test from 'node:test';
 import http from 'node:http';
 import type { AddressInfo, Server } from 'node:net';
 import { createBffApp } from './app.ts';
+import { hashOperatorPassword } from './auth.ts';
 import { shutdownHttpServer } from './shutdown.ts';
 import { SSE_UPSTREAM_PATH } from './sse.ts';
 
@@ -149,6 +150,7 @@ test('SSE BFF fails closed for wrong content type and missing server token', asy
 function openStreamRequest(
   server: Server,
   path: string,
+  extraHeaders: Record<string, string> = {},
 ): Promise<{ request: http.ClientRequest; response: http.IncomingMessage }> {
   return new Promise((resolve, reject) => {
     const port = (server.address() as AddressInfo).port;
@@ -157,7 +159,7 @@ function openStreamRequest(
       port,
       path,
       method: 'GET',
-      headers: { ...HEADERS, accept: 'text/event-stream' },
+      headers: { ...HEADERS, accept: 'text/event-stream', ...extraHeaders },
     });
     req.once('response', (response) => resolve({ request: req, response }));
     req.once('error', reject);
@@ -328,3 +330,182 @@ test('BFF shutdown closes active SSE clients and aborts upstream streams', async
   assert.equal(upstreamCancelCount, 1);
   assert.equal(active.response.destroyed || active.response.complete, true);
 });
+
+
+test('BFF restart invalidates the old operator session and accepts a fresh authenticated SSE stream', async (t) => {
+  const password = 'Integration-only-operator-password-2026!';
+  const passwordHash = await hashOperatorPassword(password, Buffer.alloc(16, 0x41));
+  const upstreamSignals: AbortSignal[] = [];
+  let upstreamCancelCount = 0;
+  const encoder = new TextEncoder();
+
+  const createHarnessApp = () => createBffApp(undefined, {
+    authOptions: { passwordHash },
+    eventStreamOptions: {
+      tokenProvider: () => 'server-only-test-token',
+      fetchImpl: async (_input, init = {}) => {
+        if (!init.signal) throw new Error('Expected an upstream AbortSignal.');
+        upstreamSignals.push(init.signal);
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode('retry: 3000' + String.fromCharCode(10, 10)));
+          },
+          cancel() {
+            upstreamCancelCount += 1;
+          },
+        });
+        return new Response(body, {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream; charset=utf-8' },
+        });
+      },
+    },
+  });
+
+  const firstServer = http.createServer(createHarnessApp());
+  await listen(firstServer);
+  t.after(async () => {
+    if (firstServer.listening) await close(firstServer);
+  });
+
+  const postLogin = (server: Server): Promise<{ status: number; cookie: string }> =>
+    new Promise((resolve, reject) => {
+      const port = (server.address() as AddressInfo).port;
+      const body = JSON.stringify({ password });
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port,
+        path: '/api/auth/login',
+        method: 'POST',
+        headers: {
+          ...HEADERS,
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(body),
+        },
+      }, (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer | string) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        res.on('end', () => {
+          const cookies = res.headers['set-cookie'];
+          const pair = Array.isArray(cookies) && cookies.length > 0
+            ? cookies[0].split(';', 1)[0]
+            : '';
+          resolve({ status: res.statusCode || 0, cookie: pair });
+        });
+      });
+      req.once('error', reject);
+      req.end(body);
+    });
+
+  const getJson = (
+    server: Server,
+    path: string,
+    cookie: string,
+  ): Promise<{ status: number; body: string }> =>
+    new Promise((resolve, reject) => {
+      const port = (server.address() as AddressInfo).port;
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port,
+        path,
+        method: 'GET',
+        headers: { ...HEADERS, cookie },
+      }, (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer | string) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        res.on('end', () => resolve({
+          status: res.statusCode || 0,
+          body: Buffer.concat(chunks).toString('utf8'),
+        }));
+      });
+      req.once('error', reject);
+      req.end();
+    });
+
+  const loginOne = await postLogin(firstServer);
+  assert.equal(loginOne.status, 200);
+  assert.match(loginOne.cookie, /^__Host-sireader_sid=[A-Za-z0-9_-]{43}$/);
+
+  const firstStream = await openStreamRequest(firstServer, SSE_UPSTREAM_PATH, {
+    cookie: loginOne.cookie,
+  });
+  assert.equal(firstStream.response.statusCode, 200);
+  assert.equal(upstreamSignals.length, 1);
+  assert.equal(upstreamSignals[0].aborted, false);
+
+  const firstStreamClosed = new Promise<void>((resolve) => {
+    firstStream.response.once('close', resolve);
+  });
+  const firstUpstreamAborted = new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('BFF restart did not abort the old authenticated SSE stream.')), 1_500);
+    upstreamSignals[0].addEventListener('abort', () => {
+      clearTimeout(timeout);
+      resolve();
+    }, { once: true });
+  });
+  const firstUpstreamCancelled = new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('BFF restart did not cancel the old upstream body.')), 1_500);
+    const check = () => {
+      if (upstreamCancelCount >= 1) {
+        clearTimeout(timeout);
+        resolve();
+      } else {
+        setTimeout(check, 5);
+      }
+    };
+    check();
+  });
+
+  const firstServerClosed = new Promise<void>((resolve) => firstServer.once('close', resolve));
+  const firstShutdownFinished = new Promise<void>((resolve) => {
+    shutdownHttpServer(firstServer, resolve);
+  });
+  await Promise.all([
+    firstServerClosed,
+    firstShutdownFinished,
+    firstStreamClosed,
+    firstUpstreamAborted,
+    firstUpstreamCancelled,
+  ]);
+  assert.equal(upstreamSignals[0].aborted, true);
+  assert.equal(upstreamCancelCount, 1);
+
+  // A new createBffApp instance represents a fresh BFF process with an empty session Map.
+  const restartedServer = http.createServer(createHarnessApp());
+  await listen(restartedServer);
+  t.after(async () => {
+    if (restartedServer.listening) await close(restartedServer);
+  });
+
+  const staleSession = await getJson(restartedServer, '/api/auth/session', loginOne.cookie);
+  assert.equal(staleSession.status, 401);
+  assert.equal(JSON.parse(staleSession.body).error.code, 'SESSION_REQUIRED');
+
+  const loginTwo = await postLogin(restartedServer);
+  assert.equal(loginTwo.status, 200);
+  assert.match(loginTwo.cookie, /^__Host-sireader_sid=[A-Za-z0-9_-]{43}$/);
+  assert.notEqual(loginTwo.cookie, loginOne.cookie);
+
+  const recoveredStream = await openStreamRequest(restartedServer, SSE_UPSTREAM_PATH, {
+    cookie: loginTwo.cookie,
+  });
+  assert.equal(recoveredStream.response.statusCode, 200);
+  assert.equal(upstreamSignals.length, 2);
+  assert.equal(upstreamSignals[1].aborted, false);
+
+  const recoveredAbort = new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Recovered SSE stream cleanup timed out.')), 1_500);
+    upstreamSignals[1].addEventListener('abort', () => {
+      clearTimeout(timeout);
+      resolve();
+    }, { once: true });
+  });
+  recoveredStream.response.destroy();
+  await recoveredAbort;
+  assert.equal(upstreamSignals[1].aborted, true);
+});
+
