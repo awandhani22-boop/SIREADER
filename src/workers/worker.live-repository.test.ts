@@ -126,6 +126,7 @@ test('LIVE repository reports absent and unknown workers explicitly', () => {
     makeSnapshot([unknownState]),
     'LIVE',
     'AUTHENTICATED',
+    'LIVE',
   ).getWorker('worker_001');
   assert.equal(unknown.statusLabel, 'ERROR');
   assert.equal(unknown.visualStatus, 'ERROR');
