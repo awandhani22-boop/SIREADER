@@ -159,7 +159,10 @@ export function ReviewInbox() {
       if (!isCurrentRequest(epoch)) return;
       setError(friendlyError(requestError));
     } finally {
-      if (isCurrentRequest(epoch)) setSubmitting(false);
+      // The success path calls load(), which intentionally advances requestEpoch.
+      // Submission state must still settle even when that refresh invalidates the
+      // original request token. Logout also resets this state independently.
+      setSubmitting(false);
     }
   }
 
@@ -205,8 +208,8 @@ export function ReviewInbox() {
               {loading && items.length === 0 && <p className="p-4 text-xs text-slate-400">Memuat review…</p>}
               {!loading && items.length === 0 && <p className="p-4 text-xs text-slate-500">Tidak ada review PENDING.</p>}
               {items.map((item) => (
-                <button key={item.review_id} type="button" onClick={() => void selectReview(item.review_id)}
-                  className={'block w-full border-b border-slate-800/80 p-3 text-left hover:bg-slate-900 ' +
+                <button key={item.review_id} type="button" disabled={submitting} onClick={() => void selectReview(item.review_id)}
+                  className={'block w-full border-b border-slate-800/80 p-3 text-left hover:bg-slate-900 disabled:cursor-wait disabled:opacity-60 ' +
                     (selectedId === item.review_id ? 'bg-violet-950/40' : 'bg-transparent')}
                   data-testid={'review-row-' + item.review_id}>
                   <span className="block truncate font-mono text-[10px] text-violet-200">{item.review_id}</span>
@@ -215,9 +218,9 @@ export function ReviewInbox() {
                 </button>
               ))}
               <div className="flex items-center justify-between p-2">
-                <button type="button" disabled={offset <= 0 || loading} onClick={() => void load(Math.max(0, offset - 25), null)}
+                <button type="button" disabled={offset <= 0 || loading || submitting} onClick={() => void load(Math.max(0, offset - 25), null)}
                   className="rounded border border-slate-700 px-2 py-1 text-[10px] disabled:opacity-30">Previous</button>
-                <button type="button" disabled={offset + 25 >= total || loading} onClick={() => void load(offset + 25, null)}
+                <button type="button" disabled={offset + 25 >= total || loading || submitting} onClick={() => void load(offset + 25, null)}
                   className="rounded border border-slate-700 px-2 py-1 text-[10px] disabled:opacity-30">Next</button>
               </div>
             </aside>
