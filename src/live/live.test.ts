@@ -12,6 +12,7 @@ import {
   type AuthenticatedSessionDto,
   type SystemStatusDto,
   type TelemetryUsageDto,
+  type WorkforceTasksResponseDto,
 } from './live.contracts';
 import {
   createLiveApiClient,
@@ -371,6 +372,11 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
       logout: async () => undefined,
       get: async (path) => fixtures[path],
       getWorkforceAttempts: async (taskId) => ({ server_time_utc: '2026-11-09T10:00:00Z', task_id: taskId, attempts: [] }),
+      getWorkforceTasks: async (limit = 50, offset = 0) => ({
+        ...(fixtures['/api/v1/workforce/tasks'] as WorkforceTasksResponseDto),
+        limit,
+        offset,
+      }),
       clearCsrfToken: () => undefined,
     };
     const controller = createLiveController(api);
@@ -399,6 +405,11 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
       logout: async () => undefined,
       get: async (path) => fixtures[path],
       getWorkforceAttempts: async (taskId) => ({ server_time_utc: '2026-11-09T10:00:00Z', task_id: taskId, attempts: [] }),
+      getWorkforceTasks: async (limit = 50, offset = 0) => ({
+        ...(fixtures['/api/v1/workforce/tasks'] as WorkforceTasksResponseDto),
+        limit,
+        offset,
+      }),
       clearCsrfToken: () => { csrfCleared = true; },
     };
     const controller = createLiveController(api);
@@ -417,6 +428,11 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
       logout: async () => undefined,
       get: async () => { throw new LiveApiError('SCHEMA_INVALID'); },
       getWorkforceAttempts: async (taskId) => ({ server_time_utc: '2026-11-09T10:00:00Z', task_id: taskId, attempts: [] }),
+      getWorkforceTasks: async (limit = 50, offset = 0) => ({
+        ...(fixtures['/api/v1/workforce/tasks'] as WorkforceTasksResponseDto),
+        limit,
+        offset,
+      }),
       clearCsrfToken: () => undefined,
     };
     const controller = createLiveController(api);
