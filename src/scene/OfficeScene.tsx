@@ -161,8 +161,9 @@ const RoomSceneItem = React.memo(function RoomSceneItem({
   const displayMode = useWorkerDisplayModeStore((state) => state.mode);
   const liveResource = useLiveStore((state) => state.resources['/api/v1/workforce/runtime']);
   const liveSession = useLiveStore((state) => state.session);
+  const liveConnection = useLiveStore((state) => state.connection);
   const liveSnapshot = liveResource.data as WorkforceRuntimeResponseDto | null;
-  const liveRepository = createLiveWorkerRepository(liveSnapshot, liveResource.status, liveSession);
+  const liveRepository = createLiveWorkerRepository(liveSnapshot, liveResource.status, liveSession, liveConnection);
   const demoRepository = createDemoWorkerRepository(worker ? [worker] : []);
   const workerStatus = displayMode === 'LIVE'
     ? liveRepository.getWorker(room.primaryWorkerId).visualStatus
