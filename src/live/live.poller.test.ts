@@ -532,9 +532,6 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
     poller.stop();
   });
 
-});
-
-
   await t.test('SSE LIVE invalidations and SIMULATED controls remain isolated in both directions', async () => {
     useLiveStore.getState().reset();
     useOfficeStore.getState().resetSimulationWithSeed(20_261_109);
@@ -599,3 +596,5 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
     useOfficeStore.getState().resetSimulationWithSeed();
     useLiveStore.getState().reset();
   });
+
+});
