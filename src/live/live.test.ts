@@ -13,6 +13,9 @@ import {
   type SystemStatusDto,
   type TelemetryUsageDto,
   type WorkforceTasksResponseDto,
+  type WorkforceCommandPath,
+  type WorkforceCommandRequest,
+  type WorkforceCommandResponseDto,
 } from './live.contracts';
 import {
   createLiveApiClient,
@@ -318,6 +321,64 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
     assert.equal(Object.keys(api).sort().join(','), 'clearCsrfToken,get,getSession,getWorkforceAttempts,getWorkforceTasks,login,logout');
   });
 
+
+  await t.test('workforce command requires authenticated session CSRF and uses same-origin POST', async () => {
+    const calls: Array<{ input: RequestInfo | URL; init: RequestInit }> = [];
+    const responseBody = {
+      command_id: 'cmd_12345678',
+      actor_id: 'local_operator',
+      command_type: 'WORKER_SCHEDULING_SET',
+      target_id: 'haiku',
+      correlation_id: 'corr_12345678',
+      outcome: {
+        accepted: true, worker_id: 'haiku',
+        accepting_tasks: false, schedule_state: 'PAUSED',
+      },
+      created_at: '2026-11-09T10:00:00Z',
+      replayed: false,
+    };
+    const api = createLiveApiClient({
+      idempotencyKeyFactory: () => 'idempotency-test-0001',
+      fetchImpl: async (input, init = {}) => {
+        calls.push({ input, init });
+        if (String(input) === '/api/auth/session') return jsonResponse(authenticatedSession);
+        return jsonResponse(responseBody);
+      },
+    });
+    await api.getSession();
+    const result = await api.sendWorkforceCommand(
+      '/api/v1/commands/workers/scheduling',
+      { worker_id: 'haiku', accepting_tasks: false },
+    );
+    assert.equal(result.command_type, 'WORKER_SCHEDULING_SET');
+    assert.equal(String(calls[1].input), '/api/v1/commands/workers/scheduling');
+    assert.equal(calls[1].init.method, 'POST');
+    assert.equal(calls[1].init.credentials, 'same-origin');
+    const headers = new Headers(calls[1].init.headers);
+    assert.equal(headers.get('x-csrf-token'), authenticatedSession.csrfToken);
+    assert.equal(headers.get('idempotency-key'), 'idempotency-test-0001');
+    assert.equal(headers.get('authorization'), null);
+    assert.equal(calls[1].init.body, JSON.stringify({ worker_id: 'haiku', accepting_tasks: false }));
+  });
+
+  await t.test('workforce command fails closed without a CSRF token and validates response schema', async () => {
+    const noSession = createLiveApiClient({ fetchImpl: async () => jsonResponse({}) });
+    await assert.rejects(
+      noSession.sendWorkforceCommand('/api/v1/commands/workers/scheduling', { worker_id: 'haiku', accepting_tasks: false }),
+      (error: unknown) => error instanceof LiveApiError && error.code === 'CSRF_MISSING',
+    );
+    const invalid = createLiveApiClient({
+      fetchImpl: async (input) => String(input) === '/api/auth/session'
+        ? jsonResponse(authenticatedSession)
+        : jsonResponse({ command_id: 'short' }),
+    });
+    await invalid.getSession();
+    await assert.rejects(
+      invalid.sendWorkforceCommand('/api/v1/commands/workers/scheduling', { worker_id: 'haiku', accepting_tasks: false }),
+      (error: unknown) => error instanceof LiveApiError && error.code === 'SCHEMA_INVALID',
+    );
+  });
+
   await t.test('missing operator session maps to SESSION_REQUIRED', async () => {
     const api = createLiveApiClient({
       fetchImpl: async () => jsonResponse(bffError('SESSION_REQUIRED'), 401),
@@ -376,6 +437,12 @@ test('SIREADER Batch 4 — LIVE contracts, API client, session and isolated stat
         ...(fixtures['/api/v1/workforce/tasks'] as WorkforceTasksResponseDto),
         limit,
         offset,
+      }),
+      sendWorkforceCommand: async (_path: WorkforceCommandPath, _request: WorkforceCommandRequest): Promise<WorkforceCommandResponseDto> => ({
+        command_id: 'cmd_12345678', actor_id: 'local_operator', command_type: 'WORKER_SCHEDULING_SET',
+        target_id: 'haiku', correlation_id: 'corr_12345678',
+        outcome: { accepted: true, worker_id: 'haiku', accepting_tasks: false, schedule_state: 'PAUSED' },
+        created_at: '2026-11-09T10:00:00Z', replayed: false,
       }),
       clearCsrfToken: () => undefined,
     };

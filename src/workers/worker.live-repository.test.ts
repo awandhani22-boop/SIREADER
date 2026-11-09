@@ -23,6 +23,7 @@ function makeWorker(
     role: 'Runtime worker',
     department: 'AI Runtime',
     enabled: true,
+    accepting_tasks: true,
     max_concurrency: 2,
     model_tier: 'FAST',
     capability_ids: ['classification', 'summarization'],

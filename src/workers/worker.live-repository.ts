@@ -24,6 +24,7 @@ export interface WorkerRuntimeRecord {
   readonly role: string;
   readonly department: string;
   readonly enabled: boolean | null;
+  readonly acceptingTasks: boolean | null;
   readonly processStatus: string;
   readonly statusLabel: string;
   readonly visualStatus: WorkerStatus;
@@ -92,6 +93,7 @@ function fromBackendWorker(
       role: worker.role,
       department: worker.department,
       enabled: worker.enabled,
+      acceptingTasks: worker.accepting_tasks,
       processStatus: freshness,
       statusLabel: freshness,
       visualStatus: freshness === 'CONNECTING' || freshness === 'REFRESHING' ? 'WAITING' : 'ERROR',
@@ -115,6 +117,7 @@ function fromBackendWorker(
     role: worker.role,
     department: worker.department,
     enabled: worker.enabled,
+    acceptingTasks: worker.accepting_tasks,
     processStatus: mapped.statusLabel,
     ...mapped,
     modelTier: worker.model_tier,
@@ -143,6 +146,7 @@ function emptyRecord(
     role: '',
     department: '',
     enabled: null,
+    acceptingTasks: null,
     processStatus: statusLabel,
     statusLabel,
     visualStatus: freshness === 'CONNECTING' ? 'WAITING' : 'ERROR',
@@ -207,6 +211,7 @@ export function createDemoWorkerRepository(
     role: worker.role,
     department: worker.department,
     enabled: true,
+    acceptingTasks: true,
     processStatus: worker.status,
     statusLabel: worker.status,
     visualStatus: worker.status,
