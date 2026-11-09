@@ -18,13 +18,11 @@
 
 - Phase 5.2.2-B–D base implementation: review database/quarantine, adjudication command, security-barrier read view, read endpoints.
 - Phase 5.2.3: single-ledger Cost Guard observability and task/worker attribution.
-- Phase 5.2.4: capability-to-model-tier policy, sensitive-data redaction/review, fail-closed trading/execution exclusions.
-- Phase 5.2.5: one-shot maintenance command, Windows wrapper, operating runbook, PostgreSQL migration/retention integration test updates.
-- Backend 5.2.3 CI [42667794174](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42667794174): 177 API tests and 75 core tests passed.
-- Backend follow-up review/retention CI [42670505104](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42670505104): 185 API tests and 75 core tests passed.
-- Backend final governance/policy/maintenance CI [42671067597](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42671067597): 187 API tests and 76 core tests passed.
-- Backend documentation closeout branch HEAD: `6fc26d153f76a37b0fc6cecfd3e58faaa0955b39`; [CI 42671597785 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42671597785).
-- Current backend branch head at this snapshot: `1568435e092fc3b59bb271a9eef9d24981daa8e8`; latest policy/maintenance CI [42671067597](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42671067597) PASS: 187 API tests and 76 core tests.
+- Phase 5.2.4: deterministic capability-to-model-tier selection, sensitive-data redaction/review, and fail-closed trading/execution exclusions. This selects one tier before one provider call; it does not perform quality-driven multi-call escalation during an attempt.
+- Phase 5.2.5: transactional one-shot maintenance command, Windows runner and Task Scheduler registration/removal helper, operations runbook, PostgreSQL migration/retention integration coverage.
+- Backend implementation and Task Scheduler helper commit: `5b00acc83fc7ac738a26d188fe8851a30c2a0ce8`.
+- Latest backend code CI [42698878591](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42698878591) PASS: 188 API tests, 76 core regression tests, and API compile step passed.
+- Subsequent backend documentation closeout commit: `f50d6e43353ebeb4ed6326de515feccd6c035362`; its documentation-only CI run [42699386851](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42699386851) was still running at the time of this report refresh.
 
 ## Important operational qualifications
 
