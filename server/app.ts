@@ -30,6 +30,12 @@ import { SafeLogger } from './log.ts';
 import { createUpstreamHandlers, type UpstreamProxyOptions, type UpstreamApiPath } from './upstream.ts';
 import { createEventStreamProxyHandler, type SseProxyOptions } from './sse.ts';
 import { OperatorAuthService, disableAuthCaching, type OperatorAuthOptions } from './auth.ts';
+import {
+  createWorkforceCommandHandlers,
+  WORKFORCE_COMMAND_MAX_BODY_BYTES,
+  type WorkforceCommandProxyOptions,
+  type WorkforceCommandPath,
+} from './commands.ts';
 
 export interface BffAppDependencies extends UpstreamProxyOptions {
   /** Test seam for upstream-only fixtures; never set in the production entrypoint. */
@@ -39,6 +45,8 @@ export interface BffAppDependencies extends UpstreamProxyOptions {
   readonly staticRoot?: string;
   /** Fixed-origin SSE upstream injection seam for tests. */
   readonly eventStreamOptions?: SseProxyOptions;
+  /** Test seam for the fixed loopback workforce command proxy. */
+  readonly workforceCommandOptions?: WorkforceCommandProxyOptions;
 }
 
 function installStaticFrontend(app: express.Application, staticRoot: string): void {
@@ -104,6 +112,7 @@ export function createBffApp(
   const app = express();
   const upstreamHandlers = createUpstreamHandlers(dependencies);
   const eventStreamHandler = createEventStreamProxyHandler(dependencies.eventStreamOptions);
+  const workforceCommandHandlers = createWorkforceCommandHandlers(dependencies.workforceCommandOptions);
   const operatorAuth = new OperatorAuthService(dependencies.authOptions);
   const requireOperatorSession = dependencies.requireOperatorSession ?? operatorAuth.requireSession;
 
@@ -264,6 +273,51 @@ export function createBffApp(
     app.get(path, requireOperatorSession, upstreamHandlers[path]);
   }
   app.get('/api/v1/events/stream', requireOperatorSession, eventStreamHandler);
+
+  // Domain 3: Human-supervised workforce commands. Every command requires
+  // the existing operator session AND per-session CSRF token before parsing.
+  const commandBodyParser = express.json({ limit: WORKFORCE_COMMAND_MAX_BODY_BYTES, strict: true });
+  const commandPolicyGuard: RequestHandler = (req, res, next) => {
+    if (req.headers.origin !== config.allowedOrigin) {
+      sendBffError(res, 403, 'FORBIDDEN', 'Exact same-origin Origin header is required for workforce commands.');
+      return;
+    }
+    if (!req.headers['content-type'] || !/^application\\/json(?:\\s*;\\s*charset=utf-8)?$/i.test(req.headers['content-type'])) {
+      sendBffError(res, 400, 'BAD_REQUEST', 'Workforce command Content-Type must be application/json.');
+      return;
+    }
+    next();
+  };
+  const handleCommandBodyError: express.ErrorRequestHandler = (error, req, res, next) => {
+    if (!error) { next(); return; }
+    if ((error as { type?: string }).type === 'entity.too.large') {
+      SafeLogger.warn('PAYLOAD_TOO_LARGE', { method: req.method, route: req.path, statusCode: 413, errorCode: 'TOO_LARGE' });
+      sendBffError(res, 413, 'TOO_LARGE', 'Workforce command payload exceeds the 20 KiB limit.');
+      return;
+    }
+    if (error instanceof SyntaxError || (error as { type?: string }).type === 'entity.parse.failed') {
+      sendBffError(res, 400, 'BAD_REQUEST', 'Workforce command JSON payload is malformed.');
+      return;
+    }
+    next(error);
+  };
+  const commandPaths: readonly WorkforceCommandPath[] = [
+    '/api/v1/commands/tasks/enqueue',
+    '/api/v1/commands/tasks/cancel',
+    '/api/v1/commands/tasks/retry',
+    '/api/v1/commands/workers/scheduling',
+  ];
+  for (const path of commandPaths) {
+    app.post(
+      path,
+      operatorAuth.requireSession,
+      operatorAuth.requireCsrf,
+      commandPolicyGuard,
+      commandBodyParser,
+      handleCommandBodyError,
+      workforceCommandHandlers[path],
+    );
+  }
 
   // 8. Production static frontend (never handles the /api namespace).
   if (dependencies.staticRoot) {

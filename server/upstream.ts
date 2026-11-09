@@ -256,11 +256,12 @@ function validWorkforceWorker(value: unknown): boolean {
       'worker_id', 'display_name', 'role', 'department', 'enabled',
       'max_concurrency', 'model_tier', 'capability_ids', 'process_status',
       'heartbeat_at', 'active_task_count', 'in_flight_provider_requests',
-      'schema_version', 'created_at', 'updated_at',
+      'schema_version', 'created_at', 'updated_at', 'accepting_tasks',
     ]) &&
     isString(value.worker_id) && value.worker_id.length >= 2 && value.worker_id.length <= 64 &&
     isString(value.display_name) && isString(value.role) && isString(value.department) &&
     isBoolean(value.enabled) &&
+    isBoolean(value.accepting_tasks) &&
     isInteger(value.max_concurrency, 1) && value.max_concurrency <= 32 &&
     ['NONE', 'FAST', 'REASONING', 'ESCALATION'].includes(String(value.model_tier)) &&
     Array.isArray(value.capability_ids) && value.capability_ids.length <= 28 &&

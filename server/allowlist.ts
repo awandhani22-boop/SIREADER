@@ -82,6 +82,27 @@ export const CANONICAL_ROUTES: readonly CanonicalRouteDefinition[] = Object.free
     allowedMethods: Object.freeze(['GET']),
     description: 'Authenticated SSE resource invalidation stream',
   },
+  // Narrow human-supervised workforce command surface (operator session + CSRF).
+  {
+    path: '/api/v1/commands/tasks/enqueue',
+    allowedMethods: Object.freeze(['POST']),
+    description: 'Enqueue one bounded generic non-trading workforce task',
+  },
+  {
+    path: '/api/v1/commands/tasks/cancel',
+    allowedMethods: Object.freeze(['POST']),
+    description: 'Request safe cancellation of an eligible non-trading task',
+  },
+  {
+    path: '/api/v1/commands/tasks/retry',
+    allowedMethods: Object.freeze(['POST']),
+    description: 'Retry one known pre-provider failed non-trading task as a new task',
+  },
+  {
+    path: '/api/v1/commands/workers/scheduling',
+    allowedMethods: Object.freeze(['POST']),
+    description: 'Pause or resume scheduling for an eligible non-trading worker',
+  },
 ]);
 
 const CANONICAL_ROUTE_MAP = new Map<string, readonly string[]>(
