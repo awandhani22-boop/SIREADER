@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Activity, Bot, Clock3, RefreshCw, X } from 'lucide-react';
 import { LiveApiError } from '../live/live.api';
 import { liveController } from '../live/live.controller';
@@ -78,7 +78,7 @@ export function WorkforceLiveDock() {
   const taskPageStart = taskRows.length > 0 && visibleTaskData ? visibleTaskData.offset + 1 : 0;
   const taskPageEnd = taskRows.length > 0 && visibleTaskData ? visibleTaskData.offset + taskRows.length : 0;
   const activityData = activity.data as WorkforceActivityResponseDto | null;
-  const workerRepository = createLiveWorkerRepository(runtimeData, runtime.status, session);
+  const workerRepository = createLiveWorkerRepository(runtimeData, runtime.status, session, connection);
   const workerRows = workerRepository.listWorkers();
 
   useEffect(() => {
