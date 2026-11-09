@@ -69,7 +69,7 @@ export function TopBar() {
           className={'font-mono text-[10px] font-semibold tracking-wider whitespace-nowrap ' + (displayMode === 'LIVE' ? 'text-emerald-300' : 'text-cyan-300')}
           data-testid={displayMode === 'LIVE' ? 'live-mode-indicator' : 'simulated-mode-indicator'}
         >
-          {displayMode === 'LIVE' ? 'LIVE · ' + liveConnection : 'DEMO · SIMULATED'}
+          {displayMode === 'LIVE' ? 'LIVE · ' + liveConnection : 'SIMULATION MODE · DEMO'}
         </span>
         <div role="group" aria-label="Worker data source mode" className="flex items-center gap-0.5 rounded border border-slate-700 bg-slate-900 p-0.5">
           <button type="button" data-testid="display-mode-demo" aria-pressed={displayMode === "DEMO"} onClick={() => setDisplayMode("DEMO")} className={displayMode === "DEMO" ? "rounded bg-cyan-500/20 px-1.5 py-0.5 font-mono text-[9px] font-bold text-cyan-200" : "rounded px-1.5 py-0.5 font-mono text-[9px] font-bold text-slate-500 hover:text-slate-200"}>DEMO</button>
