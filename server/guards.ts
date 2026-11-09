@@ -110,9 +110,13 @@ export function rawPathGuard(req: Request, res: Response, next: NextFunction): v
     return;
   }
 
-  // Reject query strings on Phase 3.2 API routes
-  if (rawUrl.includes('?')) {
-    sendBffError(res, 400, 'BAD_REQUEST', 'Query strings are not permitted on API routes.');
+  // One narrowly-scoped query is required for the read-only attempt history.
+  // Do not generalize query forwarding to any other API route or parameter.
+  const attemptsQueryAllowed =
+    rawUrl.startsWith('/api/v1/workforce/attempts?') &&
+    /^\/api\/v1\/workforce\/attempts\?task_id=[A-Za-z0-9_-]{8,64}$/.test(rawUrl);
+  if (rawUrl.includes('?') && !attemptsQueryAllowed) {
+    sendBffError(res, 400, 'BAD_REQUEST', 'Query strings are not permitted on this API route.');
     return;
   }
 
