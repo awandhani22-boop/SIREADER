@@ -1,6 +1,6 @@
 # SIREADER Phase 3.3 — SSE Execution Log
 
-**State:** CODE IMPLEMENTED ON ISOLATED BRANCHES; OWNER ACCEPTANCE PENDING  
+**State:** CODE IMPLEMENTED ON ISOLATED BRANCHES; CORE OWNER MANUAL SSE ACCEPTANCE PASSED; SUPPLEMENTARY GATES OPEN  
 **Date:** 2026-11-09  
 **Do not merge to main without owner approval.
 
@@ -59,25 +59,33 @@ Virtual Office:
 ## CI evidence
 
 ### Virtual Office
-- Branch commit: 57e3f2d1d1eb3a616eb6792f69294f0d3072e261
+- Implementation code commit: 57e3f2d1d1eb3a616eb6792f69294f0d3072e261 (current documentation branch head may be later)
 - GitHub Actions run: 42534082388
 - Result: **367/367 tests passed, 0 failed; TypeScript check passed; production build passed.**
 - This includes SSE BFF proxy integration/security tests, frontend event schema tests, poller invalidation/fallback tests, and existing regression suite.
 
 ### Python Backend
-- Branch commit: cead3a4ce2aa70371d29d72c56f36df1193fcf45
-- Prior successful implementation run: 42533930184 on preceding backend commit 6792ed30d79733cc0337eeff825816294137c4a9.
-- The latest branch commit adds TRUNCATE triggers, rollback coverage, and TCP keepalive. Its workflow run is being verified; do not mark backend CI final until that exact SHA's run concludes SUCCESS.
-- No live Supabase migration was executed by this implementation.
+- Latest backend implementation commit: `b596de70e5f6dacb847fcd6bdf432907cf5e5f34`.
+- GitHub Actions run: `42537576568` completed with **success** on that exact SHA; API tests, API compile checks, and core regressions passed.
+- The implementation did not itself apply the live Supabase migration. During owner-run local acceptance, the listener became ready: the authenticated SSE route returned 200, which only happens after the listener's database connection, LISTEN registration, and migration-inventory/security checks pass. The startup `SSE_LISTENER_READY` line was not captured in the supplied terminal transcript.
 
-## Owner acceptance still required
+## Owner manual acceptance evidence (2026-11-09)
 
-1. Review and apply the migration through the Supabase/database-owner process. The sireader_api_ro role must remain read-only.
-3. Restart the local Python API and Virtual Office; confirm the EventHub listener becomes ready with the configured Session pooler connection.
-4. In Chrome, confirm same-origin GET /api/v1/events/stream returns 200 and text/event-stream; browser request must contain no bearer token.
-5. Verify a harmless controlled test notification refreshes only the mapped snapshot, and verify the trigger mapping in staging/disposable PostgreSQL.
-6. Test network disconnect/reconnect, backend restart/epoch reset, replay gap, stream-unavailable polling fallback, BFF restart, logout/session expiry, and no late writes after stop.
-7. Confirm SIMULATED worker/task activity never changes LIVE snapshot/event data.
-8. Record performance/memory evidence for 4 concurrent streams and sustained idle heartbeats. Do not increase capacities without measurements.
+The following results were reported and shown by the owner during local Windows/Chrome testing. They are manual owner-reported evidence, not independently captured telemetry artifacts:
 
-**Phase 3.3 is not COMPLETE yet.** The remaining gates require access to the owner's Supabase project and local Windows/Chrome runtime. Do not start Phase 4 until these gates pass.
+- Python API launched on `127.0.0.1:8000` with the explicit Windows Selector event loop; the five snapshot endpoints returned HTTP 200.
+- Authenticated `GET /api/v1/events/stream` returned HTTP 200. The route is fail-closed and only serves a subscriber when `EventHub.listener_ready` is true; that state is set after PostgreSQL connect, `LISTEN`, and the six-row/six-TRUNCATE-trigger plus function-safety inventory checks.
+- A controlled `pg_notify('sireader_observability_v1', 'system')` produced a browser `resources.invalidated` event for `system`, followed by a fresh `GET /api/v1/system/status` returning 200. This proves the LISTEN → EventHub → BFF → EventSource → targeted snapshot-refresh path. It does **not** by itself prove table-trigger mapping.
+- After stopping and restarting the Python API, the owner observed snapshot requests returning 200 again and confirmed a new SSE request returned 200/remaining open in Chrome. This is owner-confirmed backend-restart recovery; a separate BFF restart has not been tested.
+- One app stream plus three temporary EventSource probes connected successfully (three `CONNECTED` console messages). The probes remained open for the five-minute test window and auto-closed without a reported `CONNECTION ERROR`; no CPU/heap measurements were captured. The app stream remained active.
+- The earlier general five-minute stability observation was also reported as safe, but no performance trace, heap time series, or heartbeat comment-frame capture was supplied.
+
+## Remaining acceptance gates
+
+1. Verify actual table-trigger-to-resource mapping with controlled row changes in a disposable/staging database. The manual `pg_notify` test validates the listener path, not the triggers; keep the live trading/message/audit rows untouched.
+2. Capture an idle heartbeat frame or equivalent server-side evidence, and measure CPU/heap for four concurrent streams plus sustained idle connections. Do not increase capacities without measurements.
+3. Test BFF restart, browser/network interruption with polling fallback, logout/session expiry closing the EventSource, and no reconnect/late private-state writes after logout. Backend API restart recovery has passed by owner report.
+4. Keep duplicate IDs, sequence gaps, replay reset, subscriber overflow/capacity, and schema validation covered by CI tests; add manual checks only if a regression or production issue warrants them.
+5. Reconfirm SIMULATED activity cannot alter LIVE event/snapshot state; existing Phase 3.2 owner isolation acceptance and Phase 3.3 automated boundaries are evidence, but the post-SSE manual interaction was not separately demonstrated in this acceptance session.
+
+**Phase 3.3 remains IMPLEMENTATION IN PROGRESS.** Core end-to-end event delivery, targeted snapshot refresh, backend restart recovery, and four-stream five-minute no-error concurrency smoke passed by owner report. Do not start Phase 4 until every remaining gate is closed and recorded.
