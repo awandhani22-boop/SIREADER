@@ -1,6 +1,6 @@
 # Phase 5 — Human-Supervised Operations & Governance
 
-**Status:** Phase 5.1 implementation + automated CI PASS; owner local acceptance pending  
+**Status:** Phase 5.1 COMPLETE (owner acceptance PASS); Phase 5.2 Architecture & Planning ACTIVE  
 **Working branch:** `phase-5-implementation`  
 **Baseline:** accepted Phase 4 branch; no merge to `main`.
 

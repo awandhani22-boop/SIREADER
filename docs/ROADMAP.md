@@ -8,8 +8,8 @@
 | Phase 4.3 — Durable task runtime | Implemented; disposable PostgreSQL migration/privilege/recovery, multi-process heartbeat, and bounded payload-retention CI PASS |
 | Phase 4.4 — LIVE presentation and workforce operations | Implemented; frontend CI PASS; owner-run Windows/Chrome acceptance PASS |
 | Phase 4 overall | COMPLETE — automated CI and owner-run browser acceptance PASS (2026-11-09) |
-| Phase 5.1 — Human-supervised operations | Source + automated CI PASS; owner local/Windows browser acceptance pending |
-| Phase 5.2 — Review, budgets, governance | PLANNED — blocked until Phase 5.1 owner acceptance |
+| Phase 5.1 — Human-supervised operations | COMPLETE — automated CI and owner-run browser acceptance PASS (2026-11-09) |
+| Phase 5.2 — Review, budgets, governance | ACTIVE — architecture and planning in progress |
 
 Phase 5.1 source implementation and automated CI now pass on the isolated phase-5-implementation branches. The remaining exit gate is owner-side local database setup and Windows/Chrome acceptance; the work is not yet operator-ready for LIVE writes. No live database migration, paid provider request, trading order, or merge to `main` is implied.
 
@@ -80,8 +80,8 @@ The existing React/Three.js project is the product. Preserve and extend it; do n
 | 4.2 | AI Provider Routing, Execution & Cost Guard | IMPLEMENTED, LIVE DISABLED — BACKEND CI PASS |
 | 4.3 | Persistent Backend Task Orchestration | IMPLEMENTED — DISPOSABLE POSTGRES CI PASS |
 | 4.4 | Frontend Live Runtime Adapter & Demo/Live Separation | IMPLEMENTED IN CODE — FRONTEND CI PASS; OWNER BROWSER ACCEPTANCE PENDING |
-| 5.1 | Human-Supervised Worker and Task Operations | PLANNED |
-| 5.2 | Review, Audit, Budgets & Governance | PLANNED |
+| 5.1 | Human-Supervised Worker and Task Operations | COMPLETE |
+| 5.2 | Review, Audit, Budgets & Governance | ACTIVE |
 | 6.1 | Security, Reliability & Failure Recovery | PLANNED |
 | 6.2 | 3D Asset, Performance & Scale Readiness | PLANNED |
 | 6.3 | Packaging, Deployment & Release Acceptance | PLANNED |

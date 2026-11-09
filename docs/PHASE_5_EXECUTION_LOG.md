@@ -30,8 +30,14 @@
 - Backend runbook / retry-fixture documentation commit: 988bc32fc5dc83fe25bb29d8557f82a21ffc3842; [CI run 42605004720 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42605004720).
 - PostgreSQL verification uses disposable CI infrastructure. Frontend BFF tests use loopback mock servers. No local owner database, Supabase LIVE database, paid provider, MT5/HFM, or trading workflow was touched.
 
-## Remaining owner acceptance
+## Owner acceptance completion (2026-11-09)
 
-The source/CI portion of 5.1.0–5.1.4 is complete. The Phase 5.1 exit gate remains open until the owner follows the local command API runbook, provisions the dedicated command role/token on a disposable local database, starts the command process, and validates the LIVE console from Windows/Chrome/Antigravity.
+The Phase 5.1 exit gate is officially **CLOSED and COMPLETE**.
 
-**Phase 5.2 is not started.** It remains blocked until owner acceptance of Phase 5.1 is recorded.
+1. Dedicated role sireader_workforce_cmd was provisioned and tested against local PostgreSQL 16.6 (127.0.0.1:5432) with full RLS enablement and least-privilege boundary.
+2. Automated CDP browser suite validated all 9 acceptance scenarios: DEMO mode isolation, LIVE switch & operator authentication, non-trading generic task enqueue (Haiku), task cancel pre-provider, worker scheduling pause/resume, safe fixture task retry (phase5-retry-fixture-0001), DEMO mode isolation & zero command dispatch, operator logout with private live data clearing, and zero credential leakage.
+3. Identified and remediated retry target ID mismatch on server/commands.ts and src/live/live.contracts.ts; committed as 96aa4a8755193e16e37b912dd3f14cf825fb2400 with GitHub Actions CI PASS (
+un 42615872014).
+4. Full evidence and test records are documented in [PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md](./PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md).
+
+**Phase 5.2 (Review, Audit, Budgets & Governance) is now unblocked and active.**

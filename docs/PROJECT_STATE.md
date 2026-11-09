@@ -1,14 +1,14 @@
-## Current status override — 2026-11-09 (Phase 5.1)
+## Current status override — 2026-11-09 (Phase 5.1 Closeout)
 
-- **Phase 5.1 source implementation and automated CI: PASS.** The remaining Phase 5.1 exit gate is owner-side Windows/Chrome/Antigravity acceptance after local command DB role/token setup. The project is not yet operator-ready for LIVE writes.
-- **Current working branch:** phase-5-implementation in both repositories. This branch is isolated from main; no merge was performed.
-- **Virtual Office source HEAD:** 04989b704deb5d9f2248341fc5d7d9bfab5c277d; [CI run 42605233370 PASS](https://github.com/awandhani22-boop/SIREADER/actions/runs/42605233370): 399 tests, TypeScript, production build.
-- **Python Backend HEAD:** de1d16be631418fe17d61524d1b63e479374f1fb; [CI run 42604536800 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42604536800): 144 API/command/PostgreSQL tests, compile check, 75 core regression tests.
-- Phase 5.1 adds a dedicated loopback command API, a dedicated PostgreSQL login with row-level non-trading policies, four fixed operator commands, BFF session+CSRF protection, LIVE-only UI controls, and idempotent append-only audit.
-- **Owner action pending:** create sireader_workforce_cmd only in a disposable local PostgreSQL database, apply 2026_11_09_workforce_commands_v1.sql locally, add a distinct command token to both ignored local environment files, start the command API, and complete the Windows/Chrome acceptance in the runbook. Never paste or commit secrets.
-- **Phase 5.2 remains PLANNED and BLOCKED** until owner acceptance of Phase 5.1. No live Supabase migration, paid provider invocation, MT5/HFM operation, trading order, or trading approval change was performed.
+- **Phase 5.1 — COMPLETE (owner acceptance recorded 2026-11-09):** Source implementation, automated CI, bug fix for retry target ID, and owner-run Windows/Chrome/Antigravity acceptance are recorded PASS. See [PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md](./PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md).
+- **Current working branch:** phase-5-implementation in both repositories (isolated from main; no merge performed).
+- **Virtual Office source HEAD:** 96aa4a8755193e16e37b912dd3f14cf825fb2400; [CI run 42615872014 PASS](https://github.com/awandhani22-boop/SIREADER/actions/runs/42615872014): 399 tests, TypeScript check, and production build.
+- **Python Backend HEAD:** 988bc32fc5dc83fe25bb29d8557f82a21ffc3842; [CI run 42605004720 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42605004720): API tests, compile check, and core regressions.
+- Phase 5.1 verified a dedicated loopback command API (127.0.0.1:8010), least-privilege PostgreSQL role sireader_workforce_cmd, row-level security, four fixed operator commands (enqueue, cancel, pause/resume worker, retry fixture), BFF session+CSRF protection, LIVE/DEMO isolation, and idempotent append-only audit.
+- **Phase 5.2 — Review, Audit, Budgets & Governance is now UNBLOCKED and ACTIVE for architecture planning.**
+- **Hard boundaries preserved:** No live Supabase migration, paid provider invocation, MT5/HFM operation, trading order, or trading approval change was performed.
 
-See PHASE_5_EXECUTION_PLAN.md and PHASE_5_EXECUTION_LOG.md.
+See [PHASE_5_EXECUTION_PLAN.md](./PHASE_5_EXECUTION_PLAN.md), [PHASE_5_EXECUTION_LOG.md](./PHASE_5_EXECUTION_LOG.md), and [PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md](./PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md).
 
 ---
 
