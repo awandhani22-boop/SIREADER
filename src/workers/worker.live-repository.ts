@@ -1,31 +1,22 @@
 /**
- * Phase 4.4 source boundary for worker presentation.
+ * Phase 4.4 worker repository and presentation adapters.
  *
- * LIVE records are built only from validated backend snapshots already held by
- * the independent LIVE store. SIMULATED records are built only from the
- * deterministic office store. This module contains no Three.js or network I/O.
+ * The async LIVE repository reads the fixed authenticated workforce runtime
+ * contract. The display adapters consume validated snapshots already held by
+ * the independent LIVE store or deterministic DEMO store. No module here
+ * imports Three.js or writes to either state store.
  */
 import type {
   WorkforceProcessStatus,
   WorkforceRuntimeResponseDto,
 } from '../live/live.contracts';
 import type { LiveResourceStatus, LiveSessionState } from '../live/live.state';
-import type {
-  AnimationClipKey,
-  WorkerEntity,
-  WorkerStatus,
-} from './worker.types';
+import type { AnimationClipKey, WorkerEntity, WorkerStatus } from './worker.types';
 
 export type WorkerRuntimeSource = 'LIVE' | 'SIMULATED';
 export type WorkerRuntimeFreshness =
-  | 'LIVE'
-  | 'REFRESHING'
-  | 'STALE'
-  | 'OFFLINE'
-  | 'ERROR'
-  | 'CONNECTING'
-  | 'UNAUTHENTICATED'
-  | 'SIMULATED';
+  | 'LIVE' | 'REFRESHING' | 'STALE' | 'ERROR' | 'CONNECTING'
+  | 'UNAUTHENTICATED' | 'SIMULATED';
 
 export interface WorkerRuntimeRecord {
   readonly workerId: string;
@@ -48,54 +39,21 @@ export interface WorkerRuntimeRecord {
   readonly freshness: WorkerRuntimeFreshness;
 }
 
+/** Transport-facing repository contract. The reader must be the fixed BFF path. */
 export interface WorkerRepository {
+  readonly source: 'LIVE';
+  listWorkers(): Promise<readonly WorkerRuntimeRecord[]>;
+}
+
+export type WorkforceRuntimeReader = (
+  path: '/api/v1/workforce/runtime',
+) => Promise<WorkforceRuntimeResponseDto>;
+
+/** Synchronous read model used by scene/roster components after store subscription. */
+export interface WorkerDisplayRepository {
   readonly source: WorkerRuntimeSource;
   listWorkers(): readonly WorkerRuntimeRecord[];
   getWorker(workerId: string): WorkerRuntimeRecord;
-}
-
-function emptyLiveRecord(
-  workerId: string,
-  freshness: WorkerRuntimeFreshness,
-): WorkerRuntimeRecord {
-  const statusLabel = freshness === 'LIVE' || freshness === 'REFRESHING'
-    ? 'NOT_REPORTED'
-    : freshness;
-  const processStatus = statusLabel;
-
-  return Object.freeze({
-    workerId,
-    displayName: workerId,
-    role: '',
-    department: '',
-    enabled: null,
-    processStatus,
-    statusLabel,
-    visualStatus: freshness === 'CONNECTING' ? 'WAITING' : 'ERROR',
-    animationState: 'idle',
-    modelTier: null,
-    capabilityIds: Object.freeze([]),
-    maxConcurrency: null,
-    activeTaskCount: null,
-    inFlightProviderRequests: null,
-    heartbeatAt: null,
-    observedAt: null,
-    source: null,
-    freshness,
-  });
-}
-
-function resourceFreshness(
-  status: LiveResourceStatus,
-  session: LiveSessionState,
-  hasSnapshot: boolean,
-): WorkerRuntimeFreshness {
-  if (session !== 'AUTHENTICATED') return 'UNAUTHENTICATED';
-  if (status === 'ERROR') return 'ERROR';
-  if (status === 'STALE') return 'STALE';
-  if (status === 'LIVE') return hasSnapshot ? 'LIVE' : 'ERROR';
-  if (status === 'LOADING' && hasSnapshot) return 'REFRESHING';
-  return 'CONNECTING';
 }
 
 function mapBackendStatus(
@@ -124,7 +82,7 @@ function mapBackendStatus(
     case 'DISABLED':
       return { statusLabel: 'DISABLED', visualStatus: 'ERROR', animationState: 'idle' };
     default:
-      // Unknown backend states are never guessed into IDLE or BUSY.
+      // Unknown backend state is never guessed into IDLE or BUSY.
       return { statusLabel: 'ERROR', visualStatus: 'ERROR', animationState: 'idle' };
   }
 }
@@ -164,7 +122,7 @@ function fromBackendWorker(
     role: worker.role,
     department: worker.department,
     enabled: worker.enabled,
-    processStatus: mapped.statusLabel as WorkforceProcessStatus | 'ERROR',
+    processStatus: mapped.statusLabel,
     ...mapped,
     modelTier: worker.model_tier,
     capabilityIds: Object.freeze([...worker.capability_ids]),
@@ -178,12 +136,77 @@ function fromBackendWorker(
   });
 }
 
+function emptyRecord(
+  workerId: string,
+  freshness: WorkerRuntimeFreshness,
+  source: WorkerRuntimeSource | null,
+): WorkerRuntimeRecord {
+  const statusLabel = freshness === 'LIVE' || freshness === 'REFRESHING'
+    ? 'NOT_REPORTED'
+    : freshness;
+  return Object.freeze({
+    workerId,
+    displayName: workerId,
+    role: '',
+    department: '',
+    enabled: null,
+    processStatus: statusLabel,
+    statusLabel,
+    visualStatus: freshness === 'CONNECTING' ? 'WAITING' : 'ERROR',
+    animationState: 'idle',
+    modelTier: null,
+    capabilityIds: Object.freeze([]),
+    maxConcurrency: null,
+    activeTaskCount: null,
+    inFlightProviderRequests: null,
+    heartbeatAt: null,
+    observedAt: null,
+    source,
+    freshness,
+  });
+}
+
+function resolveFreshness(
+  status: LiveResourceStatus,
+  session: LiveSessionState,
+  hasSnapshot: boolean,
+): WorkerRuntimeFreshness {
+  if (session !== 'AUTHENTICATED') return 'UNAUTHENTICATED';
+  if (status === 'ERROR') return 'ERROR';
+  if (status === 'STALE') return 'STALE';
+  if (status === 'LIVE') return hasSnapshot ? 'LIVE' : 'ERROR';
+  if (status === 'LOADING' && hasSnapshot) return 'REFRESHING';
+  return 'CONNECTING';
+}
+
+/**
+ * Builds the read-only backend repository. readRuntime is expected to call the
+ * existing authenticated controller/BFF client, never a browser-to-Python or
+ * browser-to-database URL.
+ */
 export function createLiveWorkerRepository(
+  readRuntime: WorkforceRuntimeReader,
+): WorkerRepository {
+  return Object.freeze({
+    source: 'LIVE' as const,
+    async listWorkers(): Promise<readonly WorkerRuntimeRecord[]> {
+      const snapshot = await readRuntime('/api/v1/workforce/runtime');
+      return Object.freeze(
+        snapshot.workers.map((worker) =>
+          fromBackendWorker(worker, snapshot.runtime.observed_at, 'LIVE'),
+        ),
+      );
+    },
+  });
+}
+
+/** Adapts the latest validated LIVE store snapshot without issuing duplicate HTTP requests. */
+export function createLiveWorkerDisplayRepository(
   snapshot: WorkforceRuntimeResponseDto | null,
   resourceStatus: LiveResourceStatus,
   session: LiveSessionState,
-): WorkerRepository {
-  const freshness = resourceFreshness(resourceStatus, session, snapshot !== null);
+): WorkerDisplayRepository {
+  const freshness = resolveFreshness(resourceStatus, session, snapshot !== null);
   const records = session === 'AUTHENTICATED' && snapshot
     ? Object.freeze(snapshot.workers.map((worker) =>
         fromBackendWorker(worker, snapshot.runtime.observed_at, freshness),
@@ -194,43 +217,22 @@ export function createLiveWorkerRepository(
   return Object.freeze({
     source: 'LIVE' as const,
     listWorkers: () => records,
-    getWorker: (workerId: string) => byId.get(workerId) ?? emptyLiveRecord(workerId, freshness),
+    getWorker: (workerId: string) =>
+      byId.get(workerId) ?? emptyRecord(workerId, freshness, null),
   });
 }
 
-function emptyDemoRecord(workerId: string): WorkerRuntimeRecord {
-  return Object.freeze({
-    workerId,
-    displayName: workerId,
-    role: '',
-    department: '',
-    enabled: null,
-    processStatus: 'NOT_REPORTED',
-    statusLabel: 'NOT_REPORTED',
-    visualStatus: 'ERROR',
-    animationState: 'idle',
-    modelTier: null,
-    capabilityIds: Object.freeze([]),
-    maxConcurrency: null,
-    activeTaskCount: null,
-    inFlightProviderRequests: null,
-    heartbeatAt: null,
-    observedAt: null,
-    source: 'SIMULATED',
-    freshness: 'SIMULATED',
-  });
-}
-
-export function createDemoWorkerRepository(
+/** Adapts only deterministic DEMO entities; no backend values are read here. */
+export function createDemoWorkerDisplayRepository(
   workers: readonly WorkerEntity[],
-): WorkerRepository {
+): WorkerDisplayRepository {
   const records = Object.freeze(workers.map((worker): WorkerRuntimeRecord => Object.freeze({
     workerId: worker.id,
     displayName: worker.name,
     role: worker.role,
     department: worker.department,
     enabled: true,
-    processStatus: 'NOT_REPORTED',
+    processStatus: worker.status,
     statusLabel: worker.status,
     visualStatus: worker.status,
     animationState: worker.animationState,
@@ -249,6 +251,7 @@ export function createDemoWorkerRepository(
   return Object.freeze({
     source: 'SIMULATED' as const,
     listWorkers: () => records,
-    getWorker: (workerId: string) => byId.get(workerId) ?? emptyDemoRecord(workerId),
+    getWorker: (workerId: string) =>
+      byId.get(workerId) ?? emptyRecord(workerId, 'SIMULATED', 'SIMULATED'),
   });
 }
