@@ -39,18 +39,11 @@ export interface WorkerRuntimeRecord {
   readonly freshness: WorkerRuntimeFreshness;
 }
 
-/** Transport-facing repository contract. The reader must be the fixed BFF path. */
+/**
+ * Read-only data-source contract consumed by the office presentation.
+ * Network access remains in the existing authenticated LIVE poller/BFF client.
+ */
 export interface WorkerRepository {
-  readonly source: 'LIVE';
-  listWorkers(): Promise<readonly WorkerRuntimeRecord[]>;
-}
-
-export type WorkforceRuntimeReader = (
-  path: '/api/v1/workforce/runtime',
-) => Promise<WorkforceRuntimeResponseDto>;
-
-/** Synchronous read model used by scene/roster components after store subscription. */
-export interface WorkerDisplayRepository {
   readonly source: WorkerRuntimeSource;
   listWorkers(): readonly WorkerRuntimeRecord[];
   getWorker(workerId: string): WorkerRuntimeRecord;
@@ -179,33 +172,12 @@ function resolveFreshness(
   return 'CONNECTING';
 }
 
-/**
- * Builds the read-only backend repository. readRuntime is expected to call the
- * existing authenticated controller/BFF client, never a browser-to-Python or
- * browser-to-database URL.
- */
-export function createLiveWorkerRepository(
-  readRuntime: WorkforceRuntimeReader,
-): WorkerRepository {
-  return Object.freeze({
-    source: 'LIVE' as const,
-    async listWorkers(): Promise<readonly WorkerRuntimeRecord[]> {
-      const snapshot = await readRuntime('/api/v1/workforce/runtime');
-      return Object.freeze(
-        snapshot.workers.map((worker) =>
-          fromBackendWorker(worker, snapshot.runtime.observed_at, 'LIVE'),
-        ),
-      );
-    },
-  });
-}
-
 /** Adapts the latest validated LIVE store snapshot without issuing duplicate HTTP requests. */
-export function createLiveWorkerDisplayRepository(
+export function createLiveWorkerRepository(
   snapshot: WorkforceRuntimeResponseDto | null,
   resourceStatus: LiveResourceStatus,
   session: LiveSessionState,
-): WorkerDisplayRepository {
+): WorkerRepository {
   const freshness = resolveFreshness(resourceStatus, session, snapshot !== null);
   const records = session === 'AUTHENTICATED' && snapshot
     ? Object.freeze(snapshot.workers.map((worker) =>
@@ -223,9 +195,9 @@ export function createLiveWorkerDisplayRepository(
 }
 
 /** Adapts only deterministic DEMO entities; no backend values are read here. */
-export function createDemoWorkerDisplayRepository(
+export function createDemoWorkerRepository(
   workers: readonly WorkerEntity[],
-): WorkerDisplayRepository {
+): WorkerRepository {
   const records = Object.freeze(workers.map((worker): WorkerRuntimeRecord => Object.freeze({
     workerId: worker.id,
     displayName: worker.name,
