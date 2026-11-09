@@ -53,9 +53,14 @@ export const RosterWorkerItem = React.memo(function RosterWorkerItem({
   const view = displayMode === 'LIVE'
     ? liveRepository.getWorker(workerId)
     : demoRepository.getWorker(workerId);
-  const isSelected = useOfficeStore((state) => state.selectedWorkerId === workerId);
-  const selectWorker = useOfficeStore((state) => state.selectWorker);
-  const canSelect = Boolean(worker);
+  const selectedDemoWorkerId = useOfficeStore((state) => state.selectedWorkerId);
+  const selectDemoWorker = useOfficeStore((state) => state.selectWorker);
+  const selectedLiveWorkerId = useWorkerDisplayModeStore((state) => state.selectedLiveWorkerId);
+  const setSelectedLiveWorkerId = useWorkerDisplayModeStore((state) => state.setSelectedLiveWorkerId);
+  const isSelected = displayMode === 'LIVE'
+    ? selectedLiveWorkerId === workerId
+    : selectedDemoWorkerId === workerId;
+  const canSelect = displayMode === 'LIVE' || Boolean(worker);
 
   if (displayMode === 'DEMO' && !worker) return null;
 
@@ -77,7 +82,8 @@ export const RosterWorkerItem = React.memo(function RosterWorkerItem({
       type="button"
       data-testid={`roster-worker-${workerId}`}
       onClick={() => {
-        if (canSelect) selectWorker(workerId as WorkerId);
+        if (displayMode === 'LIVE') setSelectedLiveWorkerId(workerId);
+        else if (worker) selectDemoWorker(workerId as WorkerId);
       }}
       disabled={!canSelect}
       className={`w-full flex flex-col gap-0.5 p-2 rounded-md border text-left transition-all ${canSelect ? 'cursor-pointer' : 'cursor-default'} ${
