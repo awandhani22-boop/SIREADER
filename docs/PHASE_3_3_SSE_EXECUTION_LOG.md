@@ -99,7 +99,8 @@ The following code-level gaps were addressed after the owner acceptance review:
 - Added `server/shutdown.ts` and wired it into the BFF process signal handler. Shutdown now stops accepting new HTTP requests with `server.close()`, then force-closes remaining HTTP connections with `server.closeAllConnections()`. This is required because long-lived SSE responses otherwise keep active HTTP connections open. The resulting response-close path is expected to abort the upstream Fetch request and destroy its streaming body through the existing BFF SSE cleanup handler.
 - Added a BFF integration regression test in `server/sse.test.ts` that opens a real loopback HTTP SSE response, invokes the same shutdown helper used by the process entrypoint, and asserts server closure, upstream AbortSignal, and upstream body cancellation.
 - Added a frontend regression test in `src/live/live.poller.test.ts` that simulates a browser network interruption, proves normal 10-second/30-second polling resumes, then simulates native EventSource reconnection and proves the 60-second reconciliation cadence returns.
-- Added a cross-store isolation regression test in `src/live/live.poller.test.ts`: a LIVE SSE invalidation refreshes the LIVE pipeline snapshot without mutating the SIMULATED worker/task/time/event state; a later SIMULATED clock step does not mutate LIVE snapshots.
+- Added a cross-store isolation regression test in `src/live/live.poller.test.ts`: a LIVE SSE invalidation refreshes the LIVE pipeline snapshot without mutating the SIMULATED worker/task/time/event state; a later deterministic SIMULATED step does not mutate LIVE snapshots.
+- Added a poller/controller regression test for the expected BFF-restart session lifecycle: a lost in-memory operator session stops SSE and clears private LIVE data; after operator re-authentication, the poller re-fetches all five snapshots and opens a fresh EventSource.
 
 Implementation commits on this branch:
 - `bd84cbb384bf16ad1bb763809dcf5858c4946bb7` — shutdown helper.
@@ -108,6 +109,8 @@ Implementation commits on this branch:
 - `c5b7b5fec9d8be898ca2dca172ff2d8797a63942` — SSE test frame correction.
 - `8cd8073655581f4a9bb1eccdd613943c03bcf4c8` and `2423cafa8434a2e938a1a322f1eb2eb6372d4e37` — LIVE/SIMULATED isolation regression test.
 - `1d4882f1d80ffe640c0109bc46f4f1b9ae7664f4` — network interruption/reconnection regression test.
+- `0af46ca1a0da2bbb4871585a7956b8ec1bdaaee6` — deterministic simulation-step setup for the isolation regression test.
+- `3beea06ee8f1b11a8640d7425e04fdf95834e5be` — operator re-authentication and fresh EventSource regression test.
 
 These commits have been pushed to the isolated implementation branch only. Their CI result must be checked before this code-level work is marked passing. They do not replace owner-run Windows/Chrome acceptance. In particular, numeric Chrome Performance Monitor values and the combined BFF process restart + browser session re-authentication flow are still not independently observed in the owner's local browser.
 
