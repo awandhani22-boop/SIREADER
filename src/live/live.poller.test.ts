@@ -723,6 +723,6 @@ test('SIREADER Batch 5 — LIVE polling cadence, freshness, retry and recovery',
 
     poller.stop();
     assert.equal(sources[0].closed, true);
-  });;
+  });
 
 });
