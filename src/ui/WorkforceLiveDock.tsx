@@ -4,6 +4,7 @@ import { LiveApiError } from '../live/live.api';
 import { liveController } from '../live/live.controller';
 import { useLiveStore, type LiveResourceSnapshot } from '../live/live.state';
 import { useWorkerDisplayModeStore } from '../workers/worker.display-mode';
+import { createLiveWorkerRepository } from '../workers/worker.live-repository';
 import type {
   WorkforceActivityResponseDto,
   WorkforceAttemptsResponseDto,
@@ -76,6 +77,8 @@ export function WorkforceLiveDock() {
   const taskPageStart = taskRows.length > 0 && visibleTaskData ? visibleTaskData.offset + 1 : 0;
   const taskPageEnd = taskRows.length > 0 && visibleTaskData ? visibleTaskData.offset + taskRows.length : 0;
   const activityData = activity.data as WorkforceActivityResponseDto | null;
+  const workerRepository = createLiveWorkerRepository(runtimeData, runtime.status, session);
+  const workerRows = workerRepository.listWorkers();
 
   useEffect(() => {
     if (session !== 'AUTHENTICATED') {
@@ -229,34 +232,34 @@ export function WorkforceLiveDock() {
                       <ResourceState resource={runtime as LiveResourceSnapshot<unknown>} />
                     </div>
                     <div className="grid gap-2 md:grid-cols-2">
-                      {(runtimeData?.workers ?? []).map((worker) => (
-                        <article key={worker.worker_id} className="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+                      {workerRows.map((worker) => (
+                        <article key={worker.workerId} className="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <p className="truncate text-xs font-semibold text-white">{worker.display_name}</p>
+                              <p className="truncate text-xs font-semibold text-white">{worker.displayName}</p>
                               <p className="mt-0.5 text-[10px] text-slate-500">{worker.role} · {worker.department}</p>
                             </div>
-                            <span className={'shrink-0 rounded border px-1.5 py-0.5 font-mono text-[9px] ' + statusTone(worker.process_status)}>
-                              {worker.process_status}
+                            <span className={'shrink-0 rounded border px-1.5 py-0.5 font-mono text-[9px] ' + statusTone(worker.statusLabel)}>
+                              {worker.statusLabel}
                             </span>
                           </div>
                           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[9px] text-slate-400">
-                            <span className="rounded bg-slate-800 px-1.5 py-0.5">{worker.model_tier}</span>
-                            <span className="rounded bg-slate-800 px-1.5 py-0.5">Concurrency {worker.active_task_count}/{worker.max_concurrency}</span>
-                            <span className="rounded bg-slate-800 px-1.5 py-0.5">Provider in-flight {worker.in_flight_provider_requests}</span>
+                            <span className="rounded bg-slate-800 px-1.5 py-0.5">{worker.modelTier}</span>
+                            <span className="rounded bg-slate-800 px-1.5 py-0.5">Concurrency {worker.activeTaskCount ?? '—'}/{worker.maxConcurrency ?? '—'}</span>
+                            <span className="rounded bg-slate-800 px-1.5 py-0.5">Provider in-flight {worker.inFlightProviderRequests ?? '—'}</span>
                           </div>
                           <div className="mt-2 flex flex-wrap gap-1">
-                            {worker.capability_ids.map((capability) => (
+                            {worker.capabilityIds.map((capability) => (
                               <span key={capability} className="rounded border border-slate-700 px-1.5 py-0.5 text-[9px] text-cyan-200">
                                 {capability}
                               </span>
                             ))}
                           </div>
-                          <p className="mt-2 text-[9px] text-slate-600">Heartbeat: {timeLabel(worker.heartbeat_at)}</p>
+                          <p className="mt-2 text-[9px] text-slate-600">Heartbeat: {timeLabel(worker.heartbeatAt)}</p>
                         </article>
                       ))}
-                      {runtimeData?.workers.length === 0 && (
-                        <p className="rounded border border-slate-800 p-3 text-xs text-slate-500">Belum ada worker terdaftar.</p>
+                      {runtimeData && workerRows.length === 0 && (
+                        <p className="rounded border border-slate-800 p-3 text-xs text-slate-500">Belum ada worker terdaftar pada snapshot backend.</p>
                       )}
                       {!runtimeData && (
                         <p data-testid="workforce-runtime-waiting" className="rounded border border-slate-800 p-3 text-xs text-slate-500">Belum ada snapshot workforce yang tervalidasi.</p>
