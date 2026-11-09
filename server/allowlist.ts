@@ -1,9 +1,9 @@
 /**
  * SIREADER Phase 3.2 BFF - Route Allowlist
  *
- * Defines the canonical fixed allowlist of exactly 9 permitted routes:
+ * Defines the canonical fixed allowlist of exactly 13 permitted routes:
  * - 3 Authentication & Session lifecycle endpoints
- * - 5 snapshot and 1 Phase 3.3 event-stream observability endpoint
+ * - 5 Phase 3 observability snapshots, 4 Phase 4 workforce read endpoints, and 1 SSE endpoint
  *
  * Strictly prevents arbitrary proxy paths or wildcard forwarding.
  */
@@ -56,6 +56,26 @@ export const CANONICAL_ROUTES: readonly CanonicalRouteDefinition[] = Object.free
     path: '/api/v1/audit/decisions',
     allowedMethods: Object.freeze(['GET']),
     description: 'Read-only trade and signal approval decision history',
+  },
+  {
+    path: '/api/v1/workforce/runtime',
+    allowedMethods: Object.freeze(['GET']),
+    description: 'Read-only persistent worker registry and runtime health',
+  },
+  {
+    path: '/api/v1/workforce/tasks',
+    allowedMethods: Object.freeze(['GET']),
+    description: 'Read-only persistent workforce task queue and lifecycle',
+  },
+  {
+    path: '/api/v1/workforce/attempts',
+    allowedMethods: Object.freeze(['GET']),
+    description: 'Read-only attempt history for one validated task ID',
+  },
+  {
+    path: '/api/v1/workforce/activity',
+    allowedMethods: Object.freeze(['GET']),
+    description: 'Read-only workforce activity event history',
   },
   {
     path: '/api/v1/events/stream',
