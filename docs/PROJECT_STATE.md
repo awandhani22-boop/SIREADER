@@ -19,6 +19,12 @@
 - Phases 1, 2.1, 2.2 and 2.3 remain complete with historical evidence and documented deferrals.
 - Phase 3.1 is implemented in the separate Python Backend repo. Owner-provided local report confirms the dedicated read-only database/API configuration and five authenticated GET smoke checks; a documentation-only status reconciliation remains for the backend runbook.
 
+### Phase 4 continuation checkpoint (2026-11-09)
+- Phase 4.1 contract/registry, Phase 4.2 provider/Cost Guard adapter, and Phase 4.3 persistent task orchestration have implementation code on the isolated branch. The 4.3 schema and API-view migrations have disposable PostgreSQL coverage; neither migration has been applied to live Supabase.
+- Phase 4.4 has an initial authenticated read-only workforce API/BFF integration and a Workforce LIVE dock. It is not complete: the scene-level WorkerRepository/LIVE adapter, explicit DEMO/LIVE presentation boundary, pagination, 50/100-worker fixtures, and end-to-end recovery acceptance remain.
+- Phase 4 verification is still PENDING. Do not mark 4.1–4.4 complete until the relevant backend and frontend CI jobs, disposable PostgreSQL tests, and browser acceptance pass. Live provider remains disabled by default and requires owner-controlled credentials and explicit bounded-budget approval.
+- The latest source-level correction to the workforce API-view migration temporarily grants CREATE on schema public to sireader_view_owner for ownership transfer, then revokes it before commit. This has not yet been proven by disposable PostgreSQL CI.
+
 Product mission: [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md).
 Master roadmap: [`docs/ROADMAP.md`](ROADMAP.md).
 Phase 4 execution plan and gates: [`docs/PHASE_4_EXECUTION_PLAN.md`](PHASE_4_EXECUTION_PLAN.md).
