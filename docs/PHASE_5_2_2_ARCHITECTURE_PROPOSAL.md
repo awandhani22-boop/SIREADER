@@ -381,6 +381,20 @@ FOR EACH ROW EXECUTE FUNCTION public.sireader_guard_review_metadata_v1();
    ```
    *Crucial Advantage:* Purging only modifies `workforce_task_review_payloads`. `workforce_task_reviews` remains untouched and 100% compliant with its terminal immutability trigger!
 
+### 6.4. Mandatory Implementation Guardrails (Checkpoint 5.2.2-B Alignment)
+
+1. **Payload Storage Immutability & Anti-Resurrection Trigger (`sireader_guard_review_payloads_v1`):**
+   - `original_output` is strictly immutable after initial insert.
+   - `adjusted_output` is write-once (transitions only from `NULL` to non-`NULL` on valid adjudication).
+   - Once `payload_purged_at` is set by the retention sweeper, the payload cannot be modified or restored (`anti-resurrection`).
+   - Purging is permitted only when the associated review record in `workforce_task_reviews` is in a terminal status (`APPROVED`, `EDITED`, `REJECTED`, `EXPIRED`) and the task's retention period has elapsed.
+   - Purging sets `original_output = NULL` and `adjusted_output = NULL` while preserving `workforce_task_reviews` metadata and SHA-256 hashes permanently.
+
+2. **Exhaustive Review Policy Mapping:**
+   - The versioned backend policy catalog (`app/governance/review_policy.py`) must contain explicit mappings for every capability in `CAPABILITY_CATALOG` (`app/workers/registry.py`) across all authorized task types.
+   - Any capability or task type not in the catalog fails closed (`NONE`).
+   - All trading-adjacent roles (Decision Engineer, Market Monitor) are explicitly barred from entering the review subsystem.
+
 ---
 
 ## 7. Security, Sanitization & Read API
