@@ -18,6 +18,9 @@ import {
 } from '../workers/worker.state';
 import { LiveObservabilityDock } from './LiveObservabilityDock';
 import { WorkforceLiveDock } from './WorkforceLiveDock';
+import { useWorkerDisplayModeStore } from '../workers/worker.display-mode';
+import { useLiveStore } from '../live/live.state';
+import type { WorkforceRuntimeResponseDto } from '../live/live.contracts';
 
 /**
  * TopBar Component (Single-Row Command Center Header)
@@ -26,6 +29,11 @@ import { WorkforceLiveDock } from './WorkforceLiveDock';
  */
 
 export function TopBar() {
+  const displayMode = useWorkerDisplayModeStore((s) => s.mode);
+  const setDisplayMode = useWorkerDisplayModeStore((s) => s.setMode);
+  const liveConnection = useLiveStore((s) => s.connection);
+  const runtimeResource = useLiveStore((s) => s.resources['/api/v1/workforce/runtime']);
+  const runtimeData = runtimeResource.data as WorkforceRuntimeResponseDto | null;
   const workers = useOfficeStore((s) => s.workers);
   const tasks = useOfficeStore((s) => s.tasks);
   const simTimeMs = useOfficeStore((s) => s.simTimeMs);
@@ -58,18 +66,22 @@ export function TopBar() {
           ·
         </span>
         <span
-          className="font-mono text-[10px] font-semibold tracking-wider text-cyan-300 whitespace-nowrap"
-          data-testid="simulated-mode-indicator"
+          className={'font-mono text-[10px] font-semibold tracking-wider whitespace-nowrap ' + (displayMode === 'LIVE' ? 'text-emerald-300' : 'text-cyan-300')}
+          data-testid={displayMode === 'LIVE' ? 'live-mode-indicator' : 'simulated-mode-indicator'}
         >
-          SIMULATION MODE
+          {displayMode === 'LIVE' ? 'LIVE · ' + liveConnection : 'DEMO · SIMULATED'}
         </span>
+        <div role="group" aria-label="Worker data source mode" className="flex items-center gap-0.5 rounded border border-slate-700 bg-slate-900 p-0.5">
+          <button type="button" data-testid="display-mode-demo" aria-pressed={displayMode === "DEMO"} onClick={() => setDisplayMode("DEMO")} className={displayMode === "DEMO" ? "rounded bg-cyan-500/20 px-1.5 py-0.5 font-mono text-[9px] font-bold text-cyan-200" : "rounded px-1.5 py-0.5 font-mono text-[9px] font-bold text-slate-500 hover:text-slate-200"}>DEMO</button>
+          <button type="button" data-testid="display-mode-live" aria-pressed={displayMode === "LIVE"} onClick={() => setDisplayMode("LIVE")} className={displayMode === "LIVE" ? "rounded bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[9px] font-bold text-emerald-200" : "rounded px-1.5 py-0.5 font-mono text-[9px] font-bold text-slate-500 hover:text-slate-200"}>LIVE</button>
+        </div>
       </div>
 
       {/* Zone 2: Global Simulated Office Telemetry (All explicitly marked SIMULATED) */}
       <div
         role="group"
         aria-label="Global Simulated Metrics"
-        className="hidden lg:flex items-center gap-3.5 text-[11px] text-slate-300 whitespace-nowrap"
+        className={displayMode === "DEMO" ? "hidden lg:flex items-center gap-3.5 text-[11px] text-slate-300 whitespace-nowrap" : "hidden"}
       >
         <div className="flex items-center gap-1">
           <span className="text-slate-400">Sim Clock:</span>
@@ -132,10 +144,21 @@ export function TopBar() {
         </div>
       </div>
 
+      {displayMode === "LIVE" && (
+        <div role="group" aria-label="Live Backend Workforce Metrics" data-testid="live-workforce-metrics" className="hidden lg:flex items-center gap-3.5 text-[11px] text-slate-300 whitespace-nowrap">
+          <span>Workers: <strong className="font-mono text-white">{runtimeData?.runtime.configured_workers ?? '—'}</strong></span>
+          <span>Ready: <strong className="font-mono text-emerald-300">{runtimeData?.runtime.ready_workers ?? '—'}</strong></span>
+          <span>Active: <strong className="font-mono text-cyan-300">{runtimeData?.runtime.active_tasks ?? '—'}</strong></span>
+          <span>Queued: <strong className="font-mono text-sky-300">{runtimeData?.runtime.queued_tasks ?? '—'}</strong></span>
+          <span className="font-mono text-slate-500">Snapshot: {runtimeResource.status}</span>
+        </div>
+      )}
+
       {/* Zone 3: Simulation Engine & Drawer Controls */}
       <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-2 xl:w-auto xl:flex-nowrap xl:shrink-0 xl:justify-end">
         {/* Roster & Feed Drawer Toggles */}
         <div role="group" aria-label="Office panel controls" className="flex flex-wrap sm:flex-nowrap items-center gap-1 bg-slate-900/90 p-0.5 rounded-md border border-slate-800">
+          {displayMode === "DEMO" && (
           <button
             type="button"
             data-testid="toggle-global-queue-btn"
@@ -151,6 +174,7 @@ export function TopBar() {
             <ListOrdered className="w-3 h-3" />
             <span data-testid="topbar-pool-queue-count">Pool Queue ({scheduler?.entries.length ?? 0})</span>
           </button>
+          )}
           <button
             type="button"
             onClick={() => setRosterOpen(!isRosterOpen)}
@@ -165,6 +189,7 @@ export function TopBar() {
             <Users className="w-3 h-3" />
             <span>Roster</span>
           </button>
+          {displayMode === "DEMO" && (
           <button
             type="button"
             onClick={() => setActivityFeedOpen(!isActivityFeedOpen)}
@@ -179,11 +204,13 @@ export function TopBar() {
             <Activity className="w-3 h-3" />
             <span>Feed</span>
           </button>
+          )}
         </div>
 
         <WorkforceLiveDock />
 
         {/* Simulation Clock Controls */}
+        {displayMode === "DEMO" ? (
         <div role="group" aria-label="Simulation controls" className="flex flex-wrap sm:flex-nowrap items-center gap-1 bg-slate-900/90 p-0.5 rounded-md border border-slate-800">
           <button
             type="button"
@@ -259,6 +286,11 @@ export function TopBar() {
             <span>Reset</span>
           </button>
         </div>
+        ) : (
+          <span data-testid="live-mode-readonly-controls" className="rounded border border-emerald-500/30 bg-emerald-950/30 px-2 py-1 font-mono text-[9px] text-emerald-200">
+            LIVE RUNTIME · READ ONLY · {liveConnection}
+          </span>
+        )}
       </div>
 
       {/* Independent authenticated LIVE backend observability dock. */}
