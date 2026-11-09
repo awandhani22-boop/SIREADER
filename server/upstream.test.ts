@@ -54,6 +54,37 @@ const FIXTURES: Record<UpstreamApiPath, unknown> = {
     offset: 0,
     decisions: [],
   },
+  '/api/v1/workforce/runtime': {
+    server_time_utc: '2026-11-09T00:00:00Z',
+    runtime: {
+      observed_at: '2026-11-09T00:00:00Z', configured_workers: 7,
+      ready_workers: 0, stale_workers: 0, offline_workers: 7,
+      active_tasks: 0, queued_tasks: 0, waiting_review_tasks: 0,
+      dead_lettered_tasks: 0, completed_last_24h: 0,
+    },
+    workers: [{
+      worker_id: 'haiku', display_name: 'Haiku Worker',
+      role: 'Fast Research & Intake Specialist', department: 'Research',
+      enabled: true, max_concurrency: 2, model_tier: 'FAST',
+      capability_ids: ['quick_research', 'summarization'],
+      process_status: 'OFFLINE', heartbeat_at: null,
+      active_task_count: 0, in_flight_provider_requests: 0,
+      schema_version: 1, created_at: '2026-11-09T00:00:00Z',
+      updated_at: '2026-11-09T00:00:00Z',
+    }],
+  },
+  '/api/v1/workforce/tasks': {
+    server_time_utc: '2026-11-09T00:00:00Z',
+    total_count: 0, limit: 50, offset: 0, tasks: [],
+  },
+  '/api/v1/workforce/attempts': {
+    server_time_utc: '2026-11-09T00:00:00Z',
+    task_id: 'task_12345678', attempts: [],
+  },
+  '/api/v1/workforce/activity': {
+    server_time_utc: '2026-11-09T00:00:00Z',
+    total_count: 0, limit: 50, offset: 0, events: [],
+  },
 };
 
 function listen(server: Server): Promise<void> {
@@ -199,8 +230,15 @@ test('SIREADER bounded upstream proxy — local mock integration', async (t) => 
       return;
     }
 
-    const path = req.url || '';
-    const payload = FIXTURES[path as UpstreamApiPath];
+    const requestUrl = new URL(req.url || '/', 'http://127.0.0.1');
+    const path = requestUrl.pathname;
+    const attemptsQueryValid =
+      path === '/api/v1/workforce/attempts' &&
+      requestUrl.searchParams.get('task_id') === 'task_12345678' &&
+      [...requestUrl.searchParams.keys()].length === 1;
+    const payload = path === '/api/v1/workforce/attempts'
+      ? (attemptsQueryValid ? FIXTURES[path as UpstreamApiPath] : undefined)
+      : (requestUrl.search === '' ? FIXTURES[path as UpstreamApiPath] : undefined);
     if (payload === undefined) {
       res.statusCode = 404;
       res.end();
@@ -220,7 +258,7 @@ test('SIREADER bounded upstream proxy — local mock integration', async (t) => 
     await close(mock);
   });
 
-  await t.test('all five fixed paths proxy and validate their backend DTO', async () => {
+  await t.test('all nine allowlisted paths proxy and validate their backend DTO', async () => {
     mode = 'normal';
     assert.deepEqual([...UPSTREAM_API_PATHS], [
       '/api/v1/system/status',
@@ -228,16 +266,43 @@ test('SIREADER bounded upstream proxy — local mock integration', async (t) => 
       '/api/v1/pipeline/active',
       '/api/v1/market-watches/active',
       '/api/v1/audit/decisions',
+      '/api/v1/workforce/runtime',
+      '/api/v1/workforce/tasks',
+      '/api/v1/workforce/attempts',
+      '/api/v1/workforce/activity',
     ]);
     for (const path of UPSTREAM_API_PATHS) {
-      const result = await request(proxy, path);
-      assert.equal(result.status, 200, path + ' should be proxied');
+      const requestPath = path === '/api/v1/workforce/attempts'
+        ? path + '?task_id=task_12345678'
+        : path;
+      const result = await request(proxy, requestPath);
+      assert.equal(result.status, 200, requestPath + ' should be proxied');
       assert.deepEqual(result.json, FIXTURES[path]);
     }
     assert.deepEqual(
-      received.slice(-5).map((entry) => entry.path),
-      [...UPSTREAM_API_PATHS],
+      received.slice(-9).map((entry) => entry.path),
+      [
+        ...UPSTREAM_API_PATHS.slice(0, 3),
+        ...UPSTREAM_API_PATHS.slice(3, 3),
+      ].concat([
+        '/api/v1/market-watches/active',
+        '/api/v1/audit/decisions',
+        '/api/v1/workforce/runtime',
+        '/api/v1/workforce/tasks',
+        '/api/v1/workforce/attempts?task_id=task_12345678',
+        '/api/v1/workforce/activity',
+      ]),
     );
+  });
+
+  await t.test('workforce attempts proxy requires one bounded task_id query', async () => {
+    mode = 'normal';
+    const before = received.length;
+    const missing = await request(proxy, '/api/v1/workforce/attempts');
+    const malformed = await request(proxy, '/api/v1/workforce/attempts?task_id=bad&extra=1');
+    assert.equal(missing.status, 400);
+    assert.equal(malformed.status, 400);
+    assert.equal(received.length, before);
   });
 
   await t.test('outbound request replaces browser credentials and forwards only server auth plus Accept', async () => {
