@@ -508,6 +508,26 @@ export function createUpstreamHandlers(
   for (const path of UPSTREAM_API_PATHS) {
     handlers[path] = async (req, res): Promise<void> => {
       let taskId: string | undefined;
+      let taskPage: { readonly limit: number; readonly offset: number } | undefined;
+      if (path === '/api/v1/workforce/tasks') {
+        const queryKeys = Object.keys(req.query);
+        const hasUnknownQuery = queryKeys.some((key) => key !== 'limit' && key !== 'offset');
+        const rawLimit = req.query.limit;
+        const rawOffset = req.query.offset;
+        const validInteger = (value: unknown, fallback: number, min: number, max: number): number | null => {
+          if (value === undefined) return fallback;
+          if (typeof value !== 'string' || !/^(0|[1-9][0-9]{0,5})$/.test(value)) return null;
+          const parsed = Number(value);
+          return Number.isSafeInteger(parsed) && parsed >= min && parsed <= max ? parsed : null;
+        };
+        const limit = validInteger(rawLimit, 50, 1, 100);
+        const offset = validInteger(rawOffset, 0, 0, 100_000);
+        if (hasUnknownQuery || limit === null || offset === null) {
+          sendBffError(res, 400, 'BAD_REQUEST', 'Only bounded integer limit and offset parameters are permitted.');
+          return;
+        }
+        taskPage = { limit, offset };
+      }
       if (path === '/api/v1/workforce/attempts') {
         const rawTaskId = req.query.task_id;
         if (
@@ -539,6 +559,10 @@ export function createUpstreamHandlers(
       try {
         const target = new URL(path, origin);
         if (taskId !== undefined) target.searchParams.set('task_id', taskId);
+        if (taskPage !== undefined) {
+          target.searchParams.set('limit', String(taskPage.limit));
+          target.searchParams.set('offset', String(taskPage.offset));
+        }
         const upstream = await fetchImpl(target, {
           method: 'GET',
           headers: {
