@@ -10,7 +10,7 @@ import {
 import { useOfficeStore } from '../workers/worker.state';
 import { RoomDefinition } from '../workers/worker.types';
 import { useWorkerDisplayModeStore } from '../workers/worker.display-mode';
-import { createDemoWorkerDisplayRepository, createLiveWorkerDisplayRepository } from '../workers/worker.live-repository';
+import { createDemoWorkerRepository, createLiveWorkerRepository } from '../workers/worker.live-repository';
 import { useLiveStore } from '../live/live.state';
 import type { WorkforceRuntimeResponseDto } from '../live/live.contracts';
 import { OfficeBuilding } from './OfficeBuilding';
@@ -162,8 +162,8 @@ const RoomSceneItem = React.memo(function RoomSceneItem({
   const liveResource = useLiveStore((state) => state.resources['/api/v1/workforce/runtime']);
   const liveSession = useLiveStore((state) => state.session);
   const liveSnapshot = liveResource.data as WorkforceRuntimeResponseDto | null;
-  const liveRepository = createLiveWorkerDisplayRepository(liveSnapshot, liveResource.status, liveSession);
-  const demoRepository = createDemoWorkerDisplayRepository(worker ? [worker] : []);
+  const liveRepository = createLiveWorkerRepository(liveSnapshot, liveResource.status, liveSession);
+  const demoRepository = createDemoWorkerRepository(worker ? [worker] : []);
   const workerStatus = displayMode === 'LIVE'
     ? liveRepository.getWorker(room.primaryWorkerId).visualStatus
     : demoRepository.getWorker(room.primaryWorkerId).visualStatus;
