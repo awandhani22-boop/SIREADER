@@ -87,7 +87,7 @@ Frontend CI: https://github.com/awandhani22-boop/SIREADER/actions/runs/426047074
 
 - Backend: 144 API/command and PostgreSQL tests passed; compileall passed; 75 core regression tests passed.
 - PostgreSQL tests cover dedicated role privileges, required RLS policies, append-only audit, allowed generic workers, and direct-SQL denial for Decision Engineer / Market Monitor rows.
-- Frontend: 398/398 automated tests passed, TypeScript check passed, production build passed.
+- Frontend: 399/399 automated tests passed, TypeScript check passed, production build passed.
 - The browser keeps the command bearer server-side. Browser writes use the existing operator session + CSRF and a stable idempotency key. An ambiguous timeout preserves the same key for retry; unresolved keys are never evicted to make room for a new command.
 - These runs use test SQLite / disposable PostgreSQL and local BFF mocks. They do not prove the owner's local environment files, PostgreSQL instance, Windows process topology, or real browser session is configured.
 

@@ -26,7 +26,8 @@
 ## Automated verification
 
 - **Backend HEAD:** de1d16be631418fe17d61524d1b63e479374f1fb. [CI run 42604536800 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42604536800): 144 API/command/PostgreSQL tests, compileall, and 75 core regression tests.
-- **Frontend HEAD:** 884eabfcee884ae31e9d0dd06d8b9f79663441fd. [CI run 42604707497 PASS](https://github.com/awandhani22-boop/SIREADER/actions/runs/42604707497): 398 tests, TypeScript check, and production build.
+- **Frontend HEAD:** 04989b704deb5d9f2248341fc5d7d9bfab5c277d. [CI run 42605233370 PASS](https://github.com/awandhani22-boop/SIREADER/actions/runs/42605233370): 399 tests, TypeScript check, and production build.
+- Backend runbook / retry-fixture documentation commit: 988bc32fc5dc83fe25bb29d8557f82a21ffc3842; [CI run 42605004720 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42605004720).
 - PostgreSQL verification uses disposable CI infrastructure. Frontend BFF tests use loopback mock servers. No local owner database, Supabase LIVE database, paid provider, MT5/HFM, or trading workflow was touched.
 
 ## Remaining owner acceptance

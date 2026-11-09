@@ -2,7 +2,7 @@
 
 - **Phase 5.1 source implementation and automated CI: PASS.** The remaining Phase 5.1 exit gate is owner-side Windows/Chrome/Antigravity acceptance after local command DB role/token setup. The project is not yet operator-ready for LIVE writes.
 - **Current working branch:** phase-5-implementation in both repositories. This branch is isolated from main; no merge was performed.
-- **Virtual Office HEAD:** 884eabfcee884ae31e9d0dd06d8b9f79663441fd; [CI run 42604707497 PASS](https://github.com/awandhani22-boop/SIREADER/actions/runs/42604707497): 398 tests, TypeScript, production build.
+- **Virtual Office source HEAD:** 04989b704deb5d9f2248341fc5d7d9bfab5c277d; [CI run 42605233370 PASS](https://github.com/awandhani22-boop/SIREADER/actions/runs/42605233370): 399 tests, TypeScript, production build.
 - **Python Backend HEAD:** de1d16be631418fe17d61524d1b63e479374f1fb; [CI run 42604536800 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42604536800): 144 API/command/PostgreSQL tests, compile check, 75 core regression tests.
 - Phase 5.1 adds a dedicated loopback command API, a dedicated PostgreSQL login with row-level non-trading policies, four fixed operator commands, BFF session+CSRF protection, LIVE-only UI controls, and idempotent append-only audit.
 - **Owner action pending:** create sireader_workforce_cmd only in a disposable local PostgreSQL database, apply 2026_11_09_workforce_commands_v1.sql locally, add a distinct command token to both ignored local environment files, start the command API, and complete the Windows/Chrome acceptance in the runbook. Never paste or commit secrets.
