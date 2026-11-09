@@ -22,7 +22,7 @@
 - Phase 5.2.5: transactional one-shot maintenance command, Windows runner and Task Scheduler registration/removal helper, operations runbook, PostgreSQL migration/retention integration coverage.
 - Backend implementation and Task Scheduler helper commit: `5b00acc83fc7ac738a26d188fe8851a30c2a0ce8`.
 - Latest backend code CI [42698878591](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42698878591) PASS: 188 API tests, 76 core regression tests, and API compile step passed.
-- Subsequent backend documentation closeout commit: `f50d6e43353ebeb4ed6326de515feccd6c035362`; its documentation-only CI run [42699386851](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42699386851) was still running at the time of this report refresh.
+- Subsequent backend operations-runbook documentation commit: `f50d6e43353ebeb4ed6326de515feccd6c035362`; [backend CI #200 / 42699386851 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42699386851): 189 API tests and 76 core tests passed, compile successful.
 
 ## Important operational qualifications
 
