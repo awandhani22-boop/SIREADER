@@ -136,3 +136,14 @@ Open `http://localhost:3000`. Confirm the expected local ports are occupied by t
 - Record the tested branch/commit, test counts, typecheck/build results, source-mode checks, pagination checks, session-expiry checks and any unavailable measurements.
 
 Phase 4 can be marked COMPLETE only after the automated gates and owner-run browser acceptance have explicit PASS evidence. No merge to `main` is part of this runbook.
+
+
+## Owner acceptance result — PASS (2026-11-09)
+
+The owner-run browser/CDP acceptance report is recorded in [PHASE_4_OWNER_ACCEPTANCE_REPORT.md](PHASE_4_OWNER_ACCEPTANCE_REPORT.md). All nine reported scenarios passed: DEMO/LIVE transitions, seven-worker authenticated roster, 50-worker fixture, 75-task pagination, attempt history, session expiry/late-response rejection, return to DEMO, store isolation, and console/network checks.
+
+The report states that local tests used an in-memory SQLite-backed adapter and did not touch Supabase LIVE. It also confirms no paid provider request, trading action, MT5/HFM action, destructive Git operation, or merge to main.
+
+**Screenshot limitation:** the report references local Antigravity PNG paths, but the PNG files were not included in the GitHub upload. The owner report is retained as acceptance attestation; screenshots are not independently retrievable from this repository.
+
+**Phase 4 status: COMPLETE.** Live Supabase migration and paid LIVE-provider canary remain separate, explicitly approved deployment decisions. Do not treat either as having been performed.

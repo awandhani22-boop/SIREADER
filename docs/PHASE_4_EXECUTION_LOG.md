@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-09  
 **Implementation branch:** `phase-4-implementation`  
-**Status:** Phase 4.1–4.4 implementation and automated CI gates PASS; local Windows/Chrome owner acceptance and owner-controlled database/provider gates remain.
+**Status:** Phase 4 COMPLETE — implementation, automated CI, and owner-run Windows/Chrome acceptance recorded PASS (2026-11-09).
 
 ## Baseline and safety boundaries
 
@@ -53,11 +53,38 @@ This continuation adds the following implementation to the frontend and BFF:
 
 - **Frontend implementation verification commit:** `eb8b1ad7dce0cde6cc0821a4831290ee8ffd3dd0`.
 - **Frontend/BFF CI:** [GitHub Actions run 42588073811](https://github.com/awandhani22-boop/SIREADER/actions/runs/42588073811) — **390/390 tests passed**, TypeScript `tsc --noEmit` passed, production build passed (637 ms). The full suite includes BFF authentication, stream proxy, shutdown/restart, worker repository, LIVE/DEMO mode, and pagination regressions. Later documentation-only branch commits also completed CI successfully.
-- **Python Backend implementation HEAD:** `3fd1caa7058be69f531909b7a8e22ebb290eba8c`.
-- **Backend CI:** [GitHub Actions run 42588724433](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42588724433) — PostgreSQL 16-backed API/migration/privilege suite **111 passed**, API package compile passed, and core regression suite **75 passed**.
+- **Python Backend implementation HEAD:** `f1071ef1c798e7168bb998e99dfdc49082777343`.
+- **Backend CI:** [GitHub Actions run 42590234343](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42590234343) — PostgreSQL 16-backed API/migration/privilege suite **111 passed**, API package compile passed, and core regression suite **75 passed**.
 - Backend provider-specific tests cover budget refusal, timeout/unknown outcome, known-not-charged persistence failure, and missing usage handling. The live provider remains disabled by default; task-level cost caps default to zero and must be configured explicitly.
 - Worker heartbeats now publish `active_task_count=1` atomically when a task enters RUNNING and `in_flight_provider_requests=1` atomically after the provider request reservation is persisted. The final heartbeat returns both counts to zero. Regression coverage verifies the intermediate heartbeat states without waiting for the 15-second periodic interval.
 - Disposable PostgreSQL tests apply both workforce migrations twice to prove idempotency, verify API-reader access is limited to allowlisted views, exercise concurrent claims/worker concurrency/lease recovery/unknown provider outcomes, verify the fixed-key workforce notification, and execute both rollback scripts in cleanup. No live Supabase migration was performed.
+
+
+## Owner-run final browser acceptance — PASS (2026-11-09)
+
+The owner uploaded a dedicated report, copied into this branch as [PHASE_4_OWNER_ACCEPTANCE_REPORT.md](PHASE_4_OWNER_ACCEPTANCE_REPORT.md). It records nine Chrome DevTools Protocol scenarios as PASS:
+
+1. Fresh DEMO session and deterministic simulation clock.
+2. DEMO → LIVE transition freezes simulation and hides DEMO controls/feed.
+3. Authenticated LIVE session and seven-worker roster.
+4. Fifty-worker fixture rendered in the LIVE dock.
+5. Pagination across a 75-task fixture (1–50, then 51–75, then back).
+6. Task selection and attempt-history detail.
+7. Logout/session expiry clears private data and rejects late pagination responses.
+8. LIVE → DEMO return resumes the simulation without data contamination.
+9. Console/network audit: zero unhandled errors/React exceptions, one authenticated SSE stream, and invalid pagination rejected by the BFF.
+
+The report states that local testing used an in-memory SQLite-backed API view adapter and did not touch the live Supabase project. It also confirms no paid provider call, MT5/HFM action, trading order, destructive Git operation, or merge to main.
+
+**Evidence limitation:** screenshot PNGs are referenced by local `file:///C:/...` paths and were not part of the GitHub upload. The scenarios are recorded as the owner's test attestation; image artifacts are not independently available from the repository.
+
+## Phase 4 closeout and deferred deployment decisions
+
+- Phase 4 implementation and both CI suites pass; owner-run browser acceptance is recorded PASS. Phase 4 is COMPLETE.
+- No live Supabase migration was applied. This is an intentional safety boundary, not a claim that production schema has been deployed. Any future live migration requires a separately reviewed plan and explicit database-owner approval.
+- Live provider remains disabled; no paid canary or trading execution was performed. A future provider canary requires separate bounded-budget approval.
+- No changes were made to main. The implementation and acceptance record remain on `phase-4-implementation`.
+- **Next planned phase:** Phase 5.1 — Human-Supervised Worker and Task Operations. It requires a separate authorization/security design before any write-command endpoint is introduced.
 
 ## Final regression hardening
 

@@ -5,11 +5,11 @@
 | Phase 3.3 — SSE observability | COMPLETE (owner confirmed) |
 | Phase 4.1 — Worker contracts and registry | Implemented; backend CI PASS |
 | Phase 4.2 — Provider and Cost Guard integration | Implemented; backend CI PASS; live provider disabled pending owner approval |
-| Phase 4.3 — Durable task runtime | Implemented; disposable PostgreSQL migration/privilege/recovery CI PASS |
-| Phase 4.4 — LIVE presentation and workforce operations | Implemented in code; frontend CI PASS; local Windows/Chrome owner acceptance pending |
-| Phase 4 overall | NOT COMPLETE until every acceptance gate is recorded |
+| Phase 4.3 — Durable task runtime | Implemented; disposable PostgreSQL migration/privilege/recovery, multi-process heartbeat, and bounded payload-retention CI PASS |
+| Phase 4.4 — LIVE presentation and workforce operations | Implemented; frontend CI PASS; owner-run Windows/Chrome acceptance PASS |
+| Phase 4 overall | COMPLETE — automated CI and owner-run browser acceptance PASS (2026-11-09) |
 
-No Phase 5 work should begin before Phase 4 is accepted. No live database migration, paid provider request, trading order, or merge to `main` is implied by this roadmap status.
+Phase 5.1 may now enter planning. No live database migration, paid provider request, trading order, or merge to `main` is implied by Phase 4 acceptance.
 
 See [PHASE_4_EXECUTION_LOG.md](./PHASE_4_EXECUTION_LOG.md).
 
@@ -300,7 +300,7 @@ Exit gate:
 - A controlled dry-run/canary path passes before real workload is enabled.
 
 ## Phase 4.3 — Persistent Backend Task Orchestration
-**Status: IMPLEMENTED; disposable PostgreSQL CI PASS (2026-11-09). Live Supabase migration not applied.**
+**Status: COMPLETE — disposable PostgreSQL CI PASS; owner chose not to apply a live Supabase migration during Phase 4.**
 
 Goal: move real task queueing and dispatch authority to the Python backend.
 
@@ -318,7 +318,7 @@ Exit gate:
 - Persistent task lifecycle is exposed through a versioned read contract.
 
 ## Phase 4.4 — Frontend Live Runtime Adapter & Demo/Live Separation
-**Status: IMPLEMENTED IN CODE; frontend CI PASS (389/389 tests, typecheck, production build). Local Windows/Chrome acceptance remains owner-controlled.**
+**Status: COMPLETE — frontend CI PASS (390/390 tests, typecheck, production build) and owner-run Windows/Chrome acceptance PASS (2026-11-09).**
 
 Goal: visualize real worker/task data while preserving the existing 3D scene and an explicit offline/demo mode.
 
