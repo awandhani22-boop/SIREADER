@@ -77,9 +77,14 @@ export const WorldWorkerBadgeItem = React.memo(function WorldWorkerBadgeItem({
     const taskId = state.workers[workerId]?.currentTaskId;
     return taskId ? state.tasks[taskId] ?? null : null;
   });
-  const isSelected = useOfficeStore((state) => state.selectedWorkerId === workerId);
-  const selectWorker = useOfficeStore((state) => state.selectWorker);
   const displayMode = useWorkerDisplayModeStore((state) => state.mode);
+  const selectedLiveWorkerId = useWorkerDisplayModeStore((state) => state.selectedLiveWorkerId);
+  const setSelectedLiveWorkerId = useWorkerDisplayModeStore((state) => state.setSelectedLiveWorkerId);
+  const selectedDemoWorkerId = useOfficeStore((state) => state.selectedWorkerId);
+  const selectDemoWorker = useOfficeStore((state) => state.selectWorker);
+  const isSelected = displayMode === 'LIVE'
+    ? selectedLiveWorkerId === workerId
+    : selectedDemoWorkerId === workerId;
   const liveResource = useLiveStore((state) => state.resources['/api/v1/workforce/runtime']);
   const liveSession = useLiveStore((state) => state.session);
   const liveConnection = useLiveStore((state) => state.connection);
@@ -117,7 +122,8 @@ export const WorldWorkerBadgeItem = React.memo(function WorldWorkerBadgeItem({
         type="button"
         onClick={(event) => {
           event.stopPropagation();
-          selectWorker(worker.id);
+          if (displayMode === 'LIVE') setSelectedLiveWorkerId(worker.id);
+          else selectDemoWorker(worker.id);
         }}
         className={`-translate-x-1/2 -translate-y-full flex flex-col items-center gap-0.5 px-2 py-1 rounded-md border transition-colors cursor-pointer select-none whitespace-nowrap ${
           isSelected
