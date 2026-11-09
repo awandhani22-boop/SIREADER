@@ -23,6 +23,9 @@ export const LIVE_POLL_INTERVALS: Readonly<Record<LiveApiPath, number>> = Object
   '/api/v1/market-watches/active': 10_000,
   '/api/v1/telemetry/usage': 30_000,
   '/api/v1/audit/decisions': 30_000,
+  '/api/v1/workforce/runtime': 10_000,
+  '/api/v1/workforce/tasks': 10_000,
+  '/api/v1/workforce/activity': 30_000,
 });
 
 export const LIVE_STALE_INTERVAL_MULTIPLIER = 3;
