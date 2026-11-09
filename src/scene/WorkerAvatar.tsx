@@ -440,7 +440,7 @@ export const WorkerAvatarSceneItem = React.memo(function WorkerAvatarSceneItem({
         if (displayMode === 'LIVE') setSelectedLiveWorkerId(selectedWorkerId);
         else selectDemoWorker(selectedWorkerId);
       }}
-      onModelError={recordAvatarModelError}
+      onModelError={displayMode === 'LIVE' ? () => undefined : recordAvatarModelError}
     />
   );
 });
