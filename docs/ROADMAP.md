@@ -3,10 +3,10 @@
 | Workstream | Status |
 |---|---|
 | Phase 3.3 — SSE observability | COMPLETE (owner confirmed) |
-| Phase 4.1 — Worker contracts and registry | Existing implementation retained; include in full Phase 4 verification |
-| Phase 4.2 — Provider and Cost Guard integration | Existing implementation retained; real provider canary remains explicitly gated |
-| Phase 4.3 — Durable task runtime | Existing implementation retained; PostgreSQL migration verification remains required |
-| Phase 4.4 — LIVE presentation and workforce operations | Implementation in progress; branch CI and local browser acceptance pending |
+| Phase 4.1 — Worker contracts and registry | Implemented; backend CI PASS |
+| Phase 4.2 — Provider and Cost Guard integration | Implemented; backend CI PASS; live provider disabled pending owner approval |
+| Phase 4.3 — Durable task runtime | Implemented; disposable PostgreSQL migration/privilege/recovery CI PASS |
+| Phase 4.4 — LIVE presentation and workforce operations | Implemented in code; frontend CI PASS; local Windows/Chrome owner acceptance pending |
 | Phase 4 overall | NOT COMPLETE until every acceptance gate is recorded |
 
 No Phase 5 work should begin before Phase 4 is accepted. No live database migration, paid provider request, trading order, or merge to `main` is implied by this roadmap status.
@@ -74,10 +74,10 @@ The existing React/Three.js project is the product. Preserve and extend it; do n
 | 3.1 | Read-Only Observability API Gateway | COMPLETE in Python backend repository |
 | 3.2 | Secure BFF & Frontend Observability Integration | COMPLETE — Batches 1–6 CI-passed; owner-reported local development, LIVE, auth/session, isolation, logout, and production-like acceptance confirmed 2026-11-09 |
 | 3.3 | Real-Time Observability (SSE) | IMPLEMENTATION IN PROGRESS — core owner manual event-delivery, targeted refresh, backend-restart recovery, and four-stream five-minute smoke passed; supplementary gates remain open |
-| 4.1 | Real Worker Runtime Contract & Registry | IMPLEMENTED IN CODE — VERIFICATION PENDING |
-| 4.2 | AI Provider Routing, Execution & Cost Guard | IMPLEMENTED WITH FAIL-CLOSED DEFAULTS — VERIFICATION PENDING |
-| 4.3 | Persistent Backend Task Orchestration | IMPLEMENTED IN CODE — DISPOSABLE POSTGRES VERIFICATION PENDING |
-| 4.4 | Frontend Live Runtime Adapter & Demo/Live Separation | PARTIAL — SCENE ADAPTER / DEMO-LIVE BOUNDARY / SCALE GATES OPEN |
+| 4.1 | Real Worker Runtime Contract & Registry | IMPLEMENTED — BACKEND CI PASS |
+| 4.2 | AI Provider Routing, Execution & Cost Guard | IMPLEMENTED, LIVE DISABLED — BACKEND CI PASS |
+| 4.3 | Persistent Backend Task Orchestration | IMPLEMENTED — DISPOSABLE POSTGRES CI PASS |
+| 4.4 | Frontend Live Runtime Adapter & Demo/Live Separation | IMPLEMENTED IN CODE — FRONTEND CI PASS; OWNER BROWSER ACCEPTANCE PENDING |
 | 5.1 | Human-Supervised Worker and Task Operations | PLANNED |
 | 5.2 | Review, Audit, Budgets & Governance | PLANNED |
 | 6.1 | Security, Reliability & Failure Recovery | PLANNED |
@@ -264,7 +264,7 @@ Exit gate:
 - Owner manual evidence and residual gates are recorded in `docs/PHASE_3_3_SSE_EXECUTION_LOG.md`.
 
 ## Phase 4.1 — Real Worker Runtime Contract & Registry
-**Status: PLANNED.**
+**Status: IMPLEMENTED; backend CI PASS (2026-11-09).**
 
 Goal: define the backend source of truth for real workers, capabilities, task ownership, runtime state, and health.
 
@@ -282,7 +282,7 @@ Exit gate:
 - No secrets or provider-specific credentials in the contract.
 
 ## Phase 4.2 — AI Provider Routing, Execution & Cost Guard
-**Status: PLANNED — requires explicit budget and provider configuration approval.**
+**Status: IMPLEMENTED; backend CI PASS. Live provider remains disabled pending explicit budget and provider configuration approval.**
 
 Goal: allow approved backend workers to perform real AI tasks through the existing server-side routing and cost-control layer.
 
@@ -300,7 +300,7 @@ Exit gate:
 - A controlled dry-run/canary path passes before real workload is enabled.
 
 ## Phase 4.3 — Persistent Backend Task Orchestration
-**Status: PLANNED.**
+**Status: IMPLEMENTED; disposable PostgreSQL CI PASS (2026-11-09). Live Supabase migration not applied.**
 
 Goal: move real task queueing and dispatch authority to the Python backend.
 
@@ -318,7 +318,7 @@ Exit gate:
 - Persistent task lifecycle is exposed through a versioned read contract.
 
 ## Phase 4.4 — Frontend Live Runtime Adapter & Demo/Live Separation
-**Status: PLANNED.**
+**Status: IMPLEMENTED IN CODE; frontend CI PASS (389/389 tests, typecheck, production build). Local Windows/Chrome acceptance remains owner-controlled.**
 
 Goal: visualize real worker/task data while preserving the existing 3D scene and an explicit offline/demo mode.
 
