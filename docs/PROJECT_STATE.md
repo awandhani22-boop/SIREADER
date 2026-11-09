@@ -1,10 +1,10 @@
 ## Current status override — 2026-11-09
 
 - **Phase 3.3 — COMPLETE:** the project owner confirmed all remaining acceptance checks were safe.
-- **Phase 4 — NOT COMPLETE:** existing 4.1–4.3 implementation is retained; Phase 4.4 LIVE presentation/pagination code is being completed and validated.
+- **Phase 4 — IMPLEMENTATION + AUTOMATED GATES PASS; OWNER ACCEPTANCE PENDING:** 4.1–4.3 backend and 4.4 frontend integration code pass CI; local Windows/Chrome acceptance and live Supabase migration approval remain owner-controlled gates.
 - **Current implementation branch:** `phase-4-implementation` in both Virtual Office and Python Backend repositories.
 - **No merge to `main`, no live Supabase migration, no real provider canary, and no trading execution were performed.
-- Phase 4 completion still requires full branch CI (frontend + BFF + Python/migration tests) and local Windows/Chrome owner acceptance.
+- Phase 4 completion still requires local Windows/Chrome owner acceptance and explicit Supabase migration review/approval. Paid live provider remains disabled pending a separately approved bounded canary.
 
 See [PHASE_4_EXECUTION_LOG.md](./PHASE_4_EXECUTION_LOG.md) for the implementation details, tests added, and remaining gates.
 
@@ -13,7 +13,7 @@ See [PHASE_4_EXECUTION_LOG.md](./PHASE_4_EXECUTION_LOG.md) for the implementatio
 # SIREADER Virtual Office — Project State
 
 ## Current phase
-**Phase 4.1 — REAL WORKER RUNTIME CONTRACT & REGISTRY: IN PROGRESS (2026-11-09).** Phase 3.3 was owner-confirmed safe/accepted on 2026-11-09; see the explicit evidence qualification below.
+**Phase 4.4 — FRONTEND LIVE RUNTIME ADAPTER & DEMO/LIVE SEPARATION: IMPLEMENTED IN CODE; OWNER ACCEPTANCE PENDING (2026-11-09).** Phase 3.3 was owner-confirmed safe/accepted on 2026-11-09; see the explicit evidence qualification below.
 
 - Phase 3.2 — Secure BFF & Frontend Observability Integration: **COMPLETE — owner acceptance confirmed 2026-11-09**.
 
@@ -32,10 +32,14 @@ See [PHASE_4_EXECUTION_LOG.md](./PHASE_4_EXECUTION_LOG.md) for the implementatio
 - Phase 3.1 is implemented in the separate Python Backend repo. Owner-provided local report confirms the dedicated read-only database/API configuration and five authenticated GET smoke checks; a documentation-only status reconciliation remains for the backend runbook.
 
 ### Phase 4 continuation checkpoint (2026-11-09)
-- Phase 4.1 contract/registry, Phase 4.2 provider/Cost Guard adapter, and Phase 4.3 persistent task orchestration have implementation code on the isolated branch. The 4.3 schema and API-view migrations have disposable PostgreSQL coverage; neither migration has been applied to live Supabase.
-- Phase 4.4 has an initial authenticated read-only workforce API/BFF integration and a Workforce LIVE dock. It is not complete: the scene-level WorkerRepository/LIVE adapter, explicit DEMO/LIVE presentation boundary, pagination, 50/100-worker fixtures, and end-to-end recovery acceptance remain.
-- Phase 4 verification is still PENDING. Do not mark 4.1–4.4 complete until the relevant backend and frontend CI jobs, disposable PostgreSQL tests, and browser acceptance pass. Live provider remains disabled by default and requires owner-controlled credentials and explicit bounded-budget approval.
-- The latest source-level correction to the workforce API-view migration temporarily grants CREATE on schema public to sireader_view_owner for ownership transfer, then revokes it before commit. This has not yet been proven by disposable PostgreSQL CI.
+- **4.1 runtime contract/registry:** implementation and backend CI PASS.
+- **4.2 provider/Cost Guard:** deterministic mock and fail-closed OmniRoute adapter implemented; backend CI PASS (including budget refusal, known-not-charged failure, timeout/unknown outcome, and missing usage). Live provider remains disabled.
+- **4.3 persistent orchestration:** migration, restricted API views, transactional claims/leases/retries/recovery, and API tests PASS on disposable PostgreSQL 16 in CI. Live Supabase migration has NOT been applied.
+- **4.4 frontend:** authenticated read-only workforce routes, strict BFF allowlist/DTO validation, task pagination, attempt history, SSE refresh, mode-aware WorkerRepository, separate DEMO/LIVE selection, worker state mapping, and 50/100-worker data fixtures implemented. Frontend CI PASS: 389/389 tests, TypeScript check, production build (864 ms).
+- Backend CI PASS: API/migration/privilege suite 111 passed and core regression suite 74 passed. Workflow: https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42586406591.
+- Frontend CI PASS: https://github.com/awandhani22-boop/SIREADER/actions/runs/42587248489.
+- Phase 4 source and automated gates are PASS. Remaining owner gates: run local Windows/Chrome acceptance for LIVE login, 7-worker baseline, 50-worker roster, task pagination, offline/reconnect/session expiry, and verify no DEMO state mutation; review/apply migrations only after explicit Supabase approval. No paid live-provider canary or trading execution has been enabled.
+- The API-view migration temporarily grants CREATE on schema public to sireader_view_owner only for view ownership transfer, then revokes it; this path passed disposable PostgreSQL CI.
 
 Product mission: [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md).
 Master roadmap: [`docs/ROADMAP.md`](ROADMAP.md).
