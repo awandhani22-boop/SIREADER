@@ -12,7 +12,9 @@ import {
   parseBffErrorCode,
   parseLiveApiResponse,
   parseLoggedOut,
+  parseWorkforceAttemptsResponse,
   type AuthenticatedSessionDto,
+  type WorkforceAttemptsResponseDto,
   type BffErrorCode,
   type LiveApiPath,
   type LiveApiResponseMap,
@@ -41,6 +43,7 @@ export interface LiveApiClient {
   login(password: string): Promise<AuthenticatedSessionDto>;
   logout(): Promise<void>;
   get<K extends LiveApiPath>(path: K): Promise<LiveApiResponseMap[K]>;
+  getWorkforceAttempts(taskId: string): Promise<WorkforceAttemptsResponseDto>;
   clearCsrfToken(): void;
 }
 
@@ -220,6 +223,31 @@ export function createLiveApiClient(options: LiveApiClientOptions = {}): LiveApi
         }
         try {
           return parseLiveApiResponse(path, payload);
+        } catch {
+          throw new LiveApiError('SCHEMA_INVALID');
+        }
+      } catch (error) {
+        if (error instanceof LiveApiError && error.code === 'SESSION_REQUIRED') csrfToken = null;
+        throw error;
+      }
+    },
+
+    async getWorkforceAttempts(taskId: string): Promise<WorkforceAttemptsResponseDto> {
+      if (typeof taskId !== 'string' || !/^[A-Za-z0-9_-]{8,64}$/.test(taskId)) {
+        throw new LiveApiError('BAD_REQUEST');
+      }
+      try {
+        const response = await request(
+          '/api/v1/workforce/attempts?task_id=' + encodeURIComponent(taskId),
+          {
+            method: 'GET',
+            headers: { Accept: 'application/json' },
+          },
+        );
+        await requireSuccess(response);
+        const payload = await readSuccessfulJson(response);
+        try {
+          return parseWorkforceAttemptsResponse(payload, taskId);
         } catch {
           throw new LiveApiError('SCHEMA_INVALID');
         }
