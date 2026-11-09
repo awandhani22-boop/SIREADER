@@ -4,6 +4,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createBffApp } from './app.ts';
 import { hashOperatorPassword, OPERATOR_SESSION_ABSOLUTE_MS } from './auth.ts';
+import type { WorkforceCommandProxyOptions } from './commands.ts';
 
 const TEST_PASSWORD = 'Test-only-operator-password-2026!';
 const HEADERS = {
@@ -22,7 +23,11 @@ interface Harness {
   request: (method: string, path: string, body?: unknown, headers?: Record<string, string>) => Promise<HttpResult>;
   close: () => Promise<void>;
 }
-async function createHarness(options: { passwordHash?: string; now?: () => number } = {}): Promise<Harness> {
+async function createHarness(options: {
+  passwordHash?: string;
+  now?: () => number;
+  workforceCommandOptions?: WorkforceCommandProxyOptions;
+} = {}): Promise<Harness> {
   const app = createBffApp(undefined, {
     authOptions: {
       passwordHash: Object.prototype.hasOwnProperty.call(options, 'passwordHash') ? options.passwordHash : '',
@@ -30,6 +35,7 @@ async function createHarness(options: { passwordHash?: string; now?: () => numbe
     },
     tokenProvider: () => undefined,
     fetchImpl: async () => new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+    workforceCommandOptions: options.workforceCommandOptions,
   });
   const server = http.createServer(app);
   await new Promise<void>((resolve, reject) => {
@@ -99,6 +105,84 @@ test('SIREADER operator authentication — secure in-memory sessions', async (t)
       assert.equal(result.status, 503);
       assert.equal(result.json?.error?.code, 'AUTH_NOT_CONFIGURED');
     } finally { await malformed.close(); }
+  });
+
+
+  await t.test('workforce command routes require operator session and CSRF before proxying', async () => {
+    const passwordHash = await hashOperatorPassword(TEST_PASSWORD, Buffer.alloc(16, 0x39));
+    const commandToken = 'bff-command-test-token-0123456789012345';
+    const received: Array<{ url: string; headers: Headers; body: string }> = [];
+    const harness = await createHarness({
+      passwordHash,
+      workforceCommandOptions: {
+        tokenProvider: () => commandToken,
+        fetchImpl: async (input, init = {}) => {
+          received.push({
+            url: String(input),
+            headers: new Headers(init.headers),
+            body: String(init.body),
+          });
+          return new Response(JSON.stringify({
+            command_id: 'cmd_12345678',
+            actor_id: 'local_operator',
+            command_type: 'WORKER_SCHEDULING_SET',
+            target_id: 'haiku',
+            correlation_id: 'corr_12345678',
+            outcome: {
+              accepted: true,
+              worker_id: 'haiku',
+              accepting_tasks: false,
+              schedule_state: 'PAUSED',
+            },
+            created_at: '2026-11-09T10:00:00Z',
+            replayed: false,
+          }), { status: 200, headers: { 'content-type': 'application/json' } });
+        },
+      },
+    });
+    try {
+      const path = '/api/v1/commands/workers/scheduling';
+      const body = { worker_id: 'haiku', accepting_tasks: false };
+      const idempotency = { 'idempotency-key': 'bff-command-session-001' };
+
+      const anonymous = await harness.request('POST', path, body, idempotency);
+      assert.equal(anonymous.status, 401);
+      assert.equal(anonymous.json?.error?.code, 'SESSION_REQUIRED');
+      assert.equal(received.length, 0);
+
+      const login = await harness.request('POST', '/api/auth/login', { password: TEST_PASSWORD });
+      assert.equal(login.status, 200);
+      const cookie = sessionCookie(login);
+      const csrf = csrfToken(login);
+
+      const withoutCsrf = await harness.request('POST', path, body, {
+        ...idempotency, cookie,
+      });
+      assert.equal(withoutCsrf.status, 403);
+      assert.equal(withoutCsrf.json?.error?.code, 'CSRF_INVALID');
+      assert.equal(received.length, 0);
+
+      const invalidOrigin = await harness.request('POST', path, body, {
+        ...idempotency, cookie, 'x-csrf-token': csrf, origin: 'http://evil.example',
+      });
+      assert.equal(invalidOrigin.status, 403);
+      assert.equal(invalidOrigin.json?.error?.code, 'FORBIDDEN');
+      assert.equal(received.length, 0);
+
+      const accepted = await harness.request('POST', path, body, {
+        ...idempotency, cookie, 'x-csrf-token': csrf,
+      });
+      assert.equal(accepted.status, 200);
+      assert.equal(accepted.json?.outcome?.schedule_state, 'PAUSED');
+      assert.equal(received.length, 1);
+      assert.equal(received[0].url, 'http://127.0.0.1:8010' + path);
+      assert.equal(received[0].headers.get('authorization'), 'Bearer ' + commandToken);
+      assert.equal(received[0].headers.get('cookie'), null);
+      assert.equal(received[0].headers.get('x-csrf-token'), null);
+      assert.equal(received[0].headers.get('idempotency-key'), 'bff-command-session-001');
+    } finally {
+      await harness.close();
+    }
   });
 
   await t.test('password login creates a secure host-only cookie and session CSRF token', async () => {
