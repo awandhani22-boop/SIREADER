@@ -91,6 +91,26 @@ The following results were reported and shown by the owner during local Windows/
 - Owner subsequently reported the five-minute browser resource observation as safe with no visible issue. Exact Performance Monitor values (CPU, JS heap, DOM nodes, JS event listeners) were not supplied, so this is qualitative evidence only and not a numeric browser-performance acceptance result.
 - The earlier general five-minute stability observation was also reported as safe, but no browser performance trace or heartbeat comment-frame capture was supplied.
 
+
+## Follow-up reliability hardening (2026-11-09)
+
+The following code-level gaps were addressed after the owner acceptance review:
+
+- Added `server/shutdown.ts` and wired it into the BFF process signal handler. Shutdown now stops accepting new HTTP requests with `server.close()`, then force-closes remaining HTTP connections with `server.closeAllConnections()`. This is required because long-lived SSE responses otherwise keep active HTTP connections open. The resulting response-close path is expected to abort the upstream Fetch request and destroy its streaming body through the existing BFF SSE cleanup handler.
+- Added a BFF integration regression test in `server/sse.test.ts` that opens a real loopback HTTP SSE response, invokes the same shutdown helper used by the process entrypoint, and asserts server closure, upstream AbortSignal, and upstream body cancellation.
+- Added a frontend regression test in `src/live/live.poller.test.ts` that simulates a browser network interruption, proves normal 10-second/30-second polling resumes, then simulates native EventSource reconnection and proves the 60-second reconciliation cadence returns.
+- Added a cross-store isolation regression test in `src/live/live.poller.test.ts`: a LIVE SSE invalidation refreshes the LIVE pipeline snapshot without mutating the SIMULATED worker/task/time/event state; a later SIMULATED clock step does not mutate LIVE snapshots.
+
+Implementation commits on this branch:
+- `bd84cbb384bf16ad1bb763809dcf5858c4946bb7` — shutdown helper.
+- `46a79aae2da74446a30669684e19c3706f743457` — process signal handler wiring.
+- `abd2b7a52cd9286865ccfbdf14f95586cbcecfdb` — BFF shutdown regression test.
+- `c5b7b5fec9d8be898ca2dca172ff2d8797a63942` — SSE test frame correction.
+- `8cd8073655581f4a9bb1eccdd613943c03bcf4c8` and `2423cafa8434a2e938a1a322f1eb2eb6372d4e37` — LIVE/SIMULATED isolation regression test.
+- `1d4882f1d80ffe640c0109bc46f4f1b9ae7664f4` — network interruption/reconnection regression test.
+
+These commits have been pushed to the isolated implementation branch only. Their CI result must be checked before this code-level work is marked passing. They do not replace owner-run Windows/Chrome acceptance. In particular, numeric Chrome Performance Monitor values and the combined BFF process restart + browser session re-authentication flow are still not independently observed in the owner's local browser.
+
 ## Remaining acceptance gates
 
 1. Table-trigger-to-resource mapping and migration safety are now verified by the disposable PostgreSQL 16 CI integration test described above. Do not repeat write/trigger tests against live trading, message, or audit rows.
