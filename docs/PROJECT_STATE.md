@@ -259,3 +259,10 @@ This dated record supersedes older status summaries above where they conflict.
 - Activity inserts remain INSERT-only: `WorkActivityEventRecord` disables ORM implicit RETURNING, so the command role does not receive SELECT rights on the audit ledger or its generated sequence.
 - A dedicated PostgreSQL integration test now covers pending-payload lock / early-update denial. Latest local backend suite: 172 passed, 44 skipped; the skipped PostgreSQL integration tests require `SIREADER_TEST_POSTGRES_URL`.
 - Latest local backend commits include `cd43577` (review security), `56ff5a8` (retry activity RLS), and `3a8ff01` (pending-payload lock and insert-only event ORM). These commits are local on `phase-5-implementation`; not pushed.
+
+
+## REJECT adjudication verification — 2026-11-10
+
+- A transaction-scoped probe under `sireader_workforce_cmd` passed REJECT: review status becomes REJECTED, task `result_payload` remains NULL (quarantine is preserved), and a `HUMAN_REVIEW_REJECTED` audit event is inserted.
+- Synthetic task/review/payload/event rows were rolled back; no local acceptance fixture remains.
+- Together with the previous probes, database-level APPROVE, EDIT and REJECT paths all pass. This does not replace the remaining authenticated Chrome UI acceptance.
