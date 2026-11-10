@@ -534,6 +534,59 @@ test('SIREADER Phase 3.2 BFF Test Suite — Remediated', async (t) => {
     assert.equal(resDoubleSlash.json?.error?.code, 'BAD_REQUEST');
   });
 
+  await t.test('P1-2a. Review inbox permits only bounded pagination on the two pending-review routes', async () => {
+    const reviewApp = createBffApp(undefined, {
+      requireOperatorSession: (_req, _res, next) => next(),
+      reviewReadOptions: {
+        tokenProvider: () => 'unit-test-review-token',
+        fetchImpl: async (input) => {
+          const url = new URL(String(input));
+          return new Response(JSON.stringify({
+            server_time_utc: '2026-11-10T00:00:00Z',
+            total_count: 0,
+            limit: Number(url.searchParams.get('limit')),
+            offset: Number(url.searchParams.get('offset')),
+            reviews: [],
+          }), { status: 200, headers: { 'content-type': 'application/json' } });
+        },
+      },
+    });
+    const reviewServer = http.createServer(reviewApp);
+    await new Promise<void>((resolve, reject) => {
+      reviewServer.once('error', reject);
+      reviewServer.listen(0, '127.0.0.1', resolve);
+    });
+    try {
+      for (const route of [
+        '/api/v1/workforce/reviews/pending',
+        '/api/v1/governance/reviews/pending',
+      ]) {
+        const response = await makeRequest(reviewServer, {
+          path: route + '?limit=25&offset=0',
+          headers: { ...VALID_HEADERS },
+        });
+        assert.equal(response.status, 200, route);
+        assert.equal(response.json?.total_count, 0);
+        assert.deepEqual(response.json?.reviews, []);
+      }
+
+      for (const invalidPath of [
+        '/api/v1/workforce/reviews/pending?limit=101&offset=0',
+        '/api/v1/workforce/reviews/pending?offset=0&limit=25',
+        '/api/v1/governance/reviews/pending?limit=25&offset=0&extra=1',
+      ]) {
+        const response = await makeRequest(reviewServer, {
+          path: invalidPath,
+          headers: { ...VALID_HEADERS },
+        });
+        assert.equal(response.status, 400, invalidPath);
+        assert.equal(response.json?.error?.code, 'BAD_REQUEST');
+      }
+    } finally {
+      await new Promise<void>((resolve) => reviewServer.close(() => resolve()));
+    }
+  });
+
   await t.test('P1-3. Static routes pass raw path guard even with query strings or static characters', async () => {
     // Static request with query string passes rawPathGuard (reaches fallback 404, does NOT return 400 BAD_REQUEST)
     const resStaticQuery = await makeRequest(server, {

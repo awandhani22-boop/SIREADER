@@ -110,7 +110,7 @@ export function rawPathGuard(req: Request, res: Response, next: NextFunction): v
     return;
   }
 
-  // Narrowly-scoped queries permitted for workforce attempt history, task pagination, and task timeline.
+  // Narrowly-scoped queries permitted for workforce attempts/tasks/reviews and task timeline.
   // Do not generalize query forwarding to any other API route or parameter.
   const attemptsQueryAllowed =
     rawUrl.startsWith('/api/v1/workforce/attempts?') &&
@@ -119,6 +119,17 @@ export function rawPathGuard(req: Request, res: Response, next: NextFunction): v
   const taskQueryParts = taskQueryIndex >= 0 ? rawUrl.slice(taskQueryIndex + 1).split('&') : [];
   const workforceTaskPageQueryAllowed =
     rawUrl.slice(0, taskQueryIndex) === '/api/v1/workforce/tasks' &&
+    taskQueryParts.length === 2 &&
+    /^limit=(?:[1-9]|[1-9][0-9]|100)$/.test(taskQueryParts[0] ?? '') &&
+    /^offset=(?:0|[1-9][0-9]{0,4}|100000)$/.test(taskQueryParts[1] ?? '');
+
+  // Review list pagination is the only additional bounded query surface.
+  // Keep the exact route, parameter order, and numeric bounds aligned with the
+  // frontend client and the review BFF handler; do not permit arbitrary keys.
+  const workforceReviewPagePath = taskQueryIndex >= 0 ? rawUrl.slice(0, taskQueryIndex) : '';
+  const workforceReviewPageQueryAllowed =
+    (workforceReviewPagePath === '/api/v1/workforce/reviews/pending' ||
+      workforceReviewPagePath === '/api/v1/governance/reviews/pending') &&
     taskQueryParts.length === 2 &&
     /^limit=(?:[1-9]|[1-9][0-9]|100)$/.test(taskQueryParts[0] ?? '') &&
     /^offset=(?:0|[1-9][0-9]{0,4}|100000)$/.test(taskQueryParts[1] ?? '');
@@ -136,7 +147,8 @@ export function rawPathGuard(req: Request, res: Response, next: NextFunction): v
          /^offset=(?:0|[1-9][0-9]{0,4}|100000)$/.test(taskQueryParts[1] ?? '')))
     );
 
-  if (rawUrl.includes('?') && !attemptsQueryAllowed && !workforceTaskPageQueryAllowed && !timelinePageQueryAllowed) {
+  if (rawUrl.includes('?') && !attemptsQueryAllowed && !workforceTaskPageQueryAllowed &&
+      !workforceReviewPageQueryAllowed && !timelinePageQueryAllowed) {
     sendBffError(res, 400, 'BAD_REQUEST', 'Query strings are not permitted on this API route.');
     return;
   }
