@@ -307,3 +307,18 @@ This dated record supersedes older status summaries above where they conflict.
 - Backend tests after the change: 185 passed, 44 skipped; compileall passed. Backend commit 96e625e on phase-5-implementation, local only; not pushed.
 - Phase 5 remains OPEN for the remaining authenticated UI acceptance that requires a real PENDING review to inspect/adjudicate and the clean full BFF listener test run without port 3001 contention. The scheduler decision/registration gate is now complete. Phase 6 has not started.
 - No Supabase LIVE migration, paid provider call, worker execution, Telegram, MT5/HFM, trading operation, Task Scheduler auto-execution of worker tasks, or additional purge was performed.
+
+## Current authoritative SIREADER status - 2026-11-10 16:42 local
+
+This snapshot supersedes earlier status notes above where they conflict.
+
+- Current workstream: **Phase 5.2.5 - Final Acceptance; Phase 5 implementation is complete. Phase 6 has not started.**
+- Frontend: 416/416 tests pass; TypeScript lint passes; production build passes with a non-blocking large-chunk warning.
+- Backend: 229 passed, 0 failed, 0 skipped on an isolated PostgreSQL 16.6 test cluster; compileall passes; event migration integration 1/1 passes. Test cluster has been stopped.
+- Local application services are running at 127.0.0.1:3000 (Vite), :3001 (BFF), :8000 (read-only API), and :8010 (workforce command API).
+- The configured local application DB remains PostgreSQL 16.6 `sireader_disposable` on 127.0.0.1:5432. The separate scratch DB created during a failed integration-test attempt was inspected and dropped. No Supabase LIVE database was modified.
+- Browser operator is authenticated; page simulation mode is DEMO and backend connection is LIVE. Review Inbox renders its valid empty state. Read-only DB verification reports zero reviews and zero PENDING reviews. No review decision was performed because there was no legitimate pending item.
+- Review coverage: frontend DTO contract tests and BFF proxy tests; backend PostgreSQL integration for APPROVE, EDIT, REJECT, quarantine/release, RLS, audit, and retry behavior. No fake review was inserted into the application DB.
+- Maintenance scheduler is enabled every five minutes, Interactive / Limited, battery-compatible, StartWhenAvailable. Automatic runs at 16:36:01 and 16:41:01 each returned LastTaskResult=0; no worker/provider starts as part of maintenance.
+- Latest backend commit `10a2f96`; latest frontend doc commit `bb198fe`. Local only; do not push/merge without explicit owner approval. Existing untracked AGENTS/patch/determinism files remain untouched.
+- Phase 5 complete for implementation and all applicable automated/operational acceptance. The first future genuine PENDING review may be adjudicated by the owner through the UI; no action is pending in the current database. Trading, MT5/HFM, Telegram, paid providers, and Supabase LIVE remain out of scope.
