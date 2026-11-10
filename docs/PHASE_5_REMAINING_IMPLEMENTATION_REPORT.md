@@ -43,3 +43,12 @@ With the latest backend and frontend code CI green, the remaining gates are: (1)
 - Incremental migration v3 guards initial metadata INSERT: review must begin PENDING with no adjudication fields. The command DB role has no INSERT on review metadata or payload tables.
 - The worker completion boundary remains the only review creation path; adjudication remains an audited command operation.
 - v1/v2/v3 PostgreSQL forward/rollback/forward tests and privilege tests pass in CI.
+
+## Final verification follow-up — 2026-11-10
+
+- Authenticated browser recheck: LIVE mode and Review Inbox load successfully; 0 PENDING reviews and no `BAD_REQUEST`. Since the inbox is empty, there is no live review detail or APPROVE/EDIT/REJECT action to exercise.
+- Local backend tests: 172 passed, 44 skipped (PostgreSQL integration tests require `SIREADER_TEST_POSTGRES_URL`). The root-level pytest discovery also encounters the legacy manual `test_connection.py`, which exits if `DATABASE_URL` is unset; the supported `tests/` directory suite passes.
+- Frontend: 384 tests passed excluding `server/app.test.ts`; TypeScript and production build passed. Full 416-test run: 414 passed, 2 failed due the P0-4 real-listener test trying to bind port 3001 while the owner's live BFF already owns it (the parent suite is also reported failed). The review pagination regression P1-2a passed. Production build retains a non-blocking large-chunk warning.
+- Private config inspection (values redacted): API and command database URLs point to `127.0.0.1:5432/sireader_disposable`; backend `.env` `DATABASE_URL` is unset and Process/User/Machine overrides are absent.
+- No `SIREADER-WorkforceMaintenance` scheduled task exists. Do not register or run maintenance until the owner separately authorizes the data-mutating retention/purge cycle and its dedicated `DATABASE_URL` is configured.
+- Phase 5 final acceptance remains OPEN for owner UI adjudication evidence, a full listener test run without port contention, and the separate maintenance scheduling decision. No worker/provider execution, review fixture, database mutation, Supabase LIVE change, trading operation, or purge was performed.
