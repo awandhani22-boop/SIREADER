@@ -86,3 +86,10 @@ With the latest backend and frontend code CI green, the remaining gates are: (1)
 - The isolated PostgreSQL 16.6 test cluster was gracefully stopped after the test run. Its temporary data directory remains under Windows Temp for inspection. A separate empty scratch database `sireader_phase5_test_20261110` was created on the application's loopback PostgreSQL cluster during the first attempt; it is not referenced by any application environment variable and was left in place rather than deleting a database without explicit cleanup authorization.
 - Phase 5 is still OPEN for owner-authenticated browser acceptance of actual review detail/adjudication. BFF restart invalidated the in-memory operator session; the browser currently requires the owner to log in again. The last authenticated Review Inbox inspection showed zero PENDING reviews, so no legitimate record was available to exercise APPROVE/EDIT/REJECT. No synthetic review, worker, or provider was created or started.
 - No GitHub push/merge, Supabase LIVE change, paid provider call, Telegram, MT5/HFM, or trading execution occurred.
+
+## Operator session and review inbox recheck - 2026-11-10 16:33 local
+
+- Browser tab now reports `LIVE BACKEND - LIVE`; the operator session is restored after the BFF restart.
+- Independently checked the review view using `sireader_api_ro` against loopback `sireader_disposable` with `default_transaction_read_only=on`: no review rows were present and `PENDING_COUNT=0`.
+- Therefore authenticated review detail and APPROVE/EDIT/REJECT still cannot be exercised with a real review. No review was created to force acceptance.
+- Maintenance scheduler battery/StartWhenAvailable settings are corrected, but a new automatic `LastRunTime` after the correction has not yet been observed as of this snapshot.
