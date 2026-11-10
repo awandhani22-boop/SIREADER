@@ -1,31 +1,31 @@
-## Current status override — 2026-11-10 (Phase 5 remaining implementation)
+## Current status override â€” 2026-11-10 (Phase 5 remaining implementation)
 
 This section supersedes older status statements below where they conflict with the current branch state. Historical snapshots are retained as historical evidence.
 
-- **Phase 5.1 — COMPLETE:** Owner acceptance was recorded on 2026-11-09 in `PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md`.
-- **Phase 5.2.1 — COMPLETE:** Lifecycle audit ledger and timeline API/BFF were implemented and verified.
-- **Phase 5.2.2-A — COMPLETE:** Review architecture proposal revision 1.1.1 was accepted as the implementation baseline.
-- **Phase 5.2.2-B — IMPLEMENTED; HARDENED:** Incremental review migrations v1/v2/v3 enforce initial PENDING metadata, original-only quarantine payload insertion, adjusted-output write-once only after EDITED, parent-retention purge, anti-resurrection, and least privilege. `sireader_workforce_cmd` has no INSERT on review metadata or payload tables; only the worker completion boundary creates reviews. Forward/rollback/forward and PostgreSQL privilege coverage pass.
-- **Phase 5.2.2-C — IMPLEMENTED:** Adjudication command API uses row locking, expected original-output SHA-256, audited idempotent command execution, and server-validated operator identity.
-- **Phase 5.2.2-D — IMPLEMENTED:** Read API and security-barrier review view are available. Frontend BFF uses fixed loopback upstreams, server-side credentials, strict response validation, bounded response parsing, CSRF/session protection, and server-injected `local_operator`.
-- **Phase 5.2.2-E — IMPLEMENTED; FRONTEND CI PASS:** Review Inbox supports pending list/detail and APPROVE, EDIT, REJECT. The follow-up UI fix `47b8ed9376c9ead1e5cc47d1addc5ad93416e232` settles adjudication state after refresh and disables list navigation while submitting. [Frontend CI #257 / 42698857209 PASS](https://github.com/awandhani22-boop/SIREADER/actions/runs/42698857209): complete tests, TypeScript check, and Vite production build succeeded. A non-blocking large-chunk warning remains.
-- **Phase 5.2.3 — IMPLEMENTED; CI PASS:** Existing Cost Guard remains the only reservation/billing ledger. Observability provides daily IDR, rolling 30-day IDR, Anthropic USD, tier allocations, worker/task attribution, and reserved versus actual usage. Configurable warning thresholds and newest-usage task sorting align the dashboard with the Cost Guard policy.
-- **Phase 5.2.4 — IMPLEMENTED; BACKEND CI PASS:** Backend-owned capability-to-tier selection and ALLOW/REDACT/REVIEW/REJECT sensitive-task policy are added. Trading/execution capability and Decision Engineer/Market Monitor LIVE provider exclusions remain enforced. Model tier is fixed before the single provider call; UNKNOWN outcomes are not automatically replayed or moved to another tier. This is deterministic pre-call routing, not quality-driven multi-call escalation.
-- **Phase 5.2.5 — IMPLEMENTED; BACKEND CI PASS:** One-shot transactional maintenance command, Windows runner, Task Scheduler helper, database target guard, operations runbook, and PostgreSQL migration/retention tests are committed. [Latest backend CI #42700770005 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42700770005): 196 API tests, 76 core tests, and API compile passed.
+- **Phase 5.1 â€” COMPLETE:** Owner acceptance was recorded on 2026-11-09 in `PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md`.
+- **Phase 5.2.1 â€” COMPLETE:** Lifecycle audit ledger and timeline API/BFF were implemented and verified.
+- **Phase 5.2.2-A â€” COMPLETE:** Review architecture proposal revision 1.1.1 was accepted as the implementation baseline.
+- **Phase 5.2.2-B â€” IMPLEMENTED; HARDENED:** Incremental review migrations v1/v2/v3 enforce initial PENDING metadata, original-only quarantine payload insertion, adjusted-output write-once only after EDITED, parent-retention purge, anti-resurrection, and least privilege. `sireader_workforce_cmd` has no INSERT on review metadata or payload tables; only the worker completion boundary creates reviews. Forward/rollback/forward and PostgreSQL privilege coverage pass.
+- **Phase 5.2.2-C â€” IMPLEMENTED:** Adjudication command API uses row locking, expected original-output SHA-256, audited idempotent command execution, and server-validated operator identity.
+- **Phase 5.2.2-D â€” IMPLEMENTED:** Read API and security-barrier review view are available. Frontend BFF uses fixed loopback upstreams, server-side credentials, strict response validation, bounded response parsing, CSRF/session protection, and server-injected `local_operator`.
+- **Phase 5.2.2-E â€” IMPLEMENTED; FRONTEND CI PASS:** Review Inbox supports pending list/detail and APPROVE, EDIT, REJECT. The follow-up UI fix `47b8ed9376c9ead1e5cc47d1addc5ad93416e232` settles adjudication state after refresh and disables list navigation while submitting. [Frontend CI #257 / 42698857209 PASS](https://github.com/awandhani22-boop/SIREADER/actions/runs/42698857209): complete tests, TypeScript check, and Vite production build succeeded. A non-blocking large-chunk warning remains.
+- **Phase 5.2.3 â€” IMPLEMENTED; CI PASS:** Existing Cost Guard remains the only reservation/billing ledger. Observability provides daily IDR, rolling 30-day IDR, Anthropic USD, tier allocations, worker/task attribution, and reserved versus actual usage. Configurable warning thresholds and newest-usage task sorting align the dashboard with the Cost Guard policy.
+- **Phase 5.2.4 â€” IMPLEMENTED; BACKEND CI PASS:** Backend-owned capability-to-tier selection and ALLOW/REDACT/REVIEW/REJECT sensitive-task policy are added. Trading/execution capability and Decision Engineer/Market Monitor LIVE provider exclusions remain enforced. Model tier is fixed before the single provider call; UNKNOWN outcomes are not automatically replayed or moved to another tier. This is deterministic pre-call routing, not quality-driven multi-call escalation.
+- **Phase 5.2.5 â€” IMPLEMENTED; BACKEND CI PASS:** One-shot transactional maintenance command, Windows runner, Task Scheduler helper, database target guard, operations runbook, and PostgreSQL migration/retention tests are committed. [Latest backend CI #42700770005 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42700770005): 196 API tests, 76 core tests, and API compile passed.
 - **Frontend implementation follow-up:** `47b8ed9376c9ead1e5cc47d1addc5ad93416e232`; frontend documentation closeout commit `eeac2f0b2ef4627d51950df7cff32759ba6a68fe`. [Frontend CI #42701156054 PASS](https://github.com/awandhani22-boop/SIREADER/actions/runs/42701156054): 415 tests, TypeScript, and production build.
 - **Backend latest code commit:** `1c8277ea1ccf0ff0b81966b0d8bd6516829e1494` (review creation boundary v3, loopback maintenance guard, and Task Scheduler script). Backend documentation closeout: `e60f8c34eb7a51376ff01d1039420d2e9b785817`; [CI #42701310022 PASS](https://github.com/awandhani22-boop/SIREADER-Python-Backend/actions/runs/42701310022): 196 API tests and 76 core tests. Python maintenance refuses non-loopback PostgreSQL before opening the DB engine; the Windows registration script checks `.env` and process/user/machine overrides and refuses remote/Supabase hosts. The actual local `DATABASE_URL` remains uninspected, so no Task Scheduler registration or maintenance run has been performed.
 - **Final Phase 5 gate remains OPEN** until one comprehensive owner-run Windows/Chrome browser acceptance is recorded. Local Task Scheduler registration is separately blocked until the effective `DATABASE_URL` is privately verified as loopback PostgreSQL; the helper now rejects remote hosts by itself. Do not merge to `main`, deploy migrations to Supabase LIVE, enable paid providers, or alter trading/MT5/HFM paths as part of this closeout.
 
 ---
 
-## Current status override — 2026-11-09 (Phase 5.2.1 Closeout)
+## Current status override â€” 2026-11-09 (Phase 5.2.1 Closeout)
 
-- **Phase 5.1 — COMPLETE (owner acceptance recorded 2026-11-09):** Source implementation, automated CI, bug fix for retry target ID, and owner-run Windows/Chrome/Antigravity acceptance are recorded PASS. See [PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md](./PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md).
-- **Phase 5.2.1 — Lifecycle Audit Ledger & Timeline API: COMPLETE (2026-11-09):**
-  - **Python Backend HEAD:** `a7cc431` — Hardened `workforce_activity_events` audit ledger with append-only BEFORE triggers (blocking UPDATE/DELETE/TRUNCATE), deterministic sequence ordering (`event_seq BIGINT GENERATED ALWAYS AS IDENTITY`), actor attribution (`SYSTEM`, `WORKER`, `OPERATOR`, `LEGACY_UNKNOWN`), explicit retry lineage (`related_task_id`), sanitized security-barrier view `v_api_workforce_task_timeline`, and read-only timeline endpoint `GET /api/v1/workforce/tasks/{task_id}/timeline` on port 8000. 148 backend tests pass (`148 passed in 6.10s`), zero compile errors.
-  - **Virtual Office source HEAD:** `6dd9af4` — Fixed BFF route `/api/v1/workforce/tasks/:taskId/timeline` proxying to port 8000 with loopback-only binding, strict input validation, response schema validation, zero credential leakage, and client adapter `getTaskTimeline`. 406 frontend tests pass (`406 passed in 3.80s`), TypeScript `tsc --noEmit` pass with zero errors, Vite production build successful.
+- **Phase 5.1 â€” COMPLETE (owner acceptance recorded 2026-11-09):** Source implementation, automated CI, bug fix for retry target ID, and owner-run Windows/Chrome/Antigravity acceptance are recorded PASS. See [PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md](./PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md).
+- **Phase 5.2.1 â€” Lifecycle Audit Ledger & Timeline API: COMPLETE (2026-11-09):**
+  - **Python Backend HEAD:** `a7cc431` â€” Hardened `workforce_activity_events` audit ledger with append-only BEFORE triggers (blocking UPDATE/DELETE/TRUNCATE), deterministic sequence ordering (`event_seq BIGINT GENERATED ALWAYS AS IDENTITY`), actor attribution (`SYSTEM`, `WORKER`, `OPERATOR`, `LEGACY_UNKNOWN`), explicit retry lineage (`related_task_id`), sanitized security-barrier view `v_api_workforce_task_timeline`, and read-only timeline endpoint `GET /api/v1/workforce/tasks/{task_id}/timeline` on port 8000. 148 backend tests pass (`148 passed in 6.10s`), zero compile errors.
+  - **Virtual Office source HEAD:** `6dd9af4` â€” Fixed BFF route `/api/v1/workforce/tasks/:taskId/timeline` proxying to port 8000 with loopback-only binding, strict input validation, response schema validation, zero credential leakage, and client adapter `getTaskTimeline`. 406 frontend tests pass (`406 passed in 3.80s`), TypeScript `tsc --noEmit` pass with zero errors, Vite production build successful.
   - See [PHASE_5_2_1_EXECUTION_LOG.md](./PHASE_5_2_1_EXECUTION_LOG.md) and [PHASE_5_2_1_EVENT_COVERAGE_AUDIT.md](./PHASE_5_2_1_EVENT_COVERAGE_AUDIT.md).
-- **Phase 5.2.2 — Human Output Review Subsystem is now NEXT.**
+- **Phase 5.2.2 â€” Human Output Review Subsystem is now NEXT.**
 - **Current working branch:** `phase-5-implementation` in both repositories (strictly isolated from main; no merge performed).
 - **Hard boundaries preserved:** No live Supabase migration, paid provider invocation, MT5/HFM operation, trading order, or trading approval change was performed.
 
@@ -33,11 +33,11 @@ See [PHASE_5_EXECUTION_PLAN.md](./PHASE_5_EXECUTION_PLAN.md), [PHASE_5_2_1_EXECU
 
 ---
 
-## Historical Phase 4 acceptance snapshot — 2026-11-09
+## Historical Phase 4 acceptance snapshot â€” 2026-11-09
 
 
-- **Phase 3.3 — COMPLETE:** the project owner confirmed all remaining acceptance checks were safe.
-- **Phase 4 — COMPLETE (owner acceptance recorded 2026-11-09):** 4.1–4.4 implementation, automated CI, and owner-run Windows/Chrome browser acceptance are recorded PASS. Live Supabase migration was intentionally not applied; paid provider and trading actions remain disabled.
+- **Phase 3.3 â€” COMPLETE:** the project owner confirmed all remaining acceptance checks were safe.
+- **Phase 4 â€” COMPLETE (owner acceptance recorded 2026-11-09):** 4.1â€“4.4 implementation, automated CI, and owner-run Windows/Chrome browser acceptance are recorded PASS. Live Supabase migration was intentionally not applied; paid provider and trading actions remain disabled.
 - **Current implementation branch:** `phase-4-implementation` in both Virtual Office and Python Backend repositories.
 - **No merge to `main`, no live Supabase migration, no real provider canary, and no trading execution were performed.**
 - The owner chose not to apply workforce migrations to Supabase LIVE during Phase 4 acceptance. Any later production migration or paid provider canary requires its own explicit approval and deployment review.
@@ -46,24 +46,24 @@ See [PHASE_4_EXECUTION_LOG.md](./PHASE_4_EXECUTION_LOG.md) for the implementatio
 
 ---
 
-# SIREADER Virtual Office — Project State
+# SIREADER Virtual Office â€” Project State
 
 ## Phase 4 acceptance snapshot (historical)
-**Phase 4 — COMPLETE (2026-11-09):** implementation, automated verification, and owner-reported Windows/Chrome acceptance are recorded PASS. See the owner acceptance report. Phase 3.3 was owner-confirmed safe/accepted on 2026-11-09; see the explicit evidence qualification below.
+**Phase 4 â€” COMPLETE (2026-11-09):** implementation, automated verification, and owner-reported Windows/Chrome acceptance are recorded PASS. See the owner acceptance report. Phase 3.3 was owner-confirmed safe/accepted on 2026-11-09; see the explicit evidence qualification below.
 
-- Phase 3.2 — Secure BFF & Frontend Observability Integration: **COMPLETE — owner acceptance confirmed 2026-11-09**.
+- Phase 3.2 â€” Secure BFF & Frontend Observability Integration: **COMPLETE â€” owner acceptance confirmed 2026-11-09**.
 
 - Active Virtual Office implementation branch: `phase-4-implementation` (branched from the accepted Phase 3.3 baseline; not merged to main).
 - Active Python Backend implementation branch: `phase-4-implementation` (branched from the Phase 3.3 backend baseline; not merged to main).
-- Phase 4 execution order: 4.1 runtime contract/registry → 4.2 provider routing and Cost Guard → 4.3 persistent task orchestration → 4.4 frontend LIVE runtime adapter. No later phase is silently skipped.
+- Phase 4 execution order: 4.1 runtime contract/registry â†’ 4.2 provider routing and Cost Guard â†’ 4.3 persistent task orchestration â†’ 4.4 frontend LIVE runtime adapter. No later phase is silently skipped.
 - Phase 3.2 implementation baseline remains `9641d18f773d8a35e14f0c5224289d8d8cfc4ea5`; Phase 3.3 code is isolated in the two branches above.
 - Virtual Office Phase 3.3 initial implementation commit: `57e3f2d1d1eb3a616eb6792f69294f0d3072e261`; GitHub Actions run `42534082388` passed 367/367 tests, TypeScript check, and production build. Follow-up BFF disconnect/capacity test passed run `42572749792`; active-session-expiry EventSource cleanup test passed run `42572901195`; both runs also passed the full test suite, TypeScript check, and production build.
 - Python Backend Phase 3.3 latest implementation/test commit: `b8dac552decc0c25a9aca176d81cd6b387d6bc4a`; GitHub Actions run `42572336352` completed successfully (API tests including disposable PostgreSQL migration/trigger integration, API compile checks, and core regressions).
 - Phase 3.3 work covers the backend EventHub/listener/route/migration, BFF streaming proxy, and frontend EventSource invalidation/fallback. Owner-reported local manual acceptance confirms PostgreSQL NOTIFY delivery through SSE, targeted system snapshot refresh, backend restart recovery, and four concurrent SSE streams held open for five minutes without reported errors. CI verifies heartbeat generation/subscriber cleanup, trigger mapping in disposable PostgreSQL 16, BFF abort/cancel and stream-capacity release on browser disconnect, and EventSource cleanup when the active operator session expires at the 60-second reconciliation. A five-minute Windows process sample recorded very low CPU (max sampled 10-second interval: Python 0.05%, BFF 0.02%, Vite 0.04%) and nearly flat Working Set. Numeric Chrome JS heap/browser measurements and a formal resource budget remain open; combined owner-run BFF restart/network interruption/session re-authentication browser E2E remains open. Follow-up automated regression tests now cover BFF shutdown abort/cancel, authenticated BFF recreation with old-session rejection and fresh SSE login, frontend polling fallback + immediate full-snapshot refresh after EventSource reconnection, operator re-authentication after session loss, and bidirectional LIVE/SIMULATED store isolation. Final code CI run `42574780437` on commit `bb1a44d` passed **374/374 tests**, TypeScript check, and production build. See the execution log.
-- Batch 1 — BFF Foundation & Security Guards: implementation pushed; port and security changes source-audited.
-- Batch 2 — Fixed Upstream Proxy: implementation pushed; GitHub Actions run `42482847460` passed (323/323).
-- Batch 3 — Operator Authentication & Session Lifecycle: implementation pushed; GitHub Actions run `42483616073` passed (331/331), typecheck and production build passed.
-- Phase 3.3 closeout: owner explicitly confirmed on 2026-11-09 that the remaining BFF restart, recovery, and performance acceptance was safe. The owner's final report describes successful real-browser authentication/SSE, one active EventSource, targeted refresh of all five snapshots, Offline→Online recovery, and LIVE/SIMULATED isolation; it reports the BFF and local services were stopped cleanly. The report did not include the six raw Chrome Performance Monitor samples, so no numeric browser metrics are independently reproduced in this state file. Treat the final owner confirmation as the acceptance attestation; retain this evidence limitation for any later release audit. The earlier CI evidence of 374/374 tests, TypeScript, and production build remains separate from owner-run browser acceptance.
+- Batch 1 â€” BFF Foundation & Security Guards: implementation pushed; port and security changes source-audited.
+- Batch 2 â€” Fixed Upstream Proxy: implementation pushed; GitHub Actions run `42482847460` passed (323/323).
+- Batch 3 â€” Operator Authentication & Session Lifecycle: implementation pushed; GitHub Actions run `42483616073` passed (331/331), typecheck and production build passed.
+- Phase 3.3 closeout: owner explicitly confirmed on 2026-11-09 that the remaining BFF restart, recovery, and performance acceptance was safe. The owner's final report describes successful real-browser authentication/SSE, one active EventSource, targeted refresh of all five snapshots, Offlineâ†’Online recovery, and LIVE/SIMULATED isolation; it reports the BFF and local services were stopped cleanly. The report did not include the six raw Chrome Performance Monitor samples, so no numeric browser metrics are independently reproduced in this state file. Treat the final owner confirmation as the acceptance attestation; retain this evidence limitation for any later release audit. The earlier CI evidence of 374/374 tests, TypeScript, and production build remains separate from owner-run browser acceptance.
 - Phases 1, 2.1, 2.2 and 2.3 remain complete with historical evidence and documented deferrals.
 - Phase 3.1 is implemented in the separate Python Backend repo. Owner-provided local report confirms the dedicated read-only database/API configuration and five authenticated GET smoke checks; a documentation-only status reconciliation remains for the backend runbook.
 
@@ -97,7 +97,7 @@ Owner acceptance report: [PHASE_4_OWNER_ACCEPTANCE_REPORT.md](PHASE_4_OWNER_ACCE
 - All five upstream observability routes now use the real operator session middleware in production. The upstream auth bypass dependency is documented as test-only and is used only by mock test harnesses.
 - GitHub Actions run `42483616073` on `8dfa50421f30bc888d22c880dcb5bd496f201d0e`: 331 tests passed, 0 failed; TypeScript check passed; production build passed (828 ms in run log). Frozen Bun dependency install passed.
 - Batch 4 added `src/live/live.contracts.ts`, `live.api.ts`, `live.state.ts`, `live.controller.ts`, and `live.test.ts`; `package.json` now includes the LIVE tests in the complete test command. Five API DTOs are strictly validated against the BFF/Python contract; the browser client calls fixed same-origin paths only, never sends a bearer token, stores CSRF only in a private in-memory closure, uses same-origin credentials and a 5-second timeout, and has explicit transport/auth/schema errors. LIVE data is kept in an independent Zustand store with explicit `source: LIVE`; it does not import or derive from `useOfficeStore` simulation state. Session-required and logout flows clear private LIVE data; polling and presentation are implemented in Batch 5 below.
-- Batch 4 CI: first run `42485110003` — 343/343 tests passed, TypeScript check found two unsafe DTO casts, so build was skipped. Fix commit `e504abf3d7cd8781559275eb4243431a88df57ad` was followed by GitHub Actions run `42485169977`: 343/343 tests passed; TypeScript check passed; production build passed; final workflow conclusion SUCCESS.
+- Batch 4 CI: first run `42485110003` â€” 343/343 tests passed, TypeScript check found two unsafe DTO casts, so build was skipped. Fix commit `e504abf3d7cd8781559275eb4243431a88df57ad` was followed by GitHub Actions run `42485169977`: 343/343 tests passed; TypeScript check passed; production build passed; final workflow conclusion SUCCESS.
 - Batch 5 added `src/live/live.poller.ts`, deterministic fake-clock tests in `src/live/live.poller.test.ts`, and `src/ui/LiveObservabilityDock.tsx` wired into the existing `TopBar`. System/pipeline/market watches poll every 10 seconds; usage/audit poll every 30 seconds. The poller prevents same-path overlap, uses bounded jittered backoff (maximum 60 seconds), records OFFLINE after two consecutive transport failures, marks retained snapshots STALE after three intervals, clears private LIVE data on SESSION_REQUIRED, and ignores late responses after stop/logout. Global connection reaches LIVE only after all five endpoint snapshots validate. Existing simulation and 3D scene remain separate and intact.
 - Batch 5 CI: initial run `42485909696` found the missing internal `stop()` helper; follow-up run `42485983354` fixed it but exposed two test generic typing errors. Final commit `f15f7430e871c032b3b7f4f457f43c26f820db4b`, GitHub Actions run `42486162630`: 353/353 tests passed; TypeScript check passed; production build passed; workflow SUCCESS.
 - Batch 6 added loopback-only Vite configuration, exact `/api` namespace regex proxy to the BFF with `changeOrigin: false`, cross-platform dual-process dev launcher, dotenv-first BFF entrypoint, production Express static hosting of `dist/`, SPA navigation fallback excluding `/api`, safe asset/index cache headers, and local setup runbook `docs/PHASE_3_2_LOCAL_SETUP.md`. Production startup selects port 3000 and fails closed if `dist/index.html` is missing; development starts Vite at 3000 and BFF at 3001. Static files and proxy behavior have automated integration/configuration tests.
@@ -111,7 +111,7 @@ Owner acceptance report: [PHASE_4_OWNER_ACCEPTANCE_REPORT.md](PHASE_4_OWNER_ACCE
 - No merge to `main` has been performed.
 
 ## Implemented
-- **Phase 2.3 — Completed with Deferred Item (2026-11-08)**:
+- **Phase 2.3 â€” Completed with Deferred Item (2026-11-08)**:
   - **Automated Test Suite**: 282/282 tests passing (0 failing, 0 skipped) across 15 test files.
   - **TypeScript Typecheck**: PASS (`npx tsc --noEmit`, 0 errors).
   - **Lint Script**: PASS (`npm run lint` invokes `tsc --noEmit`; this project script performs TypeScript typechecking and is not an ESLint execution).
@@ -154,17 +154,17 @@ Owner acceptance report: [PHASE_4_OWNER_ACCEPTANCE_REPORT.md](PHASE_4_OWNER_ACCE
     - `13a_manual_enqueue_in_queue.png`
     - `13b_manual_enqueue_dispatched.png`
 - **Phase 2.1 Foundation** (`8d2b9bb`): Capability registry for 7 permanent workers, multi-task worker concurrency invariants, and deterministic stage execution.
-- **Commit 1 — Task Dispatch State Machine & Types** (`2063c29`): Pure dispatch state machine, types, and capability matching data structures.
-- **Commit 2 — Multi-Task Worker Concurrency** (`5af49cd`): Multi-task concurrency tracking, active task slots, and worker load ratio calculation.
-- **Commit 3 — Deterministic Priority Ordering** (`782d8ab`): Pure `orderQueue()` ordering by CRITICAL > HIGH > NORMAL > LOW, sequence ascending, and original index tie-breaker.
-- **Commit 4 — Worker Matching & Candidate Selector** (`69c53d9`): Capability filtering, worker eligibility checks, concurrency limits, load ratio balancing, cost tie-breaking, and workerOrder priority.
-- **Commit 5 — Global Task Enqueue & Deterministic Dispatch Pass** (`546cdca` / `6e3e7d6`): Global unassigned task enqueue with deterministic ID format `tsk_pool_<seq>_<simTimeMs>`, rejection precedence, and atomic `dispatchPass()`.
-- **Commit 6 — Runtime Dispatcher Integration** (`0cee0da`): Integration of `enqueueGlobalTask()` and `dispatchGlobalQueue()` into `SimulationEngine.stepSimulationTick()` and `WorkerMockService`.
-- **Commit 7 — Global Demo Task Migration** (`e741c2d`): Migration of the 12-tick periodic demo task generator to the unassigned global queue with 14 canonical templates across 7 departments.
-- **Commit 8 — Store & UI Integration** (`d669428`): Integration of global scheduler state, queue drawer (`GlobalQueuePanel`), `TopBar` queue counters, explicit diagnostic propagation, and activity history.
-- **Commit 10 — UI Activity & Metrics Corrections** (`45ee964`): Corrected simulation-mode and queue labels, lifecycle-aware task activity timestamps, deterministic tie-breaking, and RUNNING-only active task counts.
-- **Commit 11 — UI Regression Coverage** (`6e82623`): Repaired React 19 UI event-handler test interactions and added regression cases for activity timestamp fallbacks, ordering, and active-count semantics.
-- **Commit 12–15 — Audit & Test Stabilization** (`2173ac2`, `9525ce9`, `4cecfdf`, `a9aa327`): Audit checklist, project state updates, and React act/UI test stabilization bringing total tests to 256/256 passing.
+- **Commit 1 â€” Task Dispatch State Machine & Types** (`2063c29`): Pure dispatch state machine, types, and capability matching data structures.
+- **Commit 2 â€” Multi-Task Worker Concurrency** (`5af49cd`): Multi-task concurrency tracking, active task slots, and worker load ratio calculation.
+- **Commit 3 â€” Deterministic Priority Ordering** (`782d8ab`): Pure `orderQueue()` ordering by CRITICAL > HIGH > NORMAL > LOW, sequence ascending, and original index tie-breaker.
+- **Commit 4 â€” Worker Matching & Candidate Selector** (`69c53d9`): Capability filtering, worker eligibility checks, concurrency limits, load ratio balancing, cost tie-breaking, and workerOrder priority.
+- **Commit 5 â€” Global Task Enqueue & Deterministic Dispatch Pass** (`546cdca` / `6e3e7d6`): Global unassigned task enqueue with deterministic ID format `tsk_pool_<seq>_<simTimeMs>`, rejection precedence, and atomic `dispatchPass()`.
+- **Commit 6 â€” Runtime Dispatcher Integration** (`0cee0da`): Integration of `enqueueGlobalTask()` and `dispatchGlobalQueue()` into `SimulationEngine.stepSimulationTick()` and `WorkerMockService`.
+- **Commit 7 â€” Global Demo Task Migration** (`e741c2d`): Migration of the 12-tick periodic demo task generator to the unassigned global queue with 14 canonical templates across 7 departments.
+- **Commit 8 â€” Store & UI Integration** (`d669428`): Integration of global scheduler state, queue drawer (`GlobalQueuePanel`), `TopBar` queue counters, explicit diagnostic propagation, and activity history.
+- **Commit 10 â€” UI Activity & Metrics Corrections** (`45ee964`): Corrected simulation-mode and queue labels, lifecycle-aware task activity timestamps, deterministic tie-breaking, and RUNNING-only active task counts.
+- **Commit 11 â€” UI Regression Coverage** (`6e82623`): Repaired React 19 UI event-handler test interactions and added regression cases for activity timestamp fallbacks, ordering, and active-count semantics.
+- **Commit 12â€“15 â€” Audit & Test Stabilization** (`2173ac2`, `9525ce9`, `4cecfdf`, `a9aa327`): Audit checklist, project state updates, and React act/UI test stabilization bringing total tests to 256/256 passing.
 - **QA Artifacts** (`2997f4d`, `cf1083d`): Browser QA screenshot evidence added.
 - Architecture ownership: `src/scheduler/` owns priority ordering, capability matching/selection, dispatch decisions, and blocked reasons; `SimulationEngine` owns simulated time and tick order; `useOfficeStore` owns reactive UI state and diagnostic synchronization.
 
@@ -200,11 +200,11 @@ Owner acceptance report: [PHASE_4_OWNER_ACCEPTANCE_REPORT.md](PHASE_4_OWNER_ACCE
     2. Final GLB avatar assets remain procedural placeholders until 3D asset modeling phase.
 
 ## External backend milestone
-- **Phase 3.1 — Read-Only Observability API Gateway: COMPLETE (2026-11-08)** in the separate `awandhani22-boop/SIREADER-Python-Backend` repository. Supabase lockdown and dedicated `sireader_api_ro` access were verified; all five local GET endpoints returned 200; missing token returned 401; POST/PUT/PATCH/DELETE returned 405; 74 API tests and 50 core backend regression tests passed locally; API compile passed; GitHub Actions run `42397323807` succeeded. Backend remains a separate project boundary.
+- **Phase 3.1 â€” Read-Only Observability API Gateway: COMPLETE (2026-11-08)** in the separate `awandhani22-boop/SIREADER-Python-Backend` repository. Supabase lockdown and dedicated `sireader_api_ro` access were verified; all five local GET endpoints returned 200; missing token returned 401; POST/PUT/PATCH/DELETE returned 405; 74 API tests and 50 core backend regression tests passed locally; API compile passed; GitHub Actions run `42397323807` succeeded. Backend remains a separate project boundary.
 
 ## Next
 
-**Phase 5.1 — Human-Supervised Worker and Task Operations (PLANNED).** Phase 4 is accepted; do not enable any write/command endpoint until Phase 5 security and authorization contracts are separately designed and tested.
+**Phase 5.1 â€” Human-Supervised Worker and Task Operations (PLANNED).** Phase 4 is accepted; do not enable any write/command endpoint until Phase 5 security and authorization contracts are separately designed and tested.
 
 - Define narrowly scoped enqueue, pause/resume, cancel, and safe retry commands for generic non-trading work only.
 - Keep read-only workforce observability credentials separate from command credentials.
@@ -214,11 +214,11 @@ Owner acceptance report: [PHASE_4_OWNER_ACCEPTANCE_REPORT.md](PHASE_4_OWNER_ACCE
 
 
 
-## Verified local runtime and LIVE contract recovery — 2026-11-10
+## Verified local runtime and LIVE contract recovery â€” 2026-11-10
 
 This dated record supersedes older status summaries above where they conflict.
 
-- **Current workstream:** Phase 5.2.5 — Operations Finalization & Governance. Phase 5.2.1–5.2.5 implementation is present; final Phase 5 owner acceptance remains OPEN. Phase 6 has not started.
+- **Current workstream:** Phase 5.2.5 â€” Operations Finalization & Governance. Phase 5.2.1â€“5.2.5 implementation is present; final Phase 5 owner acceptance remains OPEN. Phase 6 has not started.
 - **Local database:** Existing PostgreSQL 16.6 at `127.0.0.1:5432`; do not install PostgreSQL again. Existing data directory: `C:\Users\ASUS\.gemini\antigravity\scratch\pgsql\data`.
 - **Backend DB target:** `SIREADER_API_DATABASE_URL` and `SIREADER_WORKFORCE_COMMAND_DATABASE_URL` now target existing local `sireader_disposable`. Do not switch to populated `sireader_test`; do not copy the legacy `C:\SIREADER\.env` DATABASE_URL into the Phase 5 backend.
 - **Python runtime:** Reuse `C:\SIREADER\.venv\Scripts\python.exe` (Python 3.12). Do not create another environment.
@@ -232,3 +232,11 @@ This dated record supersedes older status summaries above where they conflict.
 - **Not activated:** No worker runtime, Telegram listener, AI provider, trading execution, maintenance purge, or Windows Task Scheduler task. Maintenance-specific `DATABASE_URL` remains unconfigured pending owner acceptance and separate authorization.
 - **Supabase LIVE:** No Supabase schema/data/role/migration changes made.
 - **Uncommitted archives preserved:** Existing frontend stash, `AGENTS.md`, patch files, and historical determinism diff were not deleted or applied. `milestone1.patch` corresponds to a commit already in current branch history; C1 fixed-step tests already exist in source.
+
+
+## Follow-up RLS verification â€” 2026-11-10
+
+- A final review of `retry_failed_non_trading_task` found that the command service appends `TASK_RETRIED` with both original and new task IDs. The Phase 5.2.2 v1 review policy update did not yet include this event.
+- Added `2026_11_10_workforce_review_command_security_v2.sql` and rollback. It permits `TASK_RETRIED` only when both task references are visible to the non-trading command role; existing command and human-review events remain restricted.
+- Applied v2 only to local `sireader_disposable`. A real INSERT as `sireader_workforce_cmd` succeeded inside a transaction that was rolled back; no test event remains.
+- Backend compile passed; full backend suite now reports **172 passed, 43 skipped** (the extra skipped PostgreSQL integration test requires `SIREADER_TEST_POSTGRES_URL`).
