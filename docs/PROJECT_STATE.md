@@ -240,3 +240,22 @@ This dated record supersedes older status summaries above where they conflict.
 - Added `2026_11_10_workforce_review_command_security_v2.sql` and rollback. It permits `TASK_RETRIED` only when both task references are visible to the non-trading command role; existing command and human-review events remain restricted.
 - Applied v2 only to local `sireader_disposable`. A real INSERT as `sireader_workforce_cmd` succeeded inside a transaction that was rolled back; no test event remains.
 - Backend compile passed; full backend suite now reports **172 passed, 43 skipped** (the extra skipped PostgreSQL integration test requires `SIREADER_TEST_POSTGRES_URL`).
+
+
+## Review adjudication transaction verification — 2026-11-10
+
+- Local end-to-end database probe now passes with the actual `sireader_workforce_cmd` role: APPROVE releases the quarantined original; EDIT releases the sanitized adjusted output; both create their immutable review activity events.
+- The blocker was PostgreSQL applying UPDATE RLS to `SELECT ... FOR UPDATE` on the pending payload row. Migration `2026_11_10_workforce_review_command_security_v3.sql` allows row locking while PENDING but keeps `WITH CHECK` EDITED-only and preserves the payload write-once trigger.
+- Activity ORM mapping sets `implicit_returning=False` for `WorkActivityEventRecord`. This avoids requiring SELECT on the append-only activity ledger just to return the generated `event_seq`; the command role remains INSERT-only and cannot read ledger rows.
+- All synthetic tasks, reviews, payloads and audit events were created and exercised inside one transaction, then rolled back. No test rows remain.
+- New migration/rollback and PostgreSQL integration coverage are committed locally; local backend suite: **172 passed, 44 skipped**. PostgreSQL CI integration requires `SIREADER_TEST_POSTGRES_URL`.
+
+
+## Final review-boundary verification — 2026-11-10
+
+- Local-only security migrations v1/v2/v3 are applied to `sireader_disposable`; no Supabase LIVE changes.
+- A transaction-scoped probe using `sireader_workforce_cmd` passed APPROVE, EDIT, sanitized adjusted-output release, and both human-review audit event inserts. All synthetic task/review/payload/event rows were rolled back.
+- Migration v3 resolves PostgreSQL's UPDATE-RLS check on `SELECT ... FOR UPDATE`: PENDING review payloads can be locked, while UPDATE remains restricted by `WITH CHECK` to EDITED reviews and the write-once trigger.
+- Activity inserts remain INSERT-only: `WorkActivityEventRecord` disables ORM implicit RETURNING, so the command role does not receive SELECT rights on the audit ledger or its generated sequence.
+- A dedicated PostgreSQL integration test now covers pending-payload lock / early-update denial. Latest local backend suite: 172 passed, 44 skipped; the skipped PostgreSQL integration tests require `SIREADER_TEST_POSTGRES_URL`.
+- Latest local backend commits include `cd43577` (review security), `56ff5a8` (retry activity RLS), and `3a8ff01` (pending-payload lock and insert-only event ORM). These commits are local on `phase-5-implementation`; not pushed.

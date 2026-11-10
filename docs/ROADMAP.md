@@ -496,3 +496,13 @@ A LIVE-contract mismatch was fixed: hardened Phase 5 task/activity fields (`rela
 ### Retry audit RLS follow-up — 2026-11-10
 
 The follow-up migration `2026_11_10_workforce_review_command_security_v2.sql` adds the `TASK_RETRIED` activity event to the command-role allowlist. It requires both the original and new task IDs to be visible through the non-trading task RLS policy. Applied only to local `sireader_disposable`; a direct insert as `sireader_workforce_cmd` passed inside a transaction that was rolled back. CI PostgreSQL integration coverage was extended to apply v2 and test the retry event. Latest local backend suite: 172 passed, 43 skipped (PostgreSQL integration skipped because `SIREADER_TEST_POSTGRES_URL` is unset).
+
+
+### Review adjudication transaction verification — 2026-11-10
+
+The command-role database path now passes a transactional APPROVE and EDIT probe on local `sireader_disposable`: original output release, adjusted-output sanitization/release and human-review audit event inserts all succeeded under `sireader_workforce_cmd`. The initial blocker was `SELECT ... FOR UPDATE` on PENDING review payloads being filtered by the UPDATE policy. Migration `2026_11_10_workforce_review_command_security_v3.sql` now permits locking PENDING/EDITED payload rows while keeping `WITH CHECK` EDITED-only and preserving write-once triggers. Activity ORM mapping disables implicit RETURNING so the command role does not need SELECT on the append-only activity ledger. Synthetic records/events were rolled back. Local backend suite: 172 passed, 44 skipped; PostgreSQL integration remains gated on disposable CI URL.
+
+
+### Final review-boundary verification — 2026-11-10
+
+Local review-security migrations v1/v2/v3 are applied only to `sireader_disposable`. Transactional database verification as `sireader_workforce_cmd` passed APPROVE, EDIT, sanitization, result release and both audit-event inserts; synthetic rows/events were rolled back. Migration v3 permits PENDING payload row locks while keeping updates EDITED-only. Activity ORM insert no longer uses implicit RETURNING, preserving INSERT-only access to the immutable ledger. Backend tests: 172 passed, 44 skipped (PostgreSQL integration requires the disposable CI URL). The final owner browser acceptance gate remains open.
