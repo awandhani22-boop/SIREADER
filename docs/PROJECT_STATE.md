@@ -212,3 +212,23 @@ Owner acceptance report: [PHASE_4_OWNER_ACCEPTANCE_REPORT.md](PHASE_4_OWNER_ACCE
 - Preserve the prohibition on MT5/HFM order placement, modification, closure, SL/TP changes, and trading approval bypass.
 - Keep Supabase LIVE migrations and paid provider canaries separately gated; neither was performed during Phase 4 acceptance.
 
+
+
+## Verified local runtime and LIVE contract recovery — 2026-11-10
+
+This dated record supersedes older status summaries above where they conflict.
+
+- **Current workstream:** Phase 5.2.5 — Operations Finalization & Governance. Phase 5.2.1–5.2.5 implementation is present; final Phase 5 owner acceptance remains OPEN. Phase 6 has not started.
+- **Local database:** Existing PostgreSQL 16.6 at `127.0.0.1:5432`; do not install PostgreSQL again. Existing data directory: `C:\Users\ASUS\.gemini\antigravity\scratch\pgsql\data`.
+- **Backend DB target:** `SIREADER_API_DATABASE_URL` and `SIREADER_WORKFORCE_COMMAND_DATABASE_URL` now target existing local `sireader_disposable`. Do not switch to populated `sireader_test`; do not copy the legacy `C:\SIREADER\.env` DATABASE_URL into the Phase 5 backend.
+- **Python runtime:** Reuse `C:\SIREADER\.venv\Scripts\python.exe` (Python 3.12). Do not create another environment.
+- **Service topology:** Python read-only API `127.0.0.1:8000` (`python -m app.api.server`); workforce command API `127.0.0.1:8010` (`python -m app.command_api.process`); Vite `127.0.0.1:3000`; BFF `127.0.0.1:3001`. `app.main` is the legacy Telegram entrypoint, not the Phase 5 API entrypoint.
+- **Local security migration:** `migrations/2026_11_10_workforce_review_command_security_v1.sql` was applied only to local `sireader_disposable`. It adds review RLS/scoped adjudication permissions and approved/edited result-release protection. Read-only API and command-role DB security validators pass. Do not run on Supabase LIVE.
+- **LIVE dashboard root cause fixed:** Phase 5.2.1 backend responses added `related_task_id` to tasks and `event_seq`, `actor_type`, `actor_id`, `related_task_id` to activity. BFF/browser validators expected the earlier DTO, so Tasks and Activity were rejected as `SCHEMA_INVALID`. Both BFF and browser contracts now match the hardened backend.
+- **Runtime smoke results:** All nine allowlisted BFF read routes returned HTTP 200 against local PostgreSQL; task timeline returned HTTP 200 with valid schema; workforce/governance Review Inbox pending-list proxies returned valid HTTP 200 responses (currently zero pending reviews). Command API rejects invalid bearer with 401 and accepts configured bearer up to request validation (422 for deliberately empty invalid body); no command was executed.
+- **Automated frontend verification:** 415/415 tests passed, TypeScript passed, production build passed. Main JS bundle remains about 1.5 MB (non-blocking optimization). Existing React `act(...)` and Three.js CommonJS deprecation warnings remain.
+- **Automated backend verification:** 172 passed / 42 skipped. PostgreSQL integration tests are skipped because `SIREADER_TEST_POSTGRES_URL` is not configured in this session. The populated `sireader_test` database was not used or modified.
+- **Owner acceptance still required:** Chrome now shows `SESSION REQUIRED` after BFF restart and remains in DEMO. Owner must authenticate, switch to LIVE, and verify global status/Review Inbox. There are currently zero pending workforce reviews, so a real APPROVE/EDIT/REJECT browser action cannot be attested without a deliberate local acceptance fixture or real pending review. Do not fabricate production review data.
+- **Not activated:** No worker runtime, Telegram listener, AI provider, trading execution, maintenance purge, or Windows Task Scheduler task. Maintenance-specific `DATABASE_URL` remains unconfigured pending owner acceptance and separate authorization.
+- **Supabase LIVE:** No Supabase schema/data/role/migration changes made.
+- **Uncommitted archives preserved:** Existing frontend stash, `AGENTS.md`, patch files, and historical determinism diff were not deleted or applied. `milestone1.patch` corresponds to a commit already in current branch history; C1 fixed-step tests already exist in source.

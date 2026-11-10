@@ -480,3 +480,14 @@ Phase 3.1 is already complete in the separate Python backend repository and does
 - Use Sonnet for architecture planning/review and Argon for implementation when those models are available; model choice never overrides the acceptance gates.
 - After each milestone, update `docs/PROJECT_STATE.md` and this roadmap only when the approved scope/status changes.
 - Commit/push a milestone only after tests and diff review; include evidence, not claims.
+
+
+## Latest verified execution — 2026-11-10
+
+**Current position:** Phase 5.2.5 — Operations Finalization & Governance. Phase 5.2.1–5.2.5 implementation is present. **Final Phase 5 owner/browser acceptance remains OPEN; Phase 6 has not started.** This dated record supersedes the older status table at the beginning of this document where it conflicts.
+
+Local PostgreSQL 16.6 was recovered and reused (no reinstall). The Phase 5 backend database URLs now point to the existing local `sireader_disposable` database. The local-only review security migration `2026_11_10_workforce_review_command_security_v1.sql` is applied there. Python API, command API, Vite and BFF are running on their established loopback ports 8000, 8010, 3000 and 3001.
+
+A LIVE-contract mismatch was fixed: hardened Phase 5 task/activity fields (`related_task_id`, `event_seq`, `actor_type`, `actor_id`) are now accepted by both BFF and browser DTO validators. All nine BFF read routes passed real local-database smoke checks; task timeline and Review Inbox pending-list proxies also returned schema-valid responses. Frontend verification: 415 tests, TypeScript and production build pass. Backend regression: 172 passed, 42 skipped; local PostgreSQL integration remains unverified because `SIREADER_TEST_POSTGRES_URL` is unset.
+
+**Remaining gates:** owner must sign in again after the in-memory BFF session reset, switch to LIVE and inspect the global status/Review Inbox; actual review adjudication requires an existing pending review (current pending count is zero); PostgreSQL integration tests should run only against a newly isolated scratch database; frontend bundle splitting is a non-blocking performance item; maintenance scheduling requires separate owner authorization after acceptance. No Supabase LIVE mutation, worker/provider execution, Telegram listener, trading execution, maintenance purge or Task Scheduler registration has been performed.

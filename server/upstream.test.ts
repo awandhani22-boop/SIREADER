@@ -108,7 +108,16 @@ const FIXTURES: Record<UpstreamApiPath, unknown> = {
   },
   '/api/v1/workforce/tasks': {
     server_time_utc: '2026-11-09T00:00:00Z',
-    total_count: 0, limit: 50, offset: 0, tasks: [],
+    total_count: 1, limit: 50, offset: 0,
+    tasks: [{
+      task_id: 'task_12345678', correlation_id: 'corr_12345678', schema_version: 1,
+      task_type: 'SUMMARIZATION', title: 'Review-safe task', required_capability: 'summarization',
+      requested_worker_id: 'haiku', assigned_worker_id: 'haiku', priority: 50, status: 'COMPLETED',
+      attempts: 1, max_attempts: 3, not_before: '2026-11-09T00:00:00Z',
+      deadline_at: null, lease_expires_at: null, failure_code: null,
+      created_at: '2026-11-09T00:00:00Z', updated_at: '2026-11-09T00:00:00Z',
+      completed_at: '2026-11-09T00:00:00Z', related_task_id: null,
+    }],
   },
   '/api/v1/workforce/attempts': {
     server_time_utc: '2026-11-09T00:00:00Z',
@@ -116,7 +125,13 @@ const FIXTURES: Record<UpstreamApiPath, unknown> = {
   },
   '/api/v1/workforce/activity': {
     server_time_utc: '2026-11-09T00:00:00Z',
-    total_count: 0, limit: 50, offset: 0, events: [],
+    total_count: 1, limit: 50, offset: 0,
+    events: [{
+      event_id: 'evt_12345678', event_type: 'HUMAN_REVIEW_EXPIRED',
+      occurred_at: '2026-11-09T00:00:00Z', worker_id: 'haiku',
+      task_id: 'task_12345678', attempt_id: null, correlation_id: 'corr_12345678',
+      event_seq: 1, actor_type: 'SYSTEM', actor_id: null, related_task_id: null,
+    }],
   },
 };
 

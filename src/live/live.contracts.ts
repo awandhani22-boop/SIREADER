@@ -268,6 +268,7 @@ export interface WorkforceTaskDto {
   readonly created_at: string;
   readonly updated_at: string;
   readonly completed_at: string | null;
+  readonly related_task_id: string | null;
 }
 
 export interface WorkforceTasksResponseDto {
@@ -306,6 +307,10 @@ export interface WorkforceActivityDto {
   readonly task_id: string | null;
   readonly attempt_id: string | null;
   readonly correlation_id: string;
+  readonly event_seq: number;
+  readonly actor_type: WorkforceActorType;
+  readonly actor_id: string | null;
+  readonly related_task_id: string | null;
 }
 
 
@@ -792,7 +797,7 @@ function validWorkforceTask(value: unknown): value is WorkforceTaskDto {
       'required_capability', 'requested_worker_id', 'assigned_worker_id',
       'priority', 'status', 'attempts', 'max_attempts', 'not_before',
       'deadline_at', 'lease_expires_at', 'failure_code', 'created_at',
-      'updated_at', 'completed_at',
+      'updated_at', 'completed_at', 'related_task_id',
     ]) &&
     isString(value.task_id) && value.task_id.length >= 8 && value.task_id.length <= 64 &&
     isString(value.correlation_id) && value.correlation_id.length >= 8 && value.correlation_id.length <= 64 &&
@@ -809,7 +814,8 @@ function validWorkforceTask(value: unknown): value is WorkforceTaskDto {
     validNullableDateTime(value.lease_expires_at) &&
     (value.failure_code === null || isString(value.failure_code)) &&
     isIsoDateTime(value.created_at) && isIsoDateTime(value.updated_at) &&
-    validNullableDateTime(value.completed_at)
+    validNullableDateTime(value.completed_at) &&
+    (value.related_task_id === null || (isString(value.related_task_id) && value.related_task_id.length >= 8 && value.related_task_id.length <= 64))
   );
 }
 
@@ -864,7 +870,8 @@ function validWorkforceActivity(value: unknown): value is WorkforceActivityDto {
     isObject(value) &&
     hasExactKeys(value, [
       'event_id', 'event_type', 'occurred_at', 'worker_id',
-      'task_id', 'attempt_id', 'correlation_id',
+      'task_id', 'attempt_id', 'correlation_id', 'event_seq',
+      'actor_type', 'actor_id', 'related_task_id',
     ]) &&
     isString(value.event_id) && value.event_id.length >= 8 && value.event_id.length <= 64 &&
     WORKFORCE_ACTIVITY_TYPES.includes(value.event_type as WorkforceActivityType) &&
@@ -872,7 +879,11 @@ function validWorkforceActivity(value: unknown): value is WorkforceActivityDto {
     (value.worker_id === null || isString(value.worker_id)) &&
     (value.task_id === null || isString(value.task_id)) &&
     (value.attempt_id === null || isString(value.attempt_id)) &&
-    isString(value.correlation_id) && value.correlation_id.length >= 8 && value.correlation_id.length <= 64
+    isString(value.correlation_id) && value.correlation_id.length >= 8 && value.correlation_id.length <= 64 &&
+    isInteger(value.event_seq, 1) &&
+    WORKFORCE_ACTOR_TYPES.includes(value.actor_type as WorkforceActorType) &&
+    (value.actor_id === null || (isString(value.actor_id) && value.actor_id.length <= 128)) &&
+    (value.related_task_id === null || (isString(value.related_task_id) && value.related_task_id.length >= 8 && value.related_task_id.length <= 64))
   );
 }
 
