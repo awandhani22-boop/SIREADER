@@ -52,3 +52,15 @@ With the latest backend and frontend code CI green, the remaining gates are: (1)
 - Private config inspection (values redacted): API and command database URLs point to `127.0.0.1:5432/sireader_disposable`; backend `.env` `DATABASE_URL` is unset and Process/User/Machine overrides are absent.
 - No `SIREADER-WorkforceMaintenance` scheduled task exists. Do not register or run maintenance until the owner separately authorizes the data-mutating retention/purge cycle and its dedicated `DATABASE_URL` is configured.
 - Phase 5 final acceptance remains OPEN for owner UI adjudication evidence, a full listener test run without port contention, and the separate maintenance scheduling decision. No worker/provider execution, review fixture, database mutation, Supabase LIVE change, trading operation, or purge was performed.
+
+
+## Workforce maintenance scheduler activation — 2026-11-10
+
+- Owner authorized the local workforce retention/expiry maintenance and five-minute scheduler.
+- A dedicated non-superuser login, sireader_workforce_maint, was provisioned through migration 2026_11_10_workforce_maintenance_role_v1.sql on loopback sireader_disposable only. RLS confines the role to approved non-trading worker tasks, attempts, reviews, review payloads, and a small activity INSERT allowlist. No DELETE rights; no access to registry, heartbeat, command audit, Telegram, or trading tables.
+- The local .env now uses SIREADER_WORKFORCE_MAINTENANCE_DATABASE_URL, not the legacy DATABASE_URL. The application DATABASE_URL remains unset. The Python maintenance entrypoint checks database/host/role flags; the runner explicitly selects Python 3.12 at C:\SIREADER\.venv when no backend-local venv exists.
+- First authorized maintenance cycle: 4 expired PENDING reviews transitioned to EXPIRED and 4 associated expired task payloads were purged. Lease recovery 0, deadline expiry 0, review payload purge 0. A second cycle returned all zeroes.
+- Task Scheduler task SIREADER-WorkforceMaintenance is ENABLED and scheduled every 5 minutes for the current interactive Windows user. Manual Task Scheduler launch verified LastTaskResult=0. The task requires that user to remain logged in. No worker or provider is started by maintenance.
+- A pool-size-one deadlock in the repository's table-existence inspection was fixed by reusing the active transaction connection.
+- Backend validation: 185 passed / 44 skipped; compileall passed. Backend commit 96e625e is local on phase-5-implementation and not pushed.
+- Phase 5 remains open for actual authenticated review-detail/adjudication UI evidence when a legitimate PENDING review exists, plus a complete BFF listener suite run without port contention. Scheduler registration is no longer a blocker. No Supabase LIVE, paid provider, Telegram, MT5/HFM, or trading operation was performed.
