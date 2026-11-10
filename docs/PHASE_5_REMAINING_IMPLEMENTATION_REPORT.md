@@ -112,3 +112,8 @@ With the latest backend and frontend code CI green, the remaining gates are: (1)
 - Backend commit `10a2f96`; frontend documentation commits `04a3c80`, `c60f500`, `bb198fe`. Branches remain local and are not pushed. Existing untracked frontend files (`AGENTS.md` and patch/determinism files) were preserved.
 - **Phase 5 implementation and applicable automated/operational acceptance are complete.** The only non-exercised real-world action is an operator decision on a genuine PENDING review; none currently exists, so no decision was appropriate. This is documented as a data-state limitation, not a failing test. Phase 6 has not started.
 - No Supabase LIVE changes, paid provider calls, new worker execution, Telegram, MT5/HFM, trading action, or GitHub push/merge occurred.
+
+## Fresh-cluster reproducibility confirmation - 2026-11-10 16:44 local
+
+- Repeated the backend PostgreSQL acceptance from a newly initialized PostgreSQL 16.6 cluster (fresh data directory, fresh `sireader_test` database). The privilege fixture preflight passed **20/20**; the complete `tests/` suite then passed **229/229, no skips**, with one Starlette/httpx deprecation warning.
+- Both temporary PostgreSQL 16.6 test-cluster data directories were removed after graceful shutdown; port 55432 is no longer listening. The application database and its service configuration were not changed.
