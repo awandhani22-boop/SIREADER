@@ -93,3 +93,9 @@ With the latest backend and frontend code CI green, the remaining gates are: (1)
 - Independently checked the review view using `sireader_api_ro` against loopback `sireader_disposable` with `default_transaction_read_only=on`: no review rows were present and `PENDING_COUNT=0`.
 - Therefore authenticated review detail and APPROVE/EDIT/REJECT still cannot be exercised with a real review. No review was created to force acceptance.
 - Maintenance scheduler battery/StartWhenAvailable settings are corrected, but a new automatic `LastRunTime` after the correction has not yet been observed as of this snapshot.
+
+## Automatic maintenance trigger verified - 2026-11-10 16:36 local
+
+- After allowing battery operation and enabling StartWhenAvailable, the five-minute Task Scheduler trigger fired automatically at 16:36:01 (not a manual Start-ScheduledTask invocation).
+- Follow-up state: `Ready`, `LastTaskResult=0`, next run 16:41. The intermediate 267009 result was observed while the task was still running; the subsequent completed result was 0. No maintenance runner process remained after completion.
+- This verifies the corrected scheduled execution path under the current interactive Windows session and battery power state.
