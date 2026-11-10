@@ -64,3 +64,13 @@ With the latest backend and frontend code CI green, the remaining gates are: (1)
 - A pool-size-one deadlock in the repository's table-existence inspection was fixed by reusing the active transaction connection.
 - Backend validation: 185 passed / 44 skipped; compileall passed. Backend commit 96e625e is local on phase-5-implementation and not pushed.
 - Phase 5 remains open for actual authenticated review-detail/adjudication UI evidence when a legitimate PENDING review exists, plus a complete BFF listener suite run without port contention. Scheduler registration is no longer a blocker. No Supabase LIVE, paid provider, Telegram, MT5/HFM, or trading operation was performed.
+
+## Clean local verification rerun - 2026-11-10 (16:12 Windows local time)
+
+- Frontend full suite was rerun with ports 3000/3001 released: `npm test` = 416 passed, 0 failed, 0 skipped. This resolves the earlier local P0-4 `EADDRINUSE` test blocker.
+- `npm run lint` (`tsc --noEmit`) passed. `npm run build` passed; the existing non-blocking large JavaScript chunk warning remains (about 1.51 MB minified / 404 KB gzip).
+- Backend supported test directory: `python -m pytest -q .\tests` = 185 passed, 44 skipped, one Starlette/httpx deprecation warning. `python -m compileall -q app` passed. Do not use unrestricted root pytest discovery because it collects the legacy manual `test_connection.py`, which exits when the intentionally-unset general `DATABASE_URL` is absent.
+- Local services restored and verified listening on loopback ports 3000 (Vite), 3001 (BFF), 8000 (Python observability API), and 8010 (workforce command API).
+- Restarting BFF invalidated its in-memory operator session as designed. The browser currently shows `SESSION REQUIRED`; the owner must authenticate again in the local browser. The previously authenticated UI showed an empty Review Inbox (0 PENDING), so no real review detail or APPROVE/EDIT/REJECT action can yet be exercised. No synthetic review, worker, or provider was created or started.
+- Workforce maintenance task remains enabled with a five-minute repetition trigger, interactive current-user logon, and Limited run level. A manual Task Scheduler launch at 16:11:46 returned `LastTaskResult=0`; next scheduled run was reported as 16:16. Task Scheduler reports state `Queued` while that next trigger is pending.
+- Phase 5 final acceptance remains OPEN only for owner-authenticated browser review/adjudication evidence when a legitimate PENDING review exists, plus the remaining owner acceptance checks. No push/merge, Supabase LIVE, paid provider, Telegram, MT5/HFM, or trading operation was performed.
