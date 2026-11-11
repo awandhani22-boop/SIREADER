@@ -1,4 +1,4 @@
-## Current execution status — 2026-11-11 (supersedes the 2026-11-10 snapshot)
+## Current execution status — 2026-11-12 (supersedes the 2026-11-11 snapshot)
 
 | Workstream | Status |
 |---|---|
@@ -7,12 +7,12 @@
 | Phase 7.1 — offline worker runtime assurance | COMPLETE |
 | Phase 7.2 — one-worker local MOCK pilot | COMPLETE — foreground process, heartbeat, task/audit, restart and stale checks accepted |
 | Phase 7.3 — single-worker LIVE provider canary | COMPLETE — exactly one owner-authorized synthetic Haiku request; authorization consumed |
-| Phase 7.4 — worker command boundary and limited rollout preparation | LOCAL IMPLEMENTATION + PG17 SECURITY ACCEPTANCE + RESTORED-BACKUP FORWARD/ROLLBACK/FORWARD PASS; hosted cutover and further LIVE rollout BLOCKED |
+| Phase 7.4 — worker command boundary and limited rollout preparation | LOCAL IMPLEMENTATION + MANAGED-LIKE NON-SUPERUSER PG17 FORWARD/ROLLBACK/FORWARD + ACTUAL LOGIN/HTTP ACCEPTANCE PASS; hosted equivalent staging and production cutover remain BLOCKED |
 | SIREADER Virtual Office v1.0 | NOT RELEASED |
 
-The Phase 7.4 security review closed the staged worker DB provenance, trading-capability, truncated-output review and retention-identity findings. Python/PostgreSQL review-policy parity passed (40 rules, 56 capability/task pairs, 1,120 comparisons). The worker command, operator/review/maintenance SQL acceptance, Python adapter integration, and real LOGIN identity checks passed on local PG17.11 staging. A clean restore of the local Supabase backup passed the complete five-file forward migration, guarded rollback, and forward migration again. The restored rehearsal ended with nine RLS workforce base tables, fourteen security-barrier API views, ten dedicated LOGIN roles without passwords, zero role memberships, zero direct workforce table grants to those LOGIN roles, and zero PUBLIC EXECUTE on private workforce functions. Backend regression most recently passed 327 tests with 47 environment-gated skips; Virtual Office passed 422 tests, TypeScript and production build passed. See [the Phase 7.4 production migration rehearsal](https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/PHASE_7_4_PRODUCTION_MIGRATION_REHEARSAL_2026-11-11.md), the rollout plan and backend security closeout.
+Phase 7.4 local technical acceptance is complete. The final authority migration passed on a fresh local PostgreSQL 17.11 restore using a NOSUPERUSER migration login with the managed-like CREATEROLE/CREATEDB/BYPASSRLS capabilities. The final permission matrix passed: all seven worker lifecycle surfaces; provider reservation only for Haiku/Sonnet/Opus; four Command, two Review and one Maintenance functions; zero PUBLIC EXECUTE; zero direct worker/operator base-table privileges; nine RLS workforce tables; fourteen security-barrier API views. The actual database LOGIN and FastAPI HTTP smoke tests passed using separate Command, Review and Maintenance identities; the spoofed operator header did not override the database actor. SQL worker and operator/review/maintenance acceptance passed. Backend regression passed 327 tests with 47 environment-gated skips; Virtual Office passed 422 tests, TypeScript and production build passed.
 
-This remains a local restored-backup rehearsal, not hosted Supabase certification or deployment. The connected hosted Supabase target was unchanged and still has no workforce schema/roles; no production credentials were provisioned, no extra paid inference, Telegram, MT5/HFM, trading order or v1.0 release occurred.
+This remains local managed-like acceptance, not hosted Supabase certification or deployment. The hosted target is unchanged and still has no workforce schema/roles. CLI local configuration has been initialized and the four applied hosted migration files have been restored from the actual migration ledger. A hosted development branch has not been created because it carries US$0.01344/hour compute charges and awaits explicit cost confirmation. No production credentials, additional paid inference, worker activation, Telegram, MT5/HFM, trading order or v1.0 release occurred. See [the Phase 7.4 production migration rehearsal](https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/PHASE_7_4_PRODUCTION_MIGRATION_REHEARSAL_2026-11-11.md).
 
 ---
 
@@ -21,7 +21,7 @@ This remains a local restored-backup rehearsal, not hosted Supabase certificatio
 **Document status:** ROADMAP LOCKED — source of truth for phase order, scope, and acceptance gates  
 **Repository:** `awandhani22-boop/SIREADER`  
 **Current implementation branch:** `phase-5-implementation` (isolated from `main`; matching branch exists in both SIREADER repositories). The accepted Phase 4 branch remains the baseline.  
-**Last roadmap review:** 2026-11-11
+**Last roadmap review:** 2026-11-12
 
 This document governs the SIREADER Virtual Office project from the existing 3D frontend through the final v1.0 release. **The canonical product mission and meaning of the final product are in [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md); read that before every task.** Keep this roadmap and `docs/PROJECT_STATE.md` aligned after every milestone. Do not create a replacement frontend or restart completed phases.
 

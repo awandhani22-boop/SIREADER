@@ -1,6 +1,21 @@
-## Current status override â€” 2026-11-10 (Phase 5 remaining implementation)
 
-This section supersedes older status statements below where they conflict with the current branch state. Historical snapshots are retained as historical evidence.
+## Current status override — 2026-11-12
+
+- Phase 1–6 and Phase 7.1–7.3 remain complete within their recorded scopes. The single-request Phase 7.3 Haiku authorization is consumed.
+- Phase 7.4 local implementation and acceptance are complete: managed-like NOSUPERUSER PG17.11 migration rehearsal; forward/rollback/forward; actual separate LOGIN startup and HTTP acceptance; worker and operator/review/maintenance SQL acceptance.
+- Final privilege matrix: seven lifecycle functions per worker; provider reservation only for Haiku/Sonnet/Opus; Command four functions; Review two; Maintenance one; zero PUBLIC EXECUTE; zero direct workforce table privileges for runtime LOGIN identities; nine RLS tables; fourteen security-barrier views.
+- Backend tests: 327 passed, 47 environment-gated skips. Virtual Office: 422 passed; TypeScript and production build passed.
+- Hosted Supabase remains unchanged: four historical migrations only, no workforce schema/authority roles. The four applied migration files have been restored from the hosted migration ledger; local Supabase CLI config is initialized.
+- No hosted development branch exists yet. Supabase quoted US$0.01344/hour for a branch; explicit cost confirmation remains required before provisioning.
+- Production deployment, hosted LOGIN credentials, additional paid AI requests, worker activation and v1.0 release remain NOT AUTHORIZED. Runtime stays OFF/MOCK, live provider OFF, WORKER_DATABASE_URL unset, cost caps zero, trading DRY_RUN and auto execution OFF.
+
+See the latest Phase 7.4 evidence in backend/docs/PHASE_7_4_PRODUCTION_MIGRATION_REHEARSAL_2026-11-11.md and backend/docs/WORKER_DATABASE_COMMAND_LAYER_STAGING_ACCEPTANCE_2026-11-11.md.
+
+---
+
+## Historical status snapshot — 2026-11-10 (Phase 5 remaining implementation)
+
+This snapshot is retained for historical context. It is superseded by the 2026-11-12 status override above.
 
 - **Phase 5.1 â€” COMPLETE:** Owner acceptance was recorded on 2026-11-09 in `PHASE_5_1_OWNER_ACCEPTANCE_REPORT.md`.
 - **Phase 5.2.1 â€” COMPLETE:** Lifecycle audit ledger and timeline API/BFF were implemented and verified.
@@ -627,8 +642,8 @@ Evidence: [Worker Database Security Review](https://github.com/awandhani22-boop/
 
 This update supersedes earlier Phase 7.4 statements that the production migration/rollback package had not yet been authored or rehearsed locally. It does not change the hosted-production authorization gate.
 
-- Production forward migration draft: `supabase/migrations/20261111235000_workforce_database_authorities_v1.sql`.
-- Matching guarded rollback: `supabase/rollback/20261111235000_workforce_database_authorities_v1.rollback.sql`. It preserves the nine workforce schema/RLS tables and fourteen read-only API views, and refuses rollback once any workforce operational data or LOGIN session exists.
+- Production forward migration draft: `supabase/migrations/20261111170344_workforce_database_authorities_v1.sql`.
+- Matching guarded rollback: `supabase/rollback/20261111170344_workforce_database_authorities_v1.rollback.sql`. It preserves the nine workforce schema/RLS tables and fourteen read-only API views, and refuses rollback once any workforce operational data or LOGIN session exists.
 - A clean PostgreSQL 17.11 cluster was created from the local custom-format Supabase production backup. The four workforce/read-model/security-barrier baseline migrations and the new authority migration applied in sequence.
 - Forward → rollback → forward passed. The final rehearsal has 9/9 workforce tables with RLS, 14/14 API views with security_barrier=true, ten worker/command/review/maintenance LOGIN identities created without passwords, zero memberships, zero direct workforce table grants to those LOGIN roles, and zero PUBLIC EXECUTE on private workforce functions.
 - Python startup validation passed against actual local LOGIN identities for Command, Review and Maintenance. Command and review adapters and maintenance call were exercised and rolled back.
@@ -641,3 +656,40 @@ This update supersedes earlier Phase 7.4 statements that the production migratio
 Detailed evidence: https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/PHASE_7_4_PRODUCTION_MIGRATION_REHEARSAL_2026-11-11.md
 
 **Current decision:** Phase 7.4 local implementation, SQL authority layer, Python adapters, restored-backup migration/rollback rehearsal and local acceptance are COMPLETE. Hosted Supabase cutover, credential provisioning, managed-platform staging/restore approval, limited LIVE authorization and owner v1.0 sign-off remain BLOCKED / NOT AUTHORIZED. **SIREADER Virtual Office v1.0 remains NOT RELEASED.**
+
+
+
+## Managed-role and actual-LOGIN HTTP continuation — 2026-11-12
+
+This continuation supersedes the earlier rehearsal wording where the first local PG17 test used a superuser identity. The final authority migration was reapplied successfully on a clean restore using a separate **NOSUPERUSER** migration operator with only the managed-like CREATEROLE/CREATEDB/BYPASSRLS capabilities. Hosted Supabase remained read-only and unchanged.
+
+### Migration and permission evidence
+
+- The four previously-applied hosted migration SQL files were restored exactly from the hosted `supabase_migrations.schema_migrations` ledger into `supabase/migrations`. The five Phase 7 workforce/security migrations follow them in local version order. No historic migration was applied to hosted again.
+- Supabase CLI 3.1.0 generated the authority migration filename; `supabase init` generated a local `config.toml`. No project link, password, or secret was written.
+- The final authority migration passed on local PG17.11 as a LOGIN operator with `NOSUPERUSER`, `CREATEROLE`, `CREATEDB`, `BYPASSRLS`, mirroring the inspected Supabase `postgres` role shape.
+- Effective permission matrix: all seven worker identities have all seven lifecycle functions; provider-slot reservation is EXECUTE only for Haiku/Sonnet/Opus; Command has four functions; Review has two; Maintenance has one.
+- Final audit after COMMIT: zero PUBLIC EXECUTE on the private schema; zero direct workforce base-table privileges on worker/command/review/maintenance runtime LOGINs; nine workforce tables with RLS; fourteen API views with `security_barrier=true`; function owner retains USAGE but not CREATE on its private schema.
+- The ten runtime LOGIN roles do not inherit membership in other roles. PostgreSQL CREATEROLE leaves the migration operator's creator ADMIN membership on the NOLOGIN function-owner role; the migration explicitly removes its temporary SET edge and final verification reports `set_option=false`, `inherit_option=false`. It therefore cannot SET ROLE or inherit function-owner privileges after migration.
+
+### Runtime acceptance
+
+- SQL worker acceptance: `STAGING_WORKER_COMMAND_LAYER_TESTS_PASS`.
+- SQL operator/review/maintenance acceptance: `STAGING_OPERATOR_REVIEW_MAINTENANCE_COMMAND_LAYER_TESTS_PASS`.
+- Actual PostgreSQL LOGIN startup/adapter/maintenance test: `REAL_LOGIN_COMMAND_REVIEW_MAINTENANCE_PG17_PASS`.
+- Actual LOGIN FastAPI HTTP test: `REAL_LOGIN_FASTAPI_COMMAND_REVIEW_PG17_PASS`. Enqueue, idempotent replay, cancel, worker pause/resume and review approval were exercised through HTTP with distinct Command and Review logins. An intentionally untrusted `X-Operator-Id` header did not override the actor recorded from the Review database identity.
+- Synthetic review fixtures were rejected/expired/purged through the authenticated Review and Maintenance function boundaries. No retention trigger was bypassed.
+
+### Latest regression
+
+- Backend: **327 passed, 47 skipped, 0 failed**. The 47 skips require the separate `SIREADER_TEST_POSTGRES_URL`; explicit PG17 SQL and actual-LOGIN acceptance ran separately.
+- Virtual Office: **422 passed, 0 failed**; TypeScript/lint passed; production build passed.
+- Non-blocking warnings: Starlette/httpx TestClient deprecation, React `act(...)` notices, Three.js CommonJS deprecation, Vite JS bundle 1,511.12 kB minified / 405.35 kB gzip.
+
+### Local CLI and hosted-platform boundary
+
+- The historical hosted migration ledger was reconciled into the local repo. CLI 3.1.0 `migration list --remote=<project-ref>` could not connect from this workstation because its current network does not support IPv6 and the CLI requires an explicit pooler URL for IPv4. The ledger itself was read and verified through the Supabase database connection.
+- Supabase CLI local configuration is initialized. No hosted `db push`, `db pull`, migration, role, credential, or setting change was run.
+- Supabase development branches have not been created. The branch compute quote is **US$0.01344/hour**; provisioning requires a separate explicit cost confirmation. No branch compute is currently running.
+
+**Current disposition:** Phase 7.4 implementation, SQL, Python adapters, managed-like non-superuser migration/rollback rehearsal, actual LOGIN and HTTP acceptance are locally complete. Hosted Supabase equivalent-staging and deployment remain not authorized. No password was provisioned, no paid provider request or worker was activated, and v1.0 remains NOT RELEASED.
