@@ -7,6 +7,8 @@
 - The owner chose to skip the hosted Supabase development-branch / managed-equivalent staging step to avoid the quoted US$0.01344/hour compute charge. No branch was created and no recurring branch compute is running.
 - This is an explicit SKIP/WAIVER, not a successful managed-Supabase staging result. Local PostgreSQL 17.11 managed-like acceptance remains valid only for the tested local restore and does not certify Supabase platform behavior.
 - Production migration, hosted credentials, read-only API cutover, additional paid AI, worker activation, Telegram, MT5/HFM, trading, and v1.0 release remain unauthorized. The separate production backup/recovery, deployment-window, rollback-operator, credential and owner-signoff gates are still open.
+- The Supabase organization uses the Free plan, which does not include automatic daily database backups or PITR. The existing 2026-11-11 custom-format PG17.11 dump (495,806 bytes; SHA-256 `FC83D455703EC0A66BC656EFCC82D6D9D6513AFFDCFF94C96C63CCEEE2A12333`; 872 TOC entries) passed archive-list verification on 2026-11-12 and was used for the local PG17.11 restore rehearsal. It is local-only, not off-site, and not a fresh pre-cutover snapshot.
+- Before any production migration, create a fresh Supabase-aware manual roles/schema/data export, store a protected off-site copy, verify the archives, and perform an isolated restore rehearsal. Supabase's documented CLI export uses Docker and filters managed schemas; Docker and the CLI are not available as workstation PATH commands at present. Storage API objects and custom-role passwords require separate handling.
 - Do not weaken production guards or treat this decision as permission to apply migrations to the hosted project.
 
 ## 1. Verified technical result
