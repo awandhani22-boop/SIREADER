@@ -1,23 +1,15 @@
-## Current execution status — 2026-11-09
+## Current execution status — 2026-11-10
 
 | Workstream | Status |
 |---|---|
-| Phase 3.3 — SSE observability | COMPLETE (owner confirmed) |
-| Phase 4.1 — Worker contracts and registry | Implemented; backend CI PASS |
-| Phase 4.2 — Provider and Cost Guard integration | Implemented; backend CI PASS; live provider disabled pending owner approval |
-| Phase 4.3 — Durable task runtime | Implemented; disposable PostgreSQL migration/privilege/recovery, multi-process heartbeat, and bounded payload-retention CI PASS |
-| Phase 4.4 — LIVE presentation and workforce operations | Implemented; frontend CI PASS; owner-run Windows/Chrome acceptance PASS |
-| Phase 4 overall | COMPLETE — automated CI and owner-run browser acceptance PASS (2026-11-09) |
-| Phase 5.1 — Human-supervised operations | COMPLETE — automated CI and owner-run browser acceptance PASS (2026-11-09) |
-| Phase 5.2.1 — Lifecycle audit ledger & timeline API | COMPLETE — hardened ledger, append-only trigger, deterministic sequence, actor attribution, safe timeline API & BFF (2026-11-09) |
-| Phase 5.2.2 — Human output review | ACTIVE — review inbox, approve/edit/reject, human decision audit |
-| Phase 5.2.3 — Budget governance & Cost Guard visibility | PENDING 5.2.2 |
-| Phase 5.2.4 — Policy & model tier escalation | PENDING 5.2.3 |
-| Phase 5.2.5 — UI integration & acceptance | PENDING 5.2.4 |
+| Phase 5 implementation and applicable acceptance | COMPLETE |
+| Phase 6.1–6.3 — personal local security, 3D scale baseline, operations | COMPLETE for local single-user scope |
+| Phase 7.1 — offline worker runtime assurance | COMPLETE — 31 new unit tests pass |
+| Phase 7.2 — one-worker local MOCK pilot | NEXT — requires a fresh disposable PostgreSQL cluster; not started |
+| Phase 7.3 — single-worker LIVE provider canary | NOT AUTHORIZED — requires provider/model and explicit budget approval |
+| SIREADER Virtual Office v1.0 | NOT RELEASED |
 
-Phase 5.1 source implementation and automated CI now pass on the isolated phase-5-implementation branches. The remaining exit gate is owner-side local database setup and Windows/Chrome acceptance; the work is not yet operator-ready for LIVE writes. No live database migration, paid provider request, trading order, or merge to `main` is implied.
-
-See [PHASE_4_EXECUTION_LOG.md](./PHASE_4_EXECUTION_LOG.md).
+Phase 6 evidence is in `docs/PHASE_6_CLOSEOUT.md`. Phase 7 scope, boundaries and gates are in `docs/PHASE_7_WORKER_RUNTIME_PLAN.md`. No worker process was started, no provider was called, and no application database, Supabase LIVE, Telegram, MT5/HFM or GitHub remote was modified.
 
 ---
 
@@ -26,7 +18,7 @@ See [PHASE_4_EXECUTION_LOG.md](./PHASE_4_EXECUTION_LOG.md).
 **Document status:** ROADMAP LOCKED — source of truth for phase order, scope, and acceptance gates  
 **Repository:** `awandhani22-boop/SIREADER`  
 **Current implementation branch:** `phase-5-implementation` (isolated from `main`; matching branch exists in both SIREADER repositories). The accepted Phase 4 branch remains the baseline.  
-**Last roadmap review:** 2026-11-09
+**Last roadmap review:** 2026-11-10
 
 This document governs the SIREADER Virtual Office project from the existing 3D frontend through the final v1.0 release. **The canonical product mission and meaning of the final product are in [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md); read that before every task.** Keep this roadmap and `docs/PROJECT_STATE.md` aligned after every milestone. Do not create a replacement frontend or restart completed phases.
 
@@ -73,26 +65,29 @@ The existing React/Three.js project is the product. Preserve and extend it; do n
 
 | Phase | Name | Status |
 |---|---|---|
-| 1 | Project Foundation & 3D Office Visualization | COMPLETE per current project state |
+| 1 | Project Foundation & 3D Office Visualization | COMPLETE |
 | 2.1 | Worker Intelligence Foundation | COMPLETE |
 | 2.2 | Global Task Dispatcher & Deterministic Simulation | COMPLETE |
 | 2.3 | Browser QA, Visual Closure & Simulation UX Stabilization | COMPLETE WITH DEFERRED ITEM |
-| 3.1 | Read-Only Observability API Gateway | COMPLETE in Python backend repository |
-| 3.2 | Secure BFF & Frontend Observability Integration | COMPLETE — Batches 1–6 CI-passed; owner-reported local development, LIVE, auth/session, isolation, logout, and production-like acceptance confirmed 2026-11-09 |
-| 3.3 | Real-Time Observability (SSE) | IMPLEMENTATION IN PROGRESS — core owner manual event-delivery, targeted refresh, backend-restart recovery, and four-stream five-minute smoke passed; supplementary gates remain open |
-| 4.1 | Real Worker Runtime Contract & Registry | IMPLEMENTED — BACKEND CI PASS |
-| 4.2 | AI Provider Routing, Execution & Cost Guard | IMPLEMENTED, LIVE DISABLED — BACKEND CI PASS |
-| 4.3 | Persistent Backend Task Orchestration | IMPLEMENTED — DISPOSABLE POSTGRES CI PASS |
-| 4.4 | Frontend Live Runtime Adapter & Demo/Live Separation | IMPLEMENTED IN CODE — FRONTEND CI PASS; OWNER BROWSER ACCEPTANCE PENDING |
+| 3.1 | Read-Only Observability API Gateway | COMPLETE |
+| 3.2 | Secure BFF & Frontend Observability Integration | COMPLETE |
+| 3.3 | Real-Time Observability (SSE) | COMPLETE |
+| 4.1 | Real Worker Runtime Contract & Registry | COMPLETE |
+| 4.2 | AI Provider Routing, Execution & Cost Guard | IMPLEMENTED; LIVE PROVIDER DISABLED |
+| 4.3 | Persistent Backend Task Orchestration | COMPLETE |
+| 4.4 | Frontend Live Runtime Adapter & Demo/Live Separation | COMPLETE |
 | 5.1 | Human-Supervised Worker and Task Operations | COMPLETE |
-| 5.2 | Review, Audit, Budgets & Governance | ACTIVE |
-| 6.1 | Security, Reliability & Failure Recovery | PLANNED |
-| 6.2 | 3D Asset, Performance & Scale Readiness | PLANNED |
-| 6.3 | Packaging, Deployment & Release Acceptance | PLANNED |
+| 5.2 | Review, Audit, Budgets & Governance | COMPLETE |
+| 5 | Human-Supervised Operations Closeout | COMPLETE FOR IMPLEMENTATION AND APPLICABLE ACCEPTANCE |
+| 6.1 | Personal Security & Reliability | COMPLETE — personal local scope |
+| 6.2 | 3D Scene Scale & Performance Readiness | COMPLETE — layout tests 7/50/100; GPU profiling deferred |
+| 6.3 | Local Packaging & Operations | COMPLETE — local runbook and diagnostics |
+| 7.1 | Offline Worker Runtime Assurance | COMPLETE — 31 dedicated unit tests |
+| 7.2 | One-Worker Local MOCK Pilot | NEXT — disposable PostgreSQL only |
+| 7.3 | Single-Worker LIVE Provider Canary | NOT AUTHORIZED — explicit provider/budget approval required |
 | FINAL | SIREADER Virtual Office v1.0 | NOT RELEASED |
 
-Status labels are evidence-based. A phase is not complete because its files exist; its acceptance criteria must pass and its result must be recorded in `docs/PROJECT_STATE.md`.
-
+Status labels are evidence-based. Phase 6 is closed for the accepted personal local scope. Phase 7.1 offline worker assurance is complete; the isolated MOCK pilot and any LIVE provider canary remain separately gated.
 ---
 
 ## 4. Phase definitions and acceptance gates
@@ -387,8 +382,10 @@ Exit gate:
 - Budget limit tests prevent disallowed provider calls.
 - Human review and escalation paths are covered by tests.
 
-## Phase 6.1 — Security, Reliability & Failure Recovery
-**Status: PLANNED.**
+## Phase 6.1 — Personal Security & Reliability
+**Status: COMPLETE — personal local single-user scope (2026-11-10).**
+
+Scope note: this app keeps loopback-only access, operator login/CSRF, server-side service tokens, narrow DB permissions, validation, safe logs, fail-closed states, dependency review and synthetic recovery tests. Strict CSP, public/LAN hosting, multi-user identity, enterprise monitoring and automated off-device backups are explicitly deferred. See [PHASE_6_1_SECURITY_RELIABILITY_PLAN.md](PHASE_6_1_SECURITY_RELIABILITY_PLAN.md).
 
 Requirements:
 - Threat model and least-privilege review across browser, BFF, API Gateway, backend, database, and provider boundaries.
@@ -403,8 +400,10 @@ Exit gate:
 - Recovery and credential-rotation procedures are exercised.
 - Failure modes do not silently switch to unsafe behavior.
 
-## Phase 6.2 — 3D Asset, Performance & Scale Readiness
-**Status: PLANNED.**
+## Phase 6.2 — 3D Scene Scale & Performance Readiness
+
+Scope note: LIVE scene rendering now follows the validated backend roster. Automated tests cover 7/50/100-worker layouts, with a 175-worker single-floor cap and automatic DPR-1/no-shadow fallback above 25 LIVE avatars. The current procedural avatar remains in use; final GLB assets and actual 100-avatar Chrome FPS/heap profiling are deferred until there is a real need. See PHASE_6_CLOSEOUT.md.
+**Status: COMPLETE — local personal-use scope (2026-11-10).**
 
 Requirements:
 - Audit GLB/glTF asset source, license, attribution, loading, animation clips, and fallback.
@@ -420,8 +419,10 @@ Exit gate:
 - Asset licenses and credits are complete.
 - Worker scale does not duplicate scene JSX or cause uncontrolled rerenders.
 
-## Phase 6.3 — Packaging, Deployment & Release Acceptance
-**Status: PLANNED.**
+## Phase 6.3 — Local Packaging & Operations
+
+Scope note: LOCAL_INSTALL_AND_OPERATIONS.md documents setup, start/stop, production-like local launch, backup/restore, update and rollback. scripts/check-local.ps1 was executed successfully for all five local services. A signed installer, container/public deployment, remote access and multi-user support are outside the personal-use scope.
+**Status: COMPLETE — local personal-use scope (2026-11-10).**
 
 Requirements:
 - Choose and document the supported deployment topology (local single-user first; remote/multi-user only with a separate security design).
@@ -436,6 +437,18 @@ Exit gate:
 - All required automated and manual acceptance checks pass.
 - No unresolved critical/high release blocker remains.
 - `docs/PROJECT_STATE.md` records the release commit and evidence.
+
+## Phase 7 — Controlled Worker Runtime Activation
+**Status: IN PROGRESS — 7.1 offline assurance COMPLETE; 7.2 MOCK pilot NEXT; 7.3 LIVE canary NOT AUTHORIZED.**
+
+Phase 7 validates the Python worker process itself, not more UI. Detailed gates and safety rules are in `docs/PHASE_7_WORKER_RUNTIME_PLAN.md`.
+
+- **7.1 Offline Worker Runtime Assurance — COMPLETE:** 31 new provider/policy/runtime unit tests pass; outbound provider calls are replaced by fakes; worker runtime remains disabled by default.
+- **7.2 One-Worker Local MOCK Pilot — NEXT:** execute one foreground Haiku worker against a newly created temporary PostgreSQL 16.6 cluster and one synthetic summarization task. Verify heartbeat, task lifecycle, SIMULATED result, audit trail, stop/restart and cleanup. Never use the existing `sireader_disposable` database.
+- **7.3 Single-Worker LIVE Provider Canary — NOT AUTHORIZED:** requires explicit owner selection of provider/model, credential provisioning, positive per-task cap, daily/monthly budget, one synthetic task and reconciliation procedure. No automatic retry or tier escalation after UNKNOWN.
+- **7.4 Limited General-Purpose Rollout — BLOCKED:** consider one general-purpose worker at a time only after 7.3 passes. Decision Engineer and Market Monitor stay excluded from provider execution.
+
+Exit gate: an actual foreground worker process is independently visible through backend heartbeat; one approved task completes with correct provenance and Cost Guard/audit attribution; human-review and stop/recovery behavior pass; no trading path is enabled. If provider spending is not desired, the owner may stop after 7.2 and keep local MOCK mode; the v1.0 release scope must then be explicitly revised.
 
 ## FINAL — SIREADER Virtual Office v1.0
 **Status: NOT RELEASED.**
@@ -464,10 +477,13 @@ The approved order is:
 3. **Phase 3.3** — add SSE only after snapshot integration is stable.
 4. **Phase 4.1 → 4.2 → 4.3 → 4.4** — define and implement the real worker runtime, provider execution, backend orchestration, then frontend live adapter.
 5. **Phase 5.1 → 5.2** — add safe human-supervised worker/task operations and governance.
-6. **Phase 6.1 → 6.2 → 6.3** — harden security, assets, performance, packaging, and release.
-7. **FINAL v1.0** — release only after all applicable acceptance gates pass.
+6. **Phase 6.1 → 6.2 → 6.3** — harden security, 3D scale baseline, and local operations.
+7. **Phase 7.1 → 7.2** — verify worker runtime offline, then run one worker in local MOCK mode on a disposable database.
 
-Phase 3.1 is already complete in the separate Python backend repository and does not mean Phase 2.3 can be skipped.
+
+
+8. **Phase 7.3 → 7.4** — only after explicit owner approval, run a capped LIVE provider canary and consider gradual rollout.
+9. **FINAL v1.0** — release only after all applicable acceptance gates pass or the owner explicitly revises scope.
 
 ## 6. Project governance
 
@@ -506,3 +522,186 @@ The command-role database path now passes a transactional APPROVE and EDIT probe
 ### Final review-boundary verification — 2026-11-10
 
 Local review-security migrations v1/v2/v3 are applied only to `sireader_disposable`. Transactional database verification as `sireader_workforce_cmd` passed APPROVE, EDIT, sanitization, result release and both audit-event inserts; synthetic rows/events were rolled back. Migration v3 permits PENDING payload row locks while keeping updates EDITED-only. Activity ORM insert no longer uses implicit RETURNING, preserving INSERT-only access to the immutable ledger. Backend tests: 172 passed, 44 skipped (PostgreSQL integration requires the disposable CI URL). The final owner browser acceptance gate remains open.
+
+
+## Latest verified execution — 2026-11-10 (Phase 6 closeout)
+
+**Current position: Phase 6.1, 6.2 and 6.3 COMPLETE for the personal local single-user scope.** This scope adjustment intentionally defers enterprise/public-hosting requirements; the detailed evidence and limitations are in PHASE_6_CLOSEOUT.md.
+
+- Phase 6.1: local security baseline, BFF review-detail allowlist fix, standard security headers, dependency audit, synthetic password/token rotation tests, synthetic PostgreSQL backup/restore rehearsal, and local recovery documentation are complete. Strict CSP and enterprise controls are deferred.
+- Phase 6.2: LIVE scene now builds avatars and world badges from the validated backend roster. Seven authored worker positions are preserved; 50- and 100-worker deterministic layout tests pass; the single-floor layout cap is 175. Above 25 LIVE avatars, renderer DPR falls to 1 and shadows are disabled. Final GLB assets and actual 100-avatar Chrome FPS/heap measurement are deferred and explicitly recorded.
+- Phase 6.3: local install/operations runbook and read-only local diagnostics script are complete. The diagnostic script passed for loopback ports 3000, 3001, 8000, 8010 and 5432; browser UI returned HTTP 200.
+- Frontend: 422 tests, 421 passed, 0 failed, 1 skipped because the active BFF owns the fixed port 3001; TypeScript and production build passed.
+- Backend: current local suite 185 passed / 44 skipped because no disposable PostgreSQL test URL was configured. Earlier Phase 5 full suite on a temporary PostgreSQL 16.6 cluster passed 229/229 with no skips.
+- Build warning remains: primary JS chunk approximately 1.51 MB minified / 405 KB gzip. React act(...) test notices and a Three.js CommonJS deprecation notice are non-failing.
+- Final Virtual Office v1.0 remains NOT RELEASED: real worker/provider activation and actual 100-avatar runtime performance acceptance are not claimed.
+- All changes remain local; no GitHub push/merge. Existing untracked patch files are preserved. No Supabase LIVE, provider, Telegram, MT5/HFM or trading action was performed.
+
+See PHASE_6_CLOSEOUT.md, PHASE_6_1_SECURITY_RELIABILITY_PLAN.md and LOCAL_INSTALL_AND_OPERATIONS.md for the accepted scope, commands and evidence.
+
+
+## Withdrawn assistant-authored V1 scope note — 2026-11-11
+
+This section was written by the assistant without owner approval and is withdrawn. It did not authorize a V1 scope revision or remove any locked release gate. Official Virtual Office v1.0 remains NOT RELEASED; use the latest phase audit update at the end of this roadmap.
+
+Phase 7.2 MOCK pilot evidence is in `backend/docs/PHASE_7_AI_HARNESS.md`; current verification, exact test counts, runtime caveats and known limitations are in `../SIREADER_V1_CLOSEOUT_2026-11-11.md`. Phase 7.3 LIVE provider canary, limited live-worker rollout, Supabase LIVE migration/cutover, production Telegram, MT5/HFM and trading execution remain separate workstreams requiring their own explicit scope, credentials, budget and authorization. This withdrawn note does not redefine the release scope or authorize those operations.
+
+No additional V1 phase is planned. Any request to add deployment/live capabilities must first define a separate V2 scope; do not silently extend the V1 finish line.
+
+
+V2 security precondition: the independent OmniRoute Node.js listener must require API-key authentication and have intentional restricted network exposure. Verified 2026-11-11: `OMNIROUTE_SERVER_HOST=127.0.0.1`, `REQUIRE_API_KEY=true`, listener only on `127.0.0.1:20128`, anonymous `GET /v1/models` returns 401, and the SIREADER key returns 200. Windows Firewall reachability is still unverified. Keep AI/worker runtime disabled until the separate spending authorization is approved.
+
+
+## Authoritative phase status correction — 2026-11-11
+
+This section supersedes stale Phase 7.2 “NEXT” entries and the prior assistant-generated “V1 Local Safe MVP COMPLETE” appendix. That assistant-added status was not owner-authorized and is withdrawn. **The official locked roadmap result remains: SIREADER Virtual Office v1.0 — NOT RELEASED.**
+
+The latest cross-repository audit is `../SIREADER_V1_CLOSEOUT_2026-11-11.md`. It distinguishes:
+- Phase 7.2's completed one-cycle MOCK `run_worker_once` database acceptance from the still-unproven foreground OS process/API-visible heartbeat/stop-restart gate. That earlier status is superseded: Phase 7.2 is now COMPLETE based on the fresh PG16.6 process-level acceptance recorded below.
+- Phase 3.3 is COMPLETE — the owner explicitly confirmed completion on 2026-11-11; the stale remaining-gate entry in the detailed execution log is superseded by its owner-confirmation addendum.
+- Phase 5/6 local acceptance from deployment to Supabase LIVE or a production workforce.
+- Phase 7.3 NOT AUTHORIZED and Phase 7.4 BLOCKED.
+
+Do not skip these gates or relabel v1.0 as released without explicit owner-approved scope revision and evidence.
+
+
+## Latest phase audit update — 2026-11-11
+
+This is the latest evidence-based status override. **SIREADER Virtual Office v1.0 remains NOT RELEASED.** This update does not change product scope or authorize paid/production operations.
+
+- Phase 7.2 is now **COMPLETE**. A fresh isolated PostgreSQL 16.6 database named sireader_test on loopback port 55441 was used. A real foreground Haiku MOCK process was observed READY through a temporary read-only API, completed one benign synthetic task with SIMULATED provenance, emitted a complete four-event task timeline, exposed a PENDING review while the task result remained quarantined, shut down via Ctrl+C to STOPPED, restarted under a new instance ID, stopped cleanly again, and returned STALE when a test-only heartbeat timestamp was moved two minutes into the past. The temporary API, cluster, keys/certificates and temp directory were removed. Main sireader_disposable and Supabase LIVE were not touched.
+- The legacy local Human Review migration was corrected to create the two sireader_view_owner RLS SELECT policies required by its security-barrier view. The PostgreSQL privilege fixture now seeds a PENDING review, checks that the read-only API role sees it only through the view, and verifies direct reads of review tables/payload are denied. Focused PG16.6 privilege/review regression: **22 passed**.
+- After the changes: backend offline tests/ suite **237 passed, 46 skipped, 0 failed**; compileall and pip check pass. Skips require a separate disposable PostgreSQL URL.
+- Phase 3.3 is COMPLETE — owner confirmed 2026-11-11. The detailed SSE execution log now contains the owner's confirmation; older manual-gate wording is historical and superseded.
+- Phase 7.3 remains **NOT AUTHORIZED**. Phase 7.4 remains BLOCKED. OmniRoute binding/authentication and network exposure must be reviewed before any live provider canary.
+- Supabase workforce cutover/full platform restore, production Telegram, MT5/HFM and trading execution remain not applied/not authorized. Runtime switches stay fail-closed; DRY_RUN and manual approval remain enabled.
+
+Detailed cross-repository record: ../SIREADER_V1_CLOSEOUT_2026-11-11.md. Do not label v1.0 released on the basis of local MOCK acceptance.
+
+
+## Phase 7.3 preflight update and owner confirmation — 2026-11-11
+
+- Phase 3.3 is COMPLETE — owner confirmed. The owner explicitly corrected the prior assistant audit in this conversation; stale wording that called it open/ambiguous is superseded. No 3.3 work remains.
+- Phase 7.3 offline readiness is hardened with an independent hard daily USD cap (default zero/fail-closed), daily USD observability in API and dashboard, and regression tests.
+- Backend tests/: 237 passed / 46 skipped; focused billing + telemetry API tests: 82 passed; frontend: 422 passed; TypeScript and production build passed.
+- The LIVE canary itself remains NOT AUTHORIZED / NOT RUN. Runtime is still MOCK/disabled, per-task USD cap is zero and daily USD cap is zero by default. OmniRoute is now loopback-bound and requires API-key auth; unauthenticated `/v1/models` returned 401 and the SIREADER key returned 200. Firewall exposure remains unverified. Require explicit per-task/daily/monthly budget approval and a one-request authorization before making a paid request.
+- Phase 7.4 remains BLOCKED pending successful canary and cost reconciliation. Production Supabase, Telegram, MT5/HFM and trading are not activated. Virtual Office v1.0 remains NOT RELEASED.
+
+
+## Phase 7.3 status override — 2026-11-11
+
+Phase 7.3 is **COMPLETE**: the owner-approved one-request Haiku 5.5 canary passed on a disposable SSL PostgreSQL 16.6 database. One synthetic QUICK_RESEARCH task completed in one Haiku attempt. OmniRoute independently logged one successful `POST /v1/messages` with 249 input / 33 output tokens. Cost Guard calculated USD 0.000042 actual and zero remaining reservation within the approved 1-cent task/daily caps and $5 monthly test-ledger ceiling. OmniRoute did not provide an independent provider_cost_usd value; the amount is price-based accounting, not an invoice assertion.
+
+The global application/Supabase ledger was checked read-only before and after and was not mutated; it remains at zero actual/reserved and daily cap zero. Carry the one-off USD 0.000042 manually into future budget reconciliation. Persistent backend flags remain fail-closed. No production DB, Telegram, broker, trading or additional live provider action occurred.
+
+Phase 7.4 remains **BLOCKED / not authorized**; a single canary is not permission to roll out more workers. Virtual Office v1.0 remains **NOT RELEASED**.
+
+
+## Phase 7.4 offline guard implementation — 2026-11-11
+
+The Phase 7.4 preparation work adds a single global PostgreSQL-backed LIVE provider slot for AI workers, not a worker activation. Transaction advisory locking and durable `PROVIDER_REQUESTED` / `UNKNOWN` attempt states prevent overlapping paid requests across processes; unresolved UNKNOWN outcomes remain quarantined until explicit reconciliation. The SECURITY DEFINER gate is owned by `sireader_view_owner`, guarded to database `sireader_test`, executable by the local worker runtime `postgres` login, and denied to the separate Command API role, API read-only role, and PUBLIC.
+
+Offline tests: backend `tests/` 251 passed / 47 skipped; full root backend suite 628 passed / 47 skipped / 0 failed; worker/provider focus 81 passed; compileall and diff check passed. PostgreSQL gate integration/rollback/concurrency coverage has been added but remains OPEN pending an isolated PostgreSQL test cluster. No paid request or worker was activated. Phase 7.4 LIVE remains BLOCKED pending those tests and separate explicit owner approval; Virtual Office v1.0 remains NOT RELEASED. See [Phase 7.4 limited worker rollout plan](PHASE_7_4_LIMITED_WORKER_ROLLOUT_PLAN.md).
+
+
+### Root regression interpreter update — 2026-11-11
+
+Using the pre-existing `C:\SIREADER\.venv` (which already includes MetaTrader5) to run the full backend root suite on the unified backend completed **628 passed, 47 skipped, 0 failed**. No package was installed. The system interpreter still lacks MetaTrader5; PostgreSQL integration tests remain skipped because no disposable test URL/complete local server is available. Phase 7.4 LIVE remains BLOCKED.
+
+
+## Latest status override — Phase 7.4 technical validation — 2026-11-11
+
+This is the newest status entry and supersedes earlier statements that PostgreSQL integration tests were unrun or skipped.
+
+- Phase 7.4 implementation and local PostgreSQL verification: **PASS**. A disposable EDB PostgreSQL 18.6 cluster and database `sireader_test` were used only on loopback port 55442; 24 migration/privilege/RLS/concurrency integration tests passed, including rollback/forward and the cross-worker one-slot race.
+- Full backend root suite: **675 passed, 0 skipped, 0 failed**; backend compileall passed.
+- Frontend: **422 passed, 0 failed**; TypeScript check passed; Vite production build passed. Non-blocking bundle-size/deprecation warnings remain documented in PROJECT_STATE.md.
+- Temporary database, binaries, archive, and data directory were removed; port 55442 is closed. No database service was installed.
+- Persisted runtime remains OFF/MOCK, live provider OFF, per-task/daily budget zero, trading DRY_RUN, auto-execution OFF. No additional paid request, live worker, Supabase LIVE migration, Telegram, MT5/HFM, or trading operation occurred.
+
+**Gate distinction:** Phase 7.4 code/database technical verification is complete. The actual limited LIVE worker rollout is still **NOT AUTHORIZED** and cannot be inferred from the earlier one-request Haiku canary. It needs a new owner authorization with exact worker/model, request count, synthetic task, cost limits, and time window. Supabase production cutover remains separate. **Virtual Office v1.0 remains NOT RELEASED.**
+
+
+## Latest operational readiness clarification — 2026-11-11
+
+The latest read-only workstation check confirms the Phase 7.4 test work is complete, but it does not make the current worker database deployment-ready:
+
+- The tested gate migration is deliberately restricted to `sireader_test`; it is not to be applied to the configured worker database.
+- Sanitized backend configuration classifies `DATABASE_URL` as a remote/pooler target, database `postgres`, using a `postgres.<project-ref>`-style identity. The dedicated Command API URL instead targets loopback `sireader_disposable` with role `sireader_workforce_cmd`.
+- All documented local service ports (3000/3001/8000/8010/5432) were absent. The read-only diagnostics script made no changes; no service was started because the app's current DB targets are split between remote and local.
+- Production/staging migration and least-privilege worker-role design, isolated staging rehearsal, production deployment approval, and new budgeted LIVE-run approval remain outstanding. Do not weaken the `sireader_test` migration guard or reuse the previous one-request Haiku authorization.
+
+**The next safe step is architecture/security review plus a staging migration plan—not launching a live worker.** Phase 7.4 local technical acceptance remains PASS; LIVE rollout remains blocked and Virtual Office v1.0 remains NOT RELEASED.
+
+
+## Latest worker DB hardening and release-gate clarification — 2026-11-11
+
+A dedicated worker database boundary is now enforced in source:
+
+- Non-MOCK or live-provider-enabled workers require `WORKER_DATABASE_URL` and the `sireader_worker_runtime` database identity (direct or pooler-style). Remote worker connections require TLS.
+- The worker runtime no longer imports the broad core `DATABASE_URL` session factory. It fails before heartbeat/claim/start when the dedicated URL/identity/TLS contract is not met.
+- Only local MOCK with live-provider disabled may use the old session factory. The real backend `.env` remains unchanged and `WORKER_DATABASE_URL` is unset.
+
+Verification after this source change: **690 passed, 1 skipped, 0 failed** on a fresh disposable PostgreSQL 16.6 `sireader_test` cluster; 27 focused DB-guard/runtime tests passed; compileall and diff check passed. Temporary cluster cleaned, port 55444 closed.
+
+The current effective `SIREADER_API_DATABASE_URL` is also remote/pooler with the read-only role, not local as described in older workspace notes. Historical production snapshot docs record six existing views; the 14-view workforce schema was verified only in isolated PostgreSQL 17.11 staging. The API startup audit must remain fail-closed until the production migration is approved/applied; local UI services are down.
+
+A dedicated worker DB identity is not yet provisioned. The ORM writer path still needs an explicit RLS/column-grant/trusted-result-release design, and worker polling still includes maintenance/reaper/purge functions that must be separated from ordinary worker authority. No production writer migration, role, Supabase DDL, API cutover, additional paid inference, or worker activation was performed.
+
+**Phase 7.4 code/local technical verification: PASS. Production writer/maintenance design and staging rehearsal: OPEN. Limited LIVE rollout: NOT AUTHORIZED. v1.0: NOT RELEASED.**
+
+
+## Final worker connection boundary update — 2026-11-11
+
+The final source boundary now blocks worker fallback to the remote core database even when provider mode is MOCK. Legacy core session fallback is limited to MOCK/live-provider-OFF and explicitly loopback disposable/test DB names. A dedicated `WORKER_DATABASE_URL` uses only the `sireader_worker_runtime` role direct/pooler identity, explicit database, no fragments or libpq target-override query options, one approved TLS mode, and bounded connection/pool timeouts.
+
+Final tests after all guard changes: **42 focused worker tests passed; 702 backend tests passed, 1 skipped, 0 failed** on disposable PostgreSQL 16.6. The test cluster was stopped and removed; port 55448 is closed. Compileall and diff check pass.
+
+The real `.env` remains without `WORKER_DATABASE_URL`; no worker production role or SQL migration was deployed. Production maintenance separation, RLS/column grants, trusted result-release boundary, staging rehearsal, Supabase API cutover, and fresh live/budget authorization remain unapproved. **Phase 7.4 local technical verification PASS; LIVE rollout BLOCKED; v1.0 NOT RELEASED.**
+
+
+## 2026-11-11 — worker maintenance separation update
+
+- Removed lease recovery, deadline expiry, stale-review expiry, and task/review payload purging from the normal worker polling path.
+- Ordinary worker runtime no longer imports those maintenance repository functions; a regression test enforces this boundary.
+- Maintenance remains a separate one-shot command with its existing local-only database identity guard. A production maintenance identity and database-enforced bounded operations are still NOT designed/approved/deployed.
+- Verification after this code change: focused runtime/review suite 60 passed, 17 skipped. The previous full PostgreSQL 16 run (702 passed, 1 skipped) predates this change; it is not claimed as a post-change full-suite result. No PostgreSQL server binaries/service were available for a fresh full DB-backed run during this update.
+- Release remains BLOCKED: production worker role/migration, production maintenance role, database-enforced lease/transition/review release boundary, staging rehearsal, recovery approval and limited rollout remain open. No Supabase LIVE, paid AI, Telegram, MT5/HFM or trading actions performed.
+
+
+## Post-separation verification update — 2026-11-11
+
+After removing the obsolete runtime fixture dependency on `_last_maintenance_at`, the full backend test suite was rerun without a PostgreSQL test service configured: **657 passed, 47 skipped, 0 failed**. The skipped tests include database-backed PostgreSQL integration/migration/security checks because `SIREADER_TEST_POSTGRES_URL` was intentionally unset and no local PostgreSQL service/binaries were available. Python compileall and `git diff --check` both passed. This is not a substitute for the PG16/PG17 migration, ACL, RLS, concurrency, and rollback rehearsal.
+
+
+## Static writer-security review deliverable — 2026-11-11
+
+Added backend/docs/PRODUCTION_WORKER_WRITER_SECURITY_REVIEW_2026-11-11.md. It records the ORM operation inventory, least-privilege role separation, staging negative-test matrix, and critical findings: direct ORM writes are not yet a production writer contract; the current normal-result trigger alone does not bind publication to the prior task lease/attempt; review inserts need a transaction-scoped completion proof; a shared worker DB login cannot independently attest per-worker identity; and activity-event actor integrity needs DB enforcement. These are design blockers, not production changes. Do not provision the worker role or deploy writer SQL until these are remediated and staging-tested.
+
+
+## Worker DB command contract — 2026-11-11
+
+Added backend/docs/WORKER_DATABASE_COMMAND_CONTRACT_V1_2026-11-11.md. This is the target API/role/migration/acceptance contract for replacing direct ORM mutations with narrow database functions. It defines separate worker runtime, maintenance, command API, review operator, read-only API and NOLOGIN view-owner authorities, including transaction-scoped lease/attempt validation and result quarantine/release. It is design-only, not executable SQL. Independent security review is still required before migration authoring.
+
+Staging tooling check: Docker, Podman, PostgreSQL server/client binaries (postgres, initdb, pg_ctl, psql), and Supabase CLI were not found on the workstation during this continuation. Therefore a PG17 staging environment and DB-backed ACL/RLS/concurrency/rollback rehearsal cannot be honestly claimed. Production stays untouched and LIVE remains blocked.
+
+
+## Superseding PG17.11 read-model/API staging acceptance — 2026-11-11
+
+A fresh user-space PostgreSQL 17.11 environment is now available at `C:\SIREADER-STAGING\pg17` (EDB archive SHA-256 verified; no Windows service or Administrator install). Core production backup schemas were restored to loopback-only staging, four read-model/security-barrier migrations applied, and the actual API read-only privilege audit passed: 14/14 approved views, ownership and security barriers; no API base-table or write privileges; 24/24 public base tables have RLS. Fourteen authenticated API endpoint probes returned 200, unauthenticated probe returned 401, and the explicit SelectorEventLoop SSE listener check passed.
+
+Backend 657 passed / 47 skipped; PG17 privilege tests 23 passed; Virtual Office tests 422 passed; TypeScript, production build, compileall and diff checks passed. The build reports a non-blocking large JavaScript chunk warning.
+
+Detailed evidence: `backend/docs/SIREADER_PG17_STAGING_REHEARSAL_2026-11-11.md`. This supersedes the prior note that a PG17 environment could not be created. It does not validate the proposed production worker writer, command/maintenance/review identities, ORM adapter conversion, or trusted lease-bound result release. No production change or LIVE action. **Production rollout remains BLOCKED; v1.0 NOT RELEASED.**
+
+## Latest Phase 7.4 worker database command-layer update ? 2026-11-11
+
+This dated status supersedes earlier Phase 7.4 notes that described only the provider-slot test or said the worker database command layer was not yet staged.
+
+- Phase 7.1, 7.2 and 7.3 are COMPLETE. Phase 7.4 worker command code, runtime adapter and disposable PostgreSQL technical acceptance are COMPLETE.
+- The worker command SQL was applied to isolated PostgreSQL 17.11 sireader_stage; SQL acceptance and Python adapter smoke tests passed, with synthetic writes rolled back. The earlier separate PostgreSQL 18.6 sireader_test global provider-slot concurrency/ACL suite remains valid.
+- Backend final regression after credential-boundary hardening: 670 passed, 47 skipped; compileall passed. The skipped tests require a dedicated PostgreSQL test URL; separate staging integration evidence is recorded in backend acceptance documents. Virtual Office: 422 passed; TypeScript and production build passed.
+- Worker Anthropic execution now requires the explicit Anthropic provider mode and dedicated ANTHROPIC_API_KEY; it cannot use the legacy OmniRoute AI_API_KEY as a fallback.
+- Production database login/role provisioning, production-specific writer/maintenance/command/review migration and rollback, final independent security approval, Supabase API cutover and fresh limited-LIVE authorization remain OPEN/BLOCKED. The one-request Phase 7.3 authorization is already consumed.
+- **Next task:** independent security review and production-target migration/role design; keep the existing test-only SQL guards intact. Do not start a LIVE worker or alter Supabase production as part of this task.
+- Runtime flags remain OFF/MOCK, provider LIVE OFF, spending caps zero, trading DRY_RUN and auto-execution OFF. **SIREADER Virtual Office v1.0 remains NOT RELEASED.**
