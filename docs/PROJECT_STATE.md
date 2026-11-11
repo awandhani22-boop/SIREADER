@@ -581,3 +581,43 @@ Staging cleanup: after the PG17.11 rehearsal, both local PostgreSQL clusters wer
 - **Next work:** independent security review of the staging SQL and policy synchronization; design a production-specific migration/role and rollback package for the real remote database; complete production-equivalent staging/backup-recovery review. Only after those pass should a separate owner authorization be considered for a bounded LIVE rollout.
 - **GitHub sync ? 2026-11-11:** all completed milestone commits have been pushed to the existing phase-5-implementation branch in both repositories. Virtual Office milestone commits: 3714d1b (Phase 6 implementation) and c26796b (Phase 7 status/rollout docs). Python Backend milestone commits: 7a49021 (review/output-release hardening), b3c0978 (AI Harness), and fea4a0e (Phase 7.4 worker database command layer + PG17 staging proof). Local upstream tracking was verified at 0 behind / 0 ahead in both repos. main was not changed or merged. Supabase cutover/migration drafts and scratch patch artifacts remain local and uncommitted pending review.
 - **Release:** official SIREADER Virtual Office v1.0 remains **NOT RELEASED**. No Supabase LIVE mutation, additional paid inference, Telegram action, MT5/HFM action or trading operation occurred.
+
+
+## Latest authoritative Phase 7.4 security closeout — 2026-11-11
+
+This addendum supersedes older phase status statements above that list 7.2 as NEXT, 7.3 as NOT AUTHORIZED/NOT RUN, or the worker database command layer as not yet staged. Historical evidence remains retained; use this addendum for the current position.
+
+### Phase status
+
+- Phase 7.1 COMPLETE — offline worker runtime assurance.
+- Phase 7.2 COMPLETE — isolated foreground Haiku MOCK process, synthetic task, API-visible heartbeat/audit/review, stop/restart and stale-heartbeat checks on disposable PG16.6.
+- Phase 7.3 COMPLETE — exactly one owner-authorized synthetic Haiku 5.5 request. Price-table Cost Guard accounting was USD 0.000042; provider invoice cost was not independently reported. The one-shot authorization is consumed.
+- Phase 7.4 local technical implementation and worker-command staging acceptance COMPLETE. Production deployment and further LIVE rollout remain BLOCKED.
+- Official SIREADER Virtual Office v1.0 remains NOT RELEASED.
+
+### Phase 7.4 security review and verified changes
+
+The second-pass review of the staged worker command boundary found and remediated:
+- Database provider reservation now rejects trading-related capabilities, including the Opus DECISION_EVALUATION path.
+- Completion requires an explicit source and matches LIVE provenance to a persisted provider reservation/request ID, approved AI worker identity and USD billing fields; an unreserved completion cannot claim LIVE or provider billing.
+- Worker policy version, action/reason consistency, redaction count and model tier are validated against the registered worker profile.
+- Truncated LIVE output is automatically placed into PENDING human-review quarantine and receives the OUTPUT_TRUNCATED_REVIEW event reason.
+- The result-retention trigger now checks authenticated session_user instead of current_user inside its SECURITY DEFINER context.
+- Python/PostgreSQL policy parity passed: 40 rules, 56 capability/task pairs and 1,120 deterministic decision comparisons; unknown capabilities fail closed.
+
+### Acceptance evidence
+
+- Isolated PostgreSQL 17.11 database sireader_stage on 127.0.0.1:55439 using TLS 1.3; local custom-format backup taken before staging SQL update.
+- Worker command SQL acceptance passed; all fixture task mutations and temporary test roles/policies were rolled back.
+- Python database adapter staging integration passed and rolled back; adapter unit tests 7 passed.
+- Effective ACL audit: seven worker permission roles NOLOGIN/NOINHERIT and without role memberships; zero direct worker grants on public workforce base tables; provider reservation EXECUTE only for Haiku/Sonnet/Opus; all nine workforce base tables RLS-enabled; 18 private schema functions owned by NOLOGIN function owner; SECURITY DEFINER functions use fixed search_path=pg_catalog; no PUBLIC EXECUTE.
+- Backend full suite: 670 passed, 47 skipped, 0 failed; compileall passed. The 47 skips remain gated on SIREADER_TEST_POSTGRES_URL; separate explicit PG17 SQL/adapter/parity checks passed.
+- Virtual Office full suite: 422 passed, TypeScript check passed and production build passed. Existing non-blocking Vite large-bundle warning remains.
+
+### Remaining production gates
+
+Production-specific forward/rollback migration; dedicated per-worker LOGIN/pooler credentials; bounded maintenance database functions; separate Command API and trusted review-operator function boundaries; hosted-Supabase-equivalent staging; production backup/restore and rollback approval; reconciliation of the remote core/read-only DB targets with the local Command API target; and fresh explicit owner approval for any further paid LIVE worker request remain open. WORKER_DATABASE_URL remains unset. The staging SQL is not a production migration.
+
+After testing, local PG17.11 staging was stopped; port 55439 was verified closed and the temporary HBA file was removed. No production Supabase DDL, production role/credential creation, additional paid inference, Telegram, MT5/HFM or trading action occurred. Runtime remains OFF/MOCK, live provider OFF, cost budgets zero and trading DRY_RUN.
+
+Evidence: [Worker Database Security Review](https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/WORKER_DATABASE_SECURITY_REVIEW_CLOSEOUT_2026-11-11.md) and [Worker Database Staging Acceptance](https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/WORKER_DATABASE_COMMAND_LAYER_STAGING_ACCEPTANCE_2026-11-11.md). Keep v1.0 NOT RELEASED until every locked release gate receives its own evidence and owner sign-off.

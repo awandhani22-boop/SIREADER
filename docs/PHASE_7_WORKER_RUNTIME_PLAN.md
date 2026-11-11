@@ -1,9 +1,9 @@
 # Phase 7 — Controlled Worker Runtime Activation
 
-**Status: 7.1 COMPLETE — 7.2 LOCAL MOCK PILOT NEXT**
-**Date:** 2026-11-10
+**Current status (2026-11-11): 7.1–7.3 COMPLETE — 7.4 LOCAL STAGING SECURITY ACCEPTANCE PASS; PRODUCTION ROLLOUT BLOCKED.**
+**Original plan date:** 2026-11-10
 
-## Why this is next
+## Original plan rationale (historical context)
 
 Phases 1–6 establish the Virtual Office, LIVE observability, persistent task orchestration, human review/governance, and the local operating baseline. The remaining product gap before a meaningful v1.0 is not more UI: it is proving that the Python worker process can safely claim, execute, and complete a task using the backend source of truth.
 
@@ -62,7 +62,7 @@ Exit gate:
 
 ### 7.3 — Single-Worker LIVE Provider Canary (separately gated)
 
-**Not authorized by this plan.** This stage can begin only after the owner explicitly selects a provider route/model and approves a monetary cap.
+**The original plan required a separate owner authorization.** That gate was subsequently satisfied for exactly one synthetic Haiku request on 2026-11-11. The single-use authorization is consumed; it does not authorize any additional request or continuing worker execution.
 
 Required owner decisions:
 - Which provider endpoint/account is intended (the current backend uses the server-side OmniRoute adapter).
@@ -176,3 +176,20 @@ A pre-provider claim transaction initially exposed an ORM/database FK-order mism
 Persistent backend .env flags remain OFF/MOCK/zero and the global application ledger was not mutated; it remains 0 actual/reserved with daily cap 0. Carry USD 0.000042 separately into future budget reconciliation. The isolated canary database and cluster are removed after evidence is recorded. OmniRoute remains loopback-only with API-key auth.
 
 This pass does not approve Phase 7.4 or any additional live worker/provider activity. The locked v1.0 release state remains NOT RELEASED.
+
+
+## Latest Phase 7 closeout status — 2026-11-11
+
+This status supersedes the earlier planning snapshot and readiness paragraphs above.
+
+- **7.1 COMPLETE:** offline provider, policy and runtime fail-closed unit coverage.
+- **7.2 COMPLETE:** isolated foreground Haiku MOCK worker process, synthetic task, API-observed heartbeat/audit, graceful stop/restart, and stale-heartbeat acceptance on disposable PostgreSQL 16.6.
+- **7.3 COMPLETE:** exactly one owner-authorized synthetic Haiku 5.5 request was completed and reconciled at a price-table estimate of USD 0.000042. The provider did not independently report invoice cost. This single-use authorization is consumed.
+- **7.4 local technical implementation COMPLETE:** global provider slot/UNKNOWN quarantine, worker database command layer, Python adapter and isolated PostgreSQL 17.11 acceptance are recorded.
+- **7.4 security-review remediation COMPLETE for the staged worker boundary:** trading-related provider capability denial, LIVE reservation/billing provenance, policy metadata/model-tier validation, truncated LIVE output quarantine, maintenance session_user retention authorization, and Python/PostgreSQL review-policy parity (40 rules, 56 capability/task pairs, 1,120 decisions) all passed local staging acceptance.
+- Latest regression: backend 670 passed / 47 skipped; Virtual Office 422 passed; TypeScript and production build passed. Separate PG17 staging SQL and adapter integration passed. The 47 root-suite skips still require SIREADER_TEST_POSTGRES_URL; they are not claimed as passing database integration tests.
+- **Production readiness remains BLOCKED:** production-specific forward/rollback migration, per-worker production LOGIN/pooler role provisioning, production maintenance procedures, Command API and review-operator database boundaries, hosted-Supabase-equivalent staging, production backup/recovery approval, API target reconciliation, and new owner authorization for any additional paid LIVE execution remain open.
+- Runtime remains OFF/MOCK; live provider OFF; worker database URL unset; per-task/daily USD budgets zero; trading DRY_RUN; automatic execution OFF.
+- No production Supabase DDL, credentials, further paid request, Telegram listener, MT5/HFM action or trading order occurred. v1.0 remains NOT RELEASED.
+
+The complete findings are in the [backend security review closeout](https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/WORKER_DATABASE_SECURITY_REVIEW_CLOSEOUT_2026-11-11.md) and the [PG17 staging acceptance report](https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/WORKER_DATABASE_COMMAND_LAYER_STAGING_ACCEPTANCE_2026-11-11.md). The earlier “7.2 NEXT / 7.3 NOT AUTHORIZED” statements above are historical and must not be used as the current phase position.

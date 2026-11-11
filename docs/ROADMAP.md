@@ -1,15 +1,18 @@
-## Current execution status — 2026-11-10
+## Current execution status — 2026-11-11 (supersedes the 2026-11-10 snapshot)
 
 | Workstream | Status |
 |---|---|
 | Phase 5 implementation and applicable acceptance | COMPLETE |
 | Phase 6.1–6.3 — personal local security, 3D scale baseline, operations | COMPLETE for local single-user scope |
-| Phase 7.1 — offline worker runtime assurance | COMPLETE — 31 new unit tests pass |
-| Phase 7.2 — one-worker local MOCK pilot | NEXT — requires a fresh disposable PostgreSQL cluster; not started |
-| Phase 7.3 — single-worker LIVE provider canary | NOT AUTHORIZED — requires provider/model and explicit budget approval |
+| Phase 7.1 — offline worker runtime assurance | COMPLETE |
+| Phase 7.2 — one-worker local MOCK pilot | COMPLETE — foreground process, heartbeat, task/audit, restart and stale checks accepted |
+| Phase 7.3 — single-worker LIVE provider canary | COMPLETE — exactly one owner-authorized synthetic Haiku request; authorization consumed |
+| Phase 7.4 — worker command boundary and limited rollout preparation | LOCAL IMPLEMENTATION + PG17 STAGING SECURITY ACCEPTANCE PASS; production deployment and further LIVE rollout BLOCKED |
 | SIREADER Virtual Office v1.0 | NOT RELEASED |
 
-Phase 6 evidence is in `docs/PHASE_6_CLOSEOUT.md`. Phase 7 scope, boundaries and gates are in `docs/PHASE_7_WORKER_RUNTIME_PLAN.md`. No worker process was started, no provider was called, and no application database, Supabase LIVE, Telegram, MT5/HFM or GitHub remote was modified.
+The current Phase 7.4 security review closed the staged worker DB provenance, trading-capability, truncated-output review and retention-identity findings. Python/PostgreSQL review-policy parity passed (40 rules, 56 capability/task pairs, 1,120 comparisons); worker SQL acceptance, Python adapter integration, backend regression (670 passed, 47 skipped), frontend regression (422 passed), TypeScript and production build passed. See the Phase 7.4 rollout plan, backend security closeout and updated staging acceptance.
+
+This status is limited to the local isolated staging scope. No production Supabase migration, production worker login/role, additional paid inference, Telegram action, MT5/HFM action, trading order or v1.0 release was performed.
 
 ---
 
@@ -18,7 +21,7 @@ Phase 6 evidence is in `docs/PHASE_6_CLOSEOUT.md`. Phase 7 scope, boundaries and
 **Document status:** ROADMAP LOCKED — source of truth for phase order, scope, and acceptance gates  
 **Repository:** `awandhani22-boop/SIREADER`  
 **Current implementation branch:** `phase-5-implementation` (isolated from `main`; matching branch exists in both SIREADER repositories). The accepted Phase 4 branch remains the baseline.  
-**Last roadmap review:** 2026-11-10
+**Last roadmap review:** 2026-11-11
 
 This document governs the SIREADER Virtual Office project from the existing 3D frontend through the final v1.0 release. **The canonical product mission and meaning of the final product are in [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md); read that before every task.** Keep this roadmap and `docs/PROJECT_STATE.md` aligned after every milestone. Do not create a replacement frontend or restart completed phases.
 
@@ -82,12 +85,13 @@ The existing React/Three.js project is the product. Preserve and extend it; do n
 | 6.1 | Personal Security & Reliability | COMPLETE — personal local scope |
 | 6.2 | 3D Scene Scale & Performance Readiness | COMPLETE — layout tests 7/50/100; GPU profiling deferred |
 | 6.3 | Local Packaging & Operations | COMPLETE — local runbook and diagnostics |
-| 7.1 | Offline Worker Runtime Assurance | COMPLETE — 31 dedicated unit tests |
-| 7.2 | One-Worker Local MOCK Pilot | NEXT — disposable PostgreSQL only |
-| 7.3 | Single-Worker LIVE Provider Canary | NOT AUTHORIZED — explicit provider/budget approval required |
+| 7.1 | Offline Worker Runtime Assurance | COMPLETE |
+| 7.2 | One-Worker Local MOCK Pilot | COMPLETE — foreground process and restart/stale acceptance recorded |
+| 7.3 | Single-Worker LIVE Provider Canary | COMPLETE — exactly one owner-authorized synthetic Haiku request; authorization consumed |
+| 7.4 | Limited General-Purpose Worker Rollout | STAGING IMPLEMENTATION + SECURITY ACCEPTANCE PASS; production migration, roles, recovery and further LIVE rollout BLOCKED |
 | FINAL | SIREADER Virtual Office v1.0 | NOT RELEASED |
 
-Status labels are evidence-based. Phase 6 is closed for the accepted personal local scope. Phase 7.1 offline worker assurance is complete; the isolated MOCK pilot and any LIVE provider canary remain separately gated.
+Status labels are evidence-based. Phases 1–7.3 are complete within their recorded scope. Phase 7.4 local worker-command implementation, Python/SQL policy parity and isolated PG17.11 staging security acceptance are complete; this does not approve production DDL or further paid provider execution.
 ---
 
 ## 4. Phase definitions and acceptance gates
@@ -439,16 +443,16 @@ Exit gate:
 - `docs/PROJECT_STATE.md` records the release commit and evidence.
 
 ## Phase 7 — Controlled Worker Runtime Activation
-**Status: IN PROGRESS — 7.1 offline assurance COMPLETE; 7.2 MOCK pilot NEXT; 7.3 LIVE canary NOT AUTHORIZED.**
+**Current status (2026-11-11): 7.1–7.3 COMPLETE; 7.4 local worker-command implementation and PG17.11 staging security acceptance PASS; production rollout BLOCKED.**
 
-Phase 7 validates the Python worker process itself, not more UI. Detailed gates and safety rules are in `docs/PHASE_7_WORKER_RUNTIME_PLAN.md`.
+Phase 7 validates the Python worker process and its controlled provider/database boundary, not more UI. Detailed gates and safety rules are in `docs/PHASE_7_WORKER_RUNTIME_PLAN.md`.
 
-- **7.1 Offline Worker Runtime Assurance — COMPLETE:** 31 new provider/policy/runtime unit tests pass; outbound provider calls are replaced by fakes; worker runtime remains disabled by default.
-- **7.2 One-Worker Local MOCK Pilot — NEXT:** execute one foreground Haiku worker against a newly created temporary PostgreSQL 16.6 cluster and one synthetic summarization task. Verify heartbeat, task lifecycle, SIMULATED result, audit trail, stop/restart and cleanup. Never use the existing `sireader_disposable` database.
-- **7.3 Single-Worker LIVE Provider Canary — NOT AUTHORIZED:** requires explicit owner selection of provider/model, credential provisioning, positive per-task cap, daily/monthly budget, one synthetic task and reconciliation procedure. No automatic retry or tier escalation after UNKNOWN.
-- **7.4 Limited General-Purpose Rollout — BLOCKED:** consider one general-purpose worker at a time only after 7.3 passes. Decision Engineer and Market Monitor stay excluded from provider execution.
+- **7.1 Offline Worker Runtime Assurance — COMPLETE:** isolated provider/policy/runtime fail-closed tests pass.
+- **7.2 One-Worker Local MOCK Pilot — COMPLETE:** foreground process, heartbeat, synthetic task, audit/review quarantine, stop/restart and stale-heartbeat evidence accepted on a disposable PG16.6 cluster.
+- **7.3 Single-Worker LIVE Provider Canary — COMPLETE (single use):** exactly one owner-authorized synthetic Haiku 5.5 request succeeded; price-table Cost Guard estimate USD 0.000042, not an independently reported provider invoice. That authorization is consumed.
+- **7.4 Limited General-Purpose Rollout — STAGING TECHNICAL ACCEPTANCE PASS; PRODUCTION BLOCKED:** worker command boundary, Python adapter, security remediations and Python/PostgreSQL policy parity passed isolated PG17.11 staging. Production-specific migration/rollback, production worker/maintenance/command/review roles, managed-platform staging, backup/recovery, API target reconciliation and fresh authorization for further LIVE execution remain open. Decision Engineer and Market Monitor remain excluded from provider execution.
 
-Exit gate: an actual foreground worker process is independently visible through backend heartbeat; one approved task completes with correct provenance and Cost Guard/audit attribution; human-review and stop/recovery behavior pass; no trading path is enabled. If provider spending is not desired, the owner may stop after 7.2 and keep local MOCK mode; the v1.0 release scope must then be explicitly revised.
+Exit gate for local staged implementation is met. The production rollout gate is not met: do not deploy DDL, create credentials, activate LIVE workers or make another paid request without the separately reviewed deployment package and explicit owner approval.
 
 ## FINAL — SIREADER Virtual Office v1.0
 **Status: NOT RELEASED.**
@@ -705,3 +709,19 @@ This dated status supersedes earlier Phase 7.4 notes that described only the pro
 - Production database login/role provisioning, production-specific writer/maintenance/command/review migration and rollback, final independent security approval, Supabase API cutover and fresh limited-LIVE authorization remain OPEN/BLOCKED. The one-request Phase 7.3 authorization is already consumed.
 - **Next task:** independent security review and production-target migration/role design; keep the existing test-only SQL guards intact. Do not start a LIVE worker or alter Supabase production as part of this task.
 - Runtime flags remain OFF/MOCK, provider LIVE OFF, spending caps zero, trading DRY_RUN and auto-execution OFF. **SIREADER Virtual Office v1.0 remains NOT RELEASED.**
+
+
+## Latest Phase 7.4 security closeout — 2026-11-11 (authoritative)
+
+This is the latest phase status and supersedes the older historical Phase 7.2 NEXT / Phase 7.3 NOT AUTHORIZED / Phase 7.4 initial BLOCKED statements retained above as dated evidence.
+
+- Phase 7.1, 7.2 and 7.3 are COMPLETE within their recorded scopes. Phase 7.3 was exactly one owner-authorized synthetic Haiku 5.5 request; the USD 0.000042 figure is price-table Cost Guard accounting, not an independently reported provider invoice. The single-use authorization is consumed.
+- Phase 7.4 worker database command implementation and isolated PostgreSQL 17.11 staging acceptance are COMPLETE for the staged worker command boundary.
+- Second-pass security remediations passed: trading-related provider reservation denial, explicit LIVE reservation/billing provenance, worker policy/model-tier validation, truncated LIVE output review quarantine, session_user-based maintenance retention identity and Python/PostgreSQL policy parity (40 rules, 56 capability/task pairs, 1,120 decisions).
+- Acceptance: worker SQL transaction PASS/ROLLBACK; Python adapter integration PASS/ROLLBACK; adapter tests 7 passed; backend 670 passed / 47 skipped; frontend 422 passed; TypeScript and Vite production build passed. The 47 skipped backend tests remain dedicated-PostgreSQL-URL gated; separate PG17 staging integrations passed as recorded.
+- Local effective ACL review: worker permission roles have zero direct workforce base-table grants; provider reservation EXECUTE is limited to Haiku/Sonnet/Opus; all nine workforce tables have RLS; private functions use the NOLOGIN function owner and fixed pg_catalog search_path; no PUBLIC EXECUTE was found.
+- Production migration/rollback, production login/role/credential provisioning, bounded maintenance functions, Command API and review-operator functions, hosted-Supabase-equivalent staging, production backup/recovery, API database topology reconciliation and new explicit approval for any further LIVE request remain OPEN/BLOCKED.
+- No production Supabase DDL, production credentials, additional paid inference, Telegram operation, MT5/HFM action or trading order was performed. Runtime stays OFF/MOCK, provider LIVE OFF, worker database URL unset, budgets zero and trading DRY_RUN.
+- **SIREADER Virtual Office v1.0 remains NOT RELEASED.**
+
+Detailed security findings: [Worker Database Security Review](https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/WORKER_DATABASE_SECURITY_REVIEW_CLOSEOUT_2026-11-11.md). Detailed SQL/adapter acceptance: [Worker Database Staging Acceptance](https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/WORKER_DATABASE_COMMAND_LAYER_STAGING_ACCEPTANCE_2026-11-11.md). Do not promote the staging SQL to production or treat this local acceptance as authorization to run a LIVE worker.

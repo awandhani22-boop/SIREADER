@@ -104,3 +104,27 @@ The Phase 7.4 staging scope now includes the database command layer, in addition
 - Virtual Office: **422 passed**; TypeScript check and production build passed. The existing large-bundle warning remains non-blocking.
 
 **Current decision:** Phase 7.4 code and local/disposable PostgreSQL technical acceptance are PASS. This does not provision production logins, approve a Supabase migration, or authorize another paid request. Production maintenance/command/review identities and the production-specific migration/rollback plan still need independent security review and a separate staging rehearsal. Limited LIVE rollout remains blocked pending explicit owner authorization. Virtual Office v1.0 remains NOT RELEASED.
+
+
+## Superseding security review and staging closeout — 2026-11-11
+
+The Phase 7.4 local worker command boundary has completed a second-pass security review and remediation on isolated PostgreSQL 17.11 staging. This supersedes prior notes above that described the worker command SQL as awaiting static review, but does not remove the production deployment gates.
+
+Security fixes exercised in PG17 staging:
+- Trading-related task capabilities are denied at the database provider-reservation boundary, even for an otherwise approved AI worker.
+- LIVE completion requires an existing provider reservation/request ID, an approved AI worker identity and USD billing fields; unreserved completion cannot claim LIVE provenance or provider billing.
+- Worker policy version, reason/action consistency, redaction count and fixed worker model tier are validated by the database function.
+- Truncated LIVE output is automatically quarantined for human review with OUTPUT_TRUNCATED_REVIEW audit reason.
+- Retention trigger authorization uses session_user rather than SECURITY DEFINER current_user.
+- Python and PostgreSQL review policy match for 40 catalogue rules, 56 capability/task pairs and 1,120 deterministic comparisons; unknown capabilities fail closed.
+
+Final local evidence:
+- PG17.11 sireader_stage, loopback 127.0.0.1:55439, TLS 1.3; full local backup taken before staging SQL update.
+- Worker SQL acceptance transaction passed and rolled back; Python adapter integration passed and rolled back; 7 adapter unit tests passed.
+- Effective privilege audit: 7 worker permission roles NOLOGIN/NOINHERIT with no role memberships and no direct workforce base-table grants; 9 workforce base tables RLS-enabled; 18 private-schema functions owned by the NOLOGIN function owner; SECURITY DEFINER functions fixed to search_path=pg_catalog; no PUBLIC EXECUTE; provider-reservation EXECUTE only for Haiku/Sonnet/Opus.
+- Backend 670 passed / 47 skipped; Virtual Office 422 passed; TypeScript and production build passed. The 47 skipped root tests remain environment-gated; the explicit PG17 command SQL, policy parity and adapter checks passed separately.
+- Staging was stopped after testing, port 55439 verified closed and temporary HBA configuration removed.
+
+Full findings and trust-boundary qualifications: [Worker Database Security Review](https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/WORKER_DATABASE_SECURITY_REVIEW_CLOSEOUT_2026-11-11.md) and [Worker Database Staging Acceptance](https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/WORKER_DATABASE_COMMAND_LAYER_STAGING_ACCEPTANCE_2026-11-11.md).
+
+**Production release gates remain OPEN/BLOCKED:** production-specific forward/rollback migration, worker LOGIN/pooler identities, bounded maintenance procedures, separate Command API and review-operator database functions, hosted-Supabase-equivalent staging, backup/restore and rollback approval, read-only API target reconciliation, and fresh explicit authorization for any additional LIVE worker/provider request. The previous one-request Haiku approval is consumed. Runtime remains OFF/MOCK, live provider OFF, WORKER_DATABASE_URL unset, spending caps zero and trading DRY_RUN. No production DDL or credentials were created. **Limited LIVE rollout remains NOT AUTHORIZED; v1.0 remains NOT RELEASED.**
