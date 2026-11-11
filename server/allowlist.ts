@@ -131,16 +131,20 @@ const CANONICAL_ROUTE_MAP = new Map<string, readonly string[]>(
 );
 
 export const WORKFORCE_TASK_TIMELINE_PATTERN = /^\/api\/v1\/workforce\/tasks\/[^/]+\/timeline$/;
+export const REVIEW_DETAIL_ROUTE_PATTERN = /^\/api\/v1\/(?:workforce|governance)\/reviews\/rev_[A-Za-z0-9_-]{8,60}$/;
+const GET_ONLY_METHODS = Object.freeze(['GET'] as const);
 
 export function isAllowlistedPath(path: string): boolean {
-  return CANONICAL_ROUTE_MAP.has(path) || WORKFORCE_TASK_TIMELINE_PATTERN.test(path);
+  return CANONICAL_ROUTE_MAP.has(path) ||
+    WORKFORCE_TASK_TIMELINE_PATTERN.test(path) ||
+    REVIEW_DETAIL_ROUTE_PATTERN.test(path);
 }
 
 export function getAllowedMethods(path: string): readonly string[] | undefined {
   const allowed = CANONICAL_ROUTE_MAP.get(path);
   if (allowed) return allowed;
-  if (WORKFORCE_TASK_TIMELINE_PATTERN.test(path)) {
-    return Object.freeze(['GET']);
+  if (WORKFORCE_TASK_TIMELINE_PATTERN.test(path) || REVIEW_DETAIL_ROUTE_PATTERN.test(path)) {
+    return GET_ONLY_METHODS;
   }
   return undefined;
 }

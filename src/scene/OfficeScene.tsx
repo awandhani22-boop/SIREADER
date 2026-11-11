@@ -1,6 +1,8 @@
 import { MapControls, OrthographicCamera } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
+import type { LiveWorkerSceneModel } from './liveWorkerSceneModel';
+import { createLiveWorkerSceneModels } from './liveWorkerSceneModel';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import {
@@ -37,7 +39,7 @@ const WORKSTATION_LIST = Object.values(WORKSTATION_REGISTRY);
  * inside `useFrame` using a single scratch Vector3 (`_projVec`) and writes directly
  * to DOM node `style.transform` refs (zero React state updates, zero GC allocation).
  */
-function SpatialLabelProjector() {
+function SpatialLabelProjector({ liveModels }: { liveModels?: readonly LiveWorkerSceneModel[] }) {
   const { camera, size } = useThree();
 
   useFrame(() => {
@@ -67,19 +69,30 @@ function SpatialLabelProjector() {
       domEl.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
     }
 
-    // Project 7 worker avatar badge positions at torso/desk level
-    for (const workerId of state.workerOrder) {
-      const worker = state.workers[workerId];
-      const domEl = workerLabelDomRefs[workerId];
-      if (!worker || !domEl) continue;
-
-      const [wx, wy, wz] = worker.position3D;
-      _projVec.set(wx, wy + 1.25, wz + 0.35);
-      _projVec.project(camera);
-
-      const x = _projVec.x * halfW + halfW;
-      const y = -(_projVec.y * halfH) + halfH;
-      domEl.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
+    // Project authoritative LIVE worker positions or deterministic DEMO positions.
+    if (liveModels) {
+      for (const worker of liveModels) {
+        const domEl = workerLabelDomRefs[worker.workerId];
+        if (!domEl) continue;
+        const [wx, wy, wz] = worker.position3D;
+        _projVec.set(wx, wy + 1.25, wz + 0.35);
+        _projVec.project(camera);
+        const x = _projVec.x * halfW + halfW;
+        const y = -(_projVec.y * halfH) + halfH;
+        domEl.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
+      }
+    } else {
+      for (const workerId of state.workerOrder) {
+        const worker = state.workers[workerId];
+        const domEl = workerLabelDomRefs[workerId];
+        if (!worker || !domEl) continue;
+        const [wx, wy, wz] = worker.position3D;
+        _projVec.set(wx, wy + 1.25, wz + 0.35);
+        _projVec.project(camera);
+        const x = _projVec.x * halfW + halfW;
+        const y = -(_projVec.y * halfH) + halfH;
+        domEl.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
+      }
     }
   });
 
@@ -200,9 +213,33 @@ function OfficeSceneContent() {
   const workerOrder = useOfficeStore((s) => s.workerOrder);
   const graphicsPreset = useOfficeStore((s) => s.graphicsPreset);
   const selectDemoWorker = useOfficeStore((s) => s.selectWorker);
+  const displayMode = useWorkerDisplayModeStore((s) => s.mode);
   const setSelectedLiveWorkerId = useWorkerDisplayModeStore((s) => s.setSelectedLiveWorkerId);
+  const liveResource = useLiveStore((s) => s.resources['/api/v1/workforce/runtime']);
+  const liveSession = useLiveStore((s) => s.session);
+  const liveConnection = useLiveStore((s) => s.connection);
+  const liveSnapshot = liveResource.data as WorkforceRuntimeResponseDto | null;
 
-  const enableShadows = !IS_SOFTWARE_GL && graphicsPreset === 'high';
+  const liveRepository = useMemo(
+    () => createLiveWorkerRepository(liveSnapshot, liveResource.status, liveSession, liveConnection),
+    [liveSnapshot, liveResource.status, liveSession, liveConnection],
+  );
+  const liveModels = useMemo(
+    () => displayMode === 'LIVE' ? createLiveWorkerSceneModels(liveRepository.listWorkers()) : [],
+    [displayMode, liveRepository],
+  );
+  const liveModelsById = useMemo(
+    () => new Map(liveModels.map((model) => [model.workerId, model])),
+    [liveModels],
+  );
+  const sceneWorkerIds = displayMode === 'LIVE'
+    ? liveModels.map((model) => model.workerId)
+    : workerOrder;
+
+  // Keep dense LIVE rosters responsive: avoid the expensive shadow pass once
+  // more than 25 real worker avatars are visible in the single-floor scene.
+  const isDenseLiveScene = displayMode === 'LIVE' && sceneWorkerIds.length > 25;
+  const enableShadows = !IS_SOFTWARE_GL && graphicsPreset === 'high' && !isDenseLiveScene;
 
   return (
     <>
@@ -210,7 +247,7 @@ function OfficeSceneContent() {
       <fog attach="fog" args={[SCENE_COLORS.fogColor, 55, 110]} />
 
       <IsometricCameraRig />
-      <SpatialLabelProjector />
+      <SpatialLabelProjector liveModels={displayMode === 'LIVE' ? liveModels : undefined} />
 
       {/* Balanced Corporate Sci-Fi Studio Lighting Rig */}
       <hemisphereLight args={['#7DD3FC', '#1E293B', 1.25]} />
@@ -254,8 +291,12 @@ function OfficeSceneContent() {
 
       {/* 4. Dynamic Worker Avatars (Granular Memoized Items) */}
       <group name="WorkerAvatarsGroup">
-        {workerOrder.map((workerId) => (
-          <WorkerAvatarSceneItem key={workerId} workerId={workerId} />
+        {sceneWorkerIds.map((workerId) => (
+          <WorkerAvatarSceneItem
+            key={workerId}
+            workerId={workerId}
+            liveModel={displayMode === 'LIVE' ? liveModelsById.get(workerId) : undefined}
+          />
         ))}
       </group>
     </>
@@ -264,8 +305,12 @@ function OfficeSceneContent() {
 
 export function OfficeScene() {
   const graphicsPreset = useOfficeStore((s) => s.graphicsPreset);
+  const displayMode = useWorkerDisplayModeStore((s) => s.mode);
+  const liveResource = useLiveStore((s) => s.resources['/api/v1/workforce/runtime']);
+  const liveSnapshot = liveResource.data as WorkforceRuntimeResponseDto | null;
+  const isDenseLiveScene = displayMode === 'LIVE' && (liveSnapshot?.workers.length ?? 0) > 25;
   const dpr: [number, number] =
-    IS_SOFTWARE_GL || graphicsPreset === 'balanced' ? [1, 1] : [1, 2];
+    IS_SOFTWARE_GL || graphicsPreset === 'balanced' || isDenseLiveScene ? [1, 1] : [1, 2];
 
   return (
     <div
@@ -273,7 +318,7 @@ export function OfficeScene() {
       data-testid="office-3d-viewport"
     >
       <Canvas
-        shadows={!IS_SOFTWARE_GL && graphicsPreset === 'high'}
+        shadows={!IS_SOFTWARE_GL && graphicsPreset === 'high' && !isDenseLiveScene}
         dpr={dpr}
         gl={{
           antialias: !IS_SOFTWARE_GL,

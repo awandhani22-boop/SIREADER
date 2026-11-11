@@ -409,7 +409,24 @@ test('SIREADER Phase 3.2 BFF Test Suite — Remediated', async (t) => {
     }
   });
 
-  await t.test('P0-4. Real startBffServer binds strictly to 127.0.0.1 and approved port', async () => {
+  await t.test('P0-4. Real startBffServer binds strictly to 127.0.0.1 and approved port', async (t) => {
+    // The owner may be using the local office while this suite runs. Never stop
+    // their BFF; skip only this fixed-port integration check when 3001 is busy.
+    const canBindApprovedPort = await new Promise<boolean>((resolve, reject) => {
+      const probe = net.createServer();
+      probe.once('error', (error: NodeJS.ErrnoException) => {
+        if (error.code === 'EADDRINUSE') resolve(false);
+        else reject(error);
+      });
+      probe.listen(3001, '127.0.0.1', () => {
+        probe.close((error) => error ? reject(error) : resolve(true));
+      });
+    });
+    if (!canBindApprovedPort) {
+      t.skip('The active local SIREADER BFF owns 127.0.0.1:3001; service was left running.');
+      return;
+    }
+
     let runningServer: http.Server | null = null;
     try {
       await new Promise<void>((resolve, reject) => {
@@ -541,12 +558,32 @@ test('SIREADER Phase 3.2 BFF Test Suite — Remediated', async (t) => {
         tokenProvider: () => 'unit-test-review-token',
         fetchImpl: async (input) => {
           const url = new URL(String(input));
+          if (url.pathname.endsWith('/pending')) {
+            return new Response(JSON.stringify({
+              server_time_utc: '2026-11-10T00:00:00Z',
+              total_count: 0,
+              limit: Number(url.searchParams.get('limit')),
+              offset: Number(url.searchParams.get('offset')),
+              reviews: [],
+            }), { status: 200, headers: { 'content-type': 'application/json' } });
+          }
           return new Response(JSON.stringify({
-            server_time_utc: '2026-11-10T00:00:00Z',
-            total_count: 0,
-            limit: Number(url.searchParams.get('limit')),
-            offset: Number(url.searchParams.get('offset')),
-            reviews: [],
+            review_id: 'rev_12345678',
+            task_id: 'task_12345678',
+            attempt_id: 'attempt_12345678',
+            status: 'PENDING',
+            original_output_sha256: 'a'.repeat(64),
+            adjusted_output_sha256: null,
+            adjudicated_by: null,
+            adjudicated_at: null,
+            reason_code: null,
+            notes: null,
+            review_expires_at: '2026-11-11T00:00:00Z',
+            created_at: '2026-11-10T00:00:00Z',
+            updated_at: '2026-11-10T00:00:00Z',
+            payload_purged_at: null,
+            original_output: { answer: 'quarantined' },
+            adjusted_output: null,
           }), { status: 200, headers: { 'content-type': 'application/json' } });
         },
       },
@@ -569,6 +606,32 @@ test('SIREADER Phase 3.2 BFF Test Suite — Remediated', async (t) => {
         assert.equal(response.json?.total_count, 0);
         assert.deepEqual(response.json?.reviews, []);
       }
+
+      for (const route of [
+        '/api/v1/workforce/reviews/rev_12345678',
+        '/api/v1/governance/reviews/rev_12345678',
+      ]) {
+        const response = await makeRequest(reviewServer, {
+          path: route,
+          headers: { ...VALID_HEADERS },
+        });
+        assert.equal(response.status, 200, route);
+        assert.equal(response.json?.review_id, 'rev_12345678');
+        assert.deepEqual(response.json?.original_output, { answer: 'quarantined' });
+      }
+
+      const invalidDetail = await makeRequest(reviewServer, {
+        path: '/api/v1/workforce/reviews/not-a-review-id',
+        headers: { ...VALID_HEADERS },
+      });
+      assert.equal(invalidDetail.status, 404);
+
+      const wrongMethod = await makeRequest(reviewServer, {
+        method: 'POST',
+        path: '/api/v1/governance/reviews/rev_12345678',
+        headers: { ...VALID_HEADERS },
+      });
+      assert.equal(wrongMethod.status, 405);
 
       for (const invalidPath of [
         '/api/v1/workforce/reviews/pending?limit=101&offset=0',

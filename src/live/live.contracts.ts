@@ -115,6 +115,7 @@ export interface TaskCostBreakdownDto {
 }
 export interface BudgetObservabilityDto {
   readonly daily_idr: BudgetWindowDto;
+  readonly daily_anthropic_usd: BudgetWindowDto;
   readonly rolling_month_idr: BudgetWindowDto;
   readonly monthly_anthropic_usd: BudgetWindowDto;
   readonly idr_tiers: readonly BudgetTierDto[];
@@ -588,10 +589,11 @@ function validTaskCost(value: unknown): value is TaskCostBreakdownDto {
 }
 function validBudgetObservability(value: unknown): value is BudgetObservabilityDto {
   return isObject(value) &&
-    hasExactKeys(value, ['daily_idr', 'rolling_month_idr', 'monthly_anthropic_usd', 'idr_tiers', 'worker_breakdown', 'recent_task_costs']) &&
-    validBudgetWindow(value.daily_idr) && validBudgetWindow(value.rolling_month_idr) &&
-    validBudgetWindow(value.monthly_anthropic_usd) &&
+    hasExactKeys(value, ['daily_idr', 'daily_anthropic_usd', 'rolling_month_idr', 'monthly_anthropic_usd', 'idr_tiers', 'worker_breakdown', 'recent_task_costs']) &&
+    validBudgetWindow(value.daily_idr) && validBudgetWindow(value.daily_anthropic_usd) &&
+    validBudgetWindow(value.rolling_month_idr) && validBudgetWindow(value.monthly_anthropic_usd) &&
     value.daily_idr.currency === 'IDR' && value.daily_idr.window === 'DAILY' &&
+    value.daily_anthropic_usd.currency === 'USD' && value.daily_anthropic_usd.window === 'DAILY' &&
     value.rolling_month_idr.currency === 'IDR' && value.rolling_month_idr.window === 'ROLLING_MONTH' &&
     value.monthly_anthropic_usd.currency === 'USD' &&
     Array.isArray(value.idr_tiers) && value.idr_tiers.length === 3 && value.idr_tiers.every(validBudgetTier) &&

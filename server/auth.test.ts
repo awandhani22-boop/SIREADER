@@ -211,6 +211,10 @@ test('SIREADER operator authentication — secure in-memory sessions', async (t)
       assert.equal(current.json?.authenticated, true);
       assert.equal(current.json?.csrfToken, csrf);
       assert.equal(current.headers['cache-control'], 'no-store, max-age=0');
+      assert.equal(current.headers['x-content-type-options'], 'nosniff');
+      assert.equal(current.headers['x-frame-options'], 'DENY');
+      assert.equal(current.headers['referrer-policy'], 'strict-origin-when-cross-origin');
+      assert.equal(current.headers['permissions-policy'], 'camera=(), microphone=(), geolocation=()');
 
       const anonymous = await harness.request('GET', '/api/auth/session');
       assert.equal(anonymous.status, 401);
@@ -352,4 +356,45 @@ test('SIREADER operator authentication — secure in-memory sessions', async (t)
       assert.equal(result.json?.error?.code, 'SESSION_REQUIRED');
     } finally { await restarted.close(); }
   });
+});
+
+
+test('operator credential rotation rejects the old password and invalidates prior sessions', async () => {
+  const oldPassword = 'Test-only-old-credential-before-rotation!';
+  const newPassword = 'Test-only-new-credential-after-rotation!';
+  const oldHash = await hashOperatorPassword(oldPassword, Buffer.alloc(16, 0x71));
+  const newHash = await hashOperatorPassword(newPassword, Buffer.alloc(16, 0x72));
+
+  const beforeRotation = await createHarness({ passwordHash: oldHash });
+  let oldCookie = '';
+  try {
+    const login = await beforeRotation.request('POST', '/api/auth/login', { password: oldPassword });
+    assert.equal(login.status, 200);
+    oldCookie = sessionCookie(login);
+  } finally {
+    await beforeRotation.close();
+  }
+
+  const afterRotation = await createHarness({ passwordHash: newHash });
+  try {
+    const rejectedOldCredential = await afterRotation.request(
+      'POST', '/api/auth/login', { password: oldPassword },
+    );
+    assert.equal(rejectedOldCredential.status, 401);
+    assert.equal(rejectedOldCredential.json?.error?.code, 'INVALID_CREDENTIALS');
+
+    const acceptedNewCredential = await afterRotation.request(
+      'POST', '/api/auth/login', { password: newPassword },
+    );
+    assert.equal(acceptedNewCredential.status, 200);
+    assert.equal(acceptedNewCredential.json?.authenticated, true);
+
+    const rejectedOldSession = await afterRotation.request(
+      'GET', '/api/auth/session', undefined, { cookie: oldCookie },
+    );
+    assert.equal(rejectedOldSession.status, 401);
+    assert.equal(rejectedOldSession.json?.error?.code, 'SESSION_REQUIRED');
+  } finally {
+    await afterRotation.close();
+  }
 });

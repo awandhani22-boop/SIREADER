@@ -43,6 +43,13 @@ const EMPTY_BUDGET = {
     remaining_hard_limit: '50000', percent_used: '0', warning_threshold_percent: null,
     warning_level: 'NONE', status_counts: {},
   },
+  daily_anthropic_usd: {
+    currency: 'USD', window: 'DAILY', period_start: '2026-11-09', period_end: '2026-11-09',
+    budget_amount: '0', hard_limit_amount: null, actual_cost: '0',
+    reserved_cost: '0', projected_cost: '0', remaining_budget: '0',
+    remaining_hard_limit: null, percent_used: '0', warning_threshold_percent: null,
+    warning_level: 'NONE', status_counts: {},
+  },
   rolling_month_idr: {
     currency: 'IDR', window: 'ROLLING_MONTH', period_start: '2026-10-11', period_end: '2026-11-09',
     budget_amount: '50000', hard_limit_amount: null, actual_cost: '0',

@@ -93,6 +93,9 @@ test('SIREADER Batch 6 — static serving and Vite loopback proxy contract', asy
       assert.match(String(rootPage.headers['content-type']), /text\/html/);
       assert.equal(rootPage.headers['cache-control'], 'no-store, max-age=0');
       assert.equal(rootPage.headers['x-content-type-options'], 'nosniff');
+      assert.equal(rootPage.headers['x-frame-options'], 'DENY');
+      assert.equal(rootPage.headers['referrer-policy'], 'strict-origin-when-cross-origin');
+      assert.equal(rootPage.headers['permissions-policy'], 'camera=(), microphone=(), geolocation=()');
 
       const spaRoute = await request(address.port, '/office/worker/haiku', { accept: 'text/html' });
       assert.equal(spaRoute.status, 200);

@@ -387,6 +387,10 @@ export function LiveObservabilityDock() {
                             <p className="text-[10px] font-semibold text-white">$ {displayAmount(telemetry.data.budget.monthly_anthropic_usd.projected_cost)} / {displayAmount(telemetry.data.budget.monthly_anthropic_usd.budget_amount)}</p>
                           </div>
                         </div>
+                        <p className="text-[9px] text-slate-500">
+                          Anthropic daily hard cap: $ {displayAmount(telemetry.data.budget.daily_anthropic_usd.projected_cost)} / $ {displayAmount(telemetry.data.budget.daily_anthropic_usd.budget_amount)}
+                          {Number(telemetry.data.budget.daily_anthropic_usd.budget_amount) <= 0 ? ' · LIVE DISABLED' : ''}
+                        </p>
                         <div>
                           <p className="mb-1 text-[9px] text-slate-500">IDR tier allocation</p>
                           <div className="space-y-1">

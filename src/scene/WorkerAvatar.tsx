@@ -4,7 +4,8 @@ import React, { Suspense, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { recordWorkerComponentRender } from '../utils/renderProfiler';
 import { useOfficeStore } from '../workers/worker.state';
-import { WorkerEntity, WorkerId } from '../workers/worker.types';
+import { WorkerId } from '../workers/worker.types';
+import type { LiveWorkerSceneModel, WorkerAvatarModel } from './liveWorkerSceneModel';
 import { useWorkerDisplayModeStore } from '../workers/worker.display-mode';
 import { createDemoWorkerRepository, createLiveWorkerRepository } from '../workers/worker.live-repository';
 import { useLiveStore } from '../live/live.state';
@@ -38,7 +39,7 @@ import {
  */
 
 export interface WorkerAvatarProps {
-  worker: WorkerEntity;
+  worker: WorkerAvatarModel;
   isSelected: boolean;
   reducedMotion: boolean;
   avatarLoadError?: string;
@@ -52,7 +53,7 @@ export interface WorkerAvatarProps {
 
 interface RiggedGlbModelProps {
   modelUrl: string;
-  worker: WorkerEntity;
+  worker: WorkerAvatarModel;
   reducedMotion: boolean;
 }
 
@@ -104,7 +105,7 @@ function RiggedGlbAvatar({
 }
 
 interface ArticulatedHumanoidPlaceholderProps {
-  worker: WorkerEntity;
+  worker: WorkerAvatarModel;
   isSelected: boolean;
   reducedMotion: boolean;
 }
@@ -390,8 +391,10 @@ export const WorkerAvatar = React.memo(function WorkerAvatar({
  */
 export const WorkerAvatarSceneItem = React.memo(function WorkerAvatarSceneItem({
   workerId,
+  liveModel,
 }: {
   workerId: WorkerId;
+  liveModel?: LiveWorkerSceneModel;
 }) {
   const worker = useOfficeStore((state) => state.workers[workerId]);
   const displayMode = useWorkerDisplayModeStore((state) => state.mode);
@@ -411,24 +414,29 @@ export const WorkerAvatarSceneItem = React.memo(function WorkerAvatarSceneItem({
   const liveConnection = useLiveStore((state) => state.connection);
   const liveSnapshot = liveResource.data as WorkforceRuntimeResponseDto | null;
 
-  if (!worker) return null;
+  if (!worker && !liveModel) return null;
 
   const liveRepository = createLiveWorkerRepository(liveSnapshot, liveResource.status, liveSession, liveConnection);
-  const demoRepository = createDemoWorkerRepository([worker]);
+  const demoRepository = createDemoWorkerRepository(worker ? [worker] : []);
   const view = displayMode === 'LIVE'
     ? liveRepository.getWorker(workerId)
     : demoRepository.getWorker(workerId);
 
   // In LIVE, only backend status/animation is authoritative. Position, avatar
   // model and room geometry remain presentation metadata from the static roster.
-  const displayWorker: WorkerEntity = displayMode === 'LIVE'
-    ? {
-        ...worker,
+  const displayWorker: WorkerAvatarModel | null = displayMode === 'LIVE'
+    ? (liveModel ?? (worker ? {
+        id: worker.id,
         name: view.source === 'LIVE' ? view.displayName : workerId,
+        position3D: worker.position3D,
+        deskRotationY: worker.deskRotationY,
+        avatarConfig: worker.avatarConfig,
         status: view.visualStatus,
         animationState: view.animationState,
-      }
+      } : null))
     : worker;
+
+  if (!displayWorker) return null;
 
   return (
     <WorkerAvatar

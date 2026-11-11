@@ -7,6 +7,7 @@ import { useWorkerDisplayModeStore } from '../workers/worker.display-mode';
 import { createDemoWorkerRepository, createLiveWorkerRepository } from '../workers/worker.live-repository';
 import { useLiveStore } from '../live/live.state';
 import type { WorkforceRuntimeResponseDto } from '../live/live.contracts';
+import { createLiveWorkerSceneModels, type LiveWorkerSceneModel } from './liveWorkerSceneModel';
 
 /**
  * WorldLabelsOverlay (Fix C — Granular Per-Worker & Per-Room Subscriptions)
@@ -72,8 +73,10 @@ const RoomSignageItem = React.memo(function RoomSignageItem({
 
 export const WorldWorkerBadgeItem = React.memo(function WorldWorkerBadgeItem({
   workerId,
+  liveModel,
 }: {
   workerId: WorkerId;
+  liveModel?: LiveWorkerSceneModel;
 }) {
   recordWorkerComponentRender(workerId, 'badge');
 
@@ -95,17 +98,17 @@ export const WorldWorkerBadgeItem = React.memo(function WorldWorkerBadgeItem({
   const liveConnection = useLiveStore((state) => state.connection);
   const liveSnapshot = liveResource.data as WorkforceRuntimeResponseDto | null;
 
-  if (!worker) return null;
+  if (!worker && !liveModel) return null;
 
   const liveRepository = createLiveWorkerRepository(liveSnapshot, liveResource.status, liveSession, liveConnection);
-  const demoRepository = createDemoWorkerRepository([worker]);
+  const demoRepository = createDemoWorkerRepository(worker ? [worker] : []);
   const view = displayMode === 'LIVE'
     ? liveRepository.getWorker(workerId)
     : demoRepository.getWorker(workerId);
-  const displayName = displayMode === 'LIVE'
+  const displayName = liveModel?.displayName ?? (displayMode === 'LIVE'
     ? (view.source === 'LIVE' ? view.displayName : workerId)
-    : worker.shortName;
-  const statusLabel = view.statusLabel;
+    : worker?.shortName ?? workerId);
+  const statusLabel = liveModel?.statusLabel ?? view.statusLabel;
   const statusBadgeColor =
     statusLabel === 'READY' || statusLabel === 'IDLE'
       ? 'text-emerald-300 border-emerald-500/40 bg-emerald-950/90'
@@ -141,7 +144,7 @@ export const WorldWorkerBadgeItem = React.memo(function WorldWorkerBadgeItem({
         <div className="flex items-center gap-1.5">
           <span
             className="w-2 h-2 rounded-full shrink-0"
-            style={{ backgroundColor: worker.avatarConfig.accentColor }}
+            style={{ backgroundColor: liveModel?.avatarConfig.accentColor ?? worker?.avatarConfig.accentColor ?? '#06B6D4' }}
           />
           <span className="text-[11px] font-semibold text-slate-100">
             {displayName}
@@ -189,6 +192,19 @@ export const WorldWorkerBadgeItem = React.memo(function WorldWorkerBadgeItem({
 
 export function WorldLabelsOverlay() {
   const workerOrder = useOfficeStore((s) => s.workerOrder);
+  const displayMode = useWorkerDisplayModeStore((s) => s.mode);
+  const liveResource = useLiveStore((s) => s.resources['/api/v1/workforce/runtime']);
+  const liveSession = useLiveStore((s) => s.session);
+  const liveConnection = useLiveStore((s) => s.connection);
+  const liveSnapshot = liveResource.data as WorkforceRuntimeResponseDto | null;
+  const liveRepository = React.useMemo(
+    () => createLiveWorkerRepository(liveSnapshot, liveResource.status, liveSession, liveConnection),
+    [liveSnapshot, liveResource.status, liveSession, liveConnection],
+  );
+  const liveModels = React.useMemo(
+    () => displayMode === 'LIVE' ? createLiveWorkerSceneModels(liveRepository.listWorkers()) : [],
+    [displayMode, liveRepository],
+  );
 
   return (
     <div
@@ -198,9 +214,13 @@ export function WorldLabelsOverlay() {
       {ROOM_LIST.map((room) => (
         <RoomSignageItem key={room.id} room={room} />
       ))}
-      {workerOrder.map((workerId) => (
-        <WorldWorkerBadgeItem key={workerId} workerId={workerId} />
-      ))}
+      {displayMode === 'LIVE'
+        ? liveModels.map((model) => (
+            <WorldWorkerBadgeItem key={model.workerId} workerId={model.workerId} liveModel={model} />
+          ))
+        : workerOrder.map((workerId) => (
+            <WorldWorkerBadgeItem key={workerId} workerId={workerId} />
+          ))}
     </div>
   );
 }
