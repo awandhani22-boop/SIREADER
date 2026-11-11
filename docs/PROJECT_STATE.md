@@ -6,8 +6,8 @@
 - Final privilege matrix: seven lifecycle functions per worker; provider reservation only for Haiku/Sonnet/Opus; Command four functions; Review two; Maintenance one; zero PUBLIC EXECUTE; zero direct workforce table privileges for runtime LOGIN identities; nine RLS tables; fourteen security-barrier views.
 - Backend tests: 327 passed, 47 environment-gated skips. Virtual Office: 422 passed; TypeScript and production build passed.
 - Hosted Supabase remains unchanged: four historical migrations only, no workforce schema/authority roles. The four applied migration files have been restored from the hosted migration ledger; local Supabase CLI config is initialized.
-- No hosted development branch exists yet. Supabase quoted US$0.01344/hour for a branch; explicit cost confirmation remains required before provisioning.
-- Production deployment, hosted LOGIN credentials, additional paid AI requests, worker activation and v1.0 release remain NOT AUTHORIZED. Runtime stays OFF/MOCK, live provider OFF, WORKER_DATABASE_URL unset, cost caps zero, trading DRY_RUN and auto execution OFF.
+- Owner decision (2026-11-12): skip/waive the hosted Supabase development-branch and managed-equivalent staging step to avoid its quoted US$0.01344/hour compute charge. No branch was created and no compute charge started. This stage is SKIPPED, not PASSED; hosted Supabase certification has not occurred.
+- Skipping managed staging does not authorize production deployment. Production migration, hosted LOGIN credentials, additional paid AI requests, worker activation and v1.0 release remain NOT AUTHORIZED pending separate backup/recovery, change-window, secret-provisioning and owner sign-off. Runtime stays OFF/MOCK, live provider OFF, WORKER_DATABASE_URL unset, cost caps zero, trading DRY_RUN and auto execution OFF.
 
 See the latest Phase 7.4 evidence in backend/docs/PHASE_7_4_PRODUCTION_MIGRATION_REHEARSAL_2026-11-11.md and backend/docs/WORKER_DATABASE_COMMAND_LAYER_STAGING_ACCEPTANCE_2026-11-11.md.
 

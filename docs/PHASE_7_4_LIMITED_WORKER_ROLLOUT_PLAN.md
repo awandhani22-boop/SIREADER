@@ -1,6 +1,13 @@
 # Phase 7.4 — Limited Worker Rollout Plan
 
-**Latest status (2026-11-12): WORKER/COMMAND/REVIEW/MAINTENANCE DB AUTHORITY + MANAGED-LIKE NON-SUPERUSER PG17 REHEARSAL + ACTUAL LOGIN/HTTP ACCEPTANCE PASS. HOSTED CUTOVER NOT AUTHORIZED.**
+**Latest status (2026-11-12): WORKER/COMMAND/REVIEW/MAINTENANCE DB AUTHORITY + MANAGED-LIKE NON-SUPERUSER PG17 REHEARSAL + ACTUAL LOGIN/HTTP ACCEPTANCE PASS. HOSTED MANAGED-STAGING STEP SKIPPED BY OWNER; PRODUCTION CUTOVER NOT AUTHORIZED.**
+
+## Current owner disposition — 2026-11-12
+
+- The owner chose to skip the hosted Supabase development-branch / managed-equivalent staging step to avoid the quoted US$0.01344/hour compute charge. No branch was created and no recurring branch compute is running.
+- This is an explicit SKIP/WAIVER, not a successful managed-Supabase staging result. Local PostgreSQL 17.11 managed-like acceptance remains valid only for the tested local restore and does not certify Supabase platform behavior.
+- Production migration, hosted credentials, read-only API cutover, additional paid AI, worker activation, Telegram, MT5/HFM, trading, and v1.0 release remain unauthorized. The separate production backup/recovery, deployment-window, rollback-operator, credential and owner-signoff gates are still open.
+- Do not weaken production guards or treat this decision as permission to apply migrations to the hosted project.
 
 ## 1. Verified technical result
 
