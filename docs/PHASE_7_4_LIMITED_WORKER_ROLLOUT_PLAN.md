@@ -128,3 +128,15 @@ Final local evidence:
 Full findings and trust-boundary qualifications: [Worker Database Security Review](https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/WORKER_DATABASE_SECURITY_REVIEW_CLOSEOUT_2026-11-11.md) and [Worker Database Staging Acceptance](https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/WORKER_DATABASE_COMMAND_LAYER_STAGING_ACCEPTANCE_2026-11-11.md).
 
 **Production release gates remain OPEN/BLOCKED:** production-specific forward/rollback migration, worker LOGIN/pooler identities, bounded maintenance procedures, separate Command API and review-operator database functions, hosted-Supabase-equivalent staging, backup/restore and rollback approval, read-only API target reconciliation, and fresh explicit authorization for any additional LIVE worker/provider request. The previous one-request Haiku approval is consumed. Runtime remains OFF/MOCK, live provider OFF, WORKER_DATABASE_URL unset, spending caps zero and trading DRY_RUN. No production DDL or credentials were created. **Limited LIVE rollout remains NOT AUTHORIZED; v1.0 remains NOT RELEASED.**
+
+
+
+## Restored production-backup migration rehearsal update — 2026-11-11
+
+A clean PostgreSQL 17.11 restore of the locally held Supabase custom-format backup passed the four workforce/read-model/security-barrier baseline migrations followed by the new authority migration. The forward migration and guarded authority-only rollback were both tested; the same forward migration then applied successfully again. The rollback preserves workforce schema/RLS tables and read-only views and intentionally refuses to run after operational workforce data exists.
+
+The Python database role validators were exercised using actual local LOGIN identities for Command, Review and Maintenance. The Command API uses its role-specific SQL function surface; the review route uses a separate review DB pool; maintenance uses its dedicated DB function and database clock. Role secrets were not written or committed.
+
+This closes the local production-migration design/rehearsal work in Phase 7.4. It does not close hosted Supabase deployment: the hosted target still has no workforce schema/roles, and it has not received the new migrations or secrets. Managed-Supabase-equivalent staging, verified hosted restore point, deployment window/rollback operator, monitoring, role secret provisioning, fresh paid-LIVE authorization and final v1.0 owner acceptance remain blocked. Do not start a worker or perform hosted DDL from this local rehearsal.
+
+Evidence: https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/PHASE_7_4_PRODUCTION_MIGRATION_REHEARSAL_2026-11-11.md

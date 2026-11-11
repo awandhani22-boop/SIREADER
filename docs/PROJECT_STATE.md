@@ -621,3 +621,23 @@ Production-specific forward/rollback migration; dedicated per-worker LOGIN/poole
 After testing, local PG17.11 staging was stopped; port 55439 was verified closed and the temporary HBA file was removed. No production Supabase DDL, production role/credential creation, additional paid inference, Telegram, MT5/HFM or trading action occurred. Runtime remains OFF/MOCK, live provider OFF, cost budgets zero and trading DRY_RUN.
 
 Evidence: [Worker Database Security Review](https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/WORKER_DATABASE_SECURITY_REVIEW_CLOSEOUT_2026-11-11.md) and [Worker Database Staging Acceptance](https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/WORKER_DATABASE_COMMAND_LAYER_STAGING_ACCEPTANCE_2026-11-11.md). Keep v1.0 NOT RELEASED until every locked release gate receives its own evidence and owner sign-off.
+
+
+## Latest authoritative Phase 7.4 production-migration rehearsal — 2026-11-11
+
+This update supersedes earlier Phase 7.4 statements that the production migration/rollback package had not yet been authored or rehearsed locally. It does not change the hosted-production authorization gate.
+
+- Production forward migration draft: `supabase/migrations/20261111235000_workforce_database_authorities_v1.sql`.
+- Matching guarded rollback: `supabase/rollback/20261111235000_workforce_database_authorities_v1.rollback.sql`. It preserves the nine workforce schema/RLS tables and fourteen read-only API views, and refuses rollback once any workforce operational data or LOGIN session exists.
+- A clean PostgreSQL 17.11 cluster was created from the local custom-format Supabase production backup. The four workforce/read-model/security-barrier baseline migrations and the new authority migration applied in sequence.
+- Forward → rollback → forward passed. The final rehearsal has 9/9 workforce tables with RLS, 14/14 API views with security_barrier=true, ten worker/command/review/maintenance LOGIN identities created without passwords, zero memberships, zero direct workforce table grants to those LOGIN roles, and zero PUBLIC EXECUTE on private workforce functions.
+- Python startup validation passed against actual local LOGIN identities for Command, Review and Maintenance. Command and review adapters and maintenance call were exercised and rolled back.
+- SQL acceptance: worker command PASS; operator/review/maintenance PASS. Python FastAPI-to-PG17 smoke PASS and real LOGIN identity smoke PASS.
+- Backend full `tests/` suite: 327 passed, 47 environment-gated skips, 0 failed; compileall passed. The 47 skipped tests require `SIREADER_TEST_POSTGRES_URL` and are not claimed as database integration passes. Explicit PG17 SQL and role-identity tests passed separately.
+- Virtual Office official test runner: 422 passed; TypeScript/lint and production build passed. The existing non-blocking large JS bundle warning remains.
+- Hosted Supabase was not changed. Its inspected baseline still has 15 public base tables, six API views, no workforce tables/private authority schema, and no worker/command/review/maintenance identities. No production credentials, further paid AI calls, worker activation, Telegram action, MT5/HFM or trading order occurred.
+- Worker runtime remains OFF/MOCK; live provider OFF; WORKER_DATABASE_URL unset; cost caps zero; trading DRY_RUN; auto execution OFF. The Phase 7.3 one-request authorization is consumed.
+
+Detailed evidence: https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/PHASE_7_4_PRODUCTION_MIGRATION_REHEARSAL_2026-11-11.md
+
+**Current decision:** Phase 7.4 local implementation, SQL authority layer, Python adapters, restored-backup migration/rollback rehearsal and local acceptance are COMPLETE. Hosted Supabase cutover, credential provisioning, managed-platform staging/restore approval, limited LIVE authorization and owner v1.0 sign-off remain BLOCKED / NOT AUTHORIZED. **SIREADER Virtual Office v1.0 remains NOT RELEASED.**

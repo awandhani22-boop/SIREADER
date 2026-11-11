@@ -7,12 +7,12 @@
 | Phase 7.1 — offline worker runtime assurance | COMPLETE |
 | Phase 7.2 — one-worker local MOCK pilot | COMPLETE — foreground process, heartbeat, task/audit, restart and stale checks accepted |
 | Phase 7.3 — single-worker LIVE provider canary | COMPLETE — exactly one owner-authorized synthetic Haiku request; authorization consumed |
-| Phase 7.4 — worker command boundary and limited rollout preparation | LOCAL IMPLEMENTATION + PG17 STAGING SECURITY ACCEPTANCE PASS; production deployment and further LIVE rollout BLOCKED |
+| Phase 7.4 — worker command boundary and limited rollout preparation | LOCAL IMPLEMENTATION + PG17 SECURITY ACCEPTANCE + RESTORED-BACKUP FORWARD/ROLLBACK/FORWARD PASS; hosted cutover and further LIVE rollout BLOCKED |
 | SIREADER Virtual Office v1.0 | NOT RELEASED |
 
-The current Phase 7.4 security review closed the staged worker DB provenance, trading-capability, truncated-output review and retention-identity findings. Python/PostgreSQL review-policy parity passed (40 rules, 56 capability/task pairs, 1,120 comparisons); worker SQL acceptance, Python adapter integration, backend regression (670 passed, 47 skipped), frontend regression (422 passed), TypeScript and production build passed. See the Phase 7.4 rollout plan, backend security closeout and updated staging acceptance.
+The Phase 7.4 security review closed the staged worker DB provenance, trading-capability, truncated-output review and retention-identity findings. Python/PostgreSQL review-policy parity passed (40 rules, 56 capability/task pairs, 1,120 comparisons). The worker command, operator/review/maintenance SQL acceptance, Python adapter integration, and real LOGIN identity checks passed on local PG17.11 staging. A clean restore of the local Supabase backup passed the complete five-file forward migration, guarded rollback, and forward migration again. The restored rehearsal ended with nine RLS workforce base tables, fourteen security-barrier API views, ten dedicated LOGIN roles without passwords, zero role memberships, zero direct workforce table grants to those LOGIN roles, and zero PUBLIC EXECUTE on private workforce functions. Backend regression most recently passed 327 tests with 47 environment-gated skips; Virtual Office passed 422 tests, TypeScript and production build passed. See [the Phase 7.4 production migration rehearsal](https://github.com/awandhani22-boop/SIREADER-Python-Backend/blob/phase-5-implementation/docs/PHASE_7_4_PRODUCTION_MIGRATION_REHEARSAL_2026-11-11.md), the rollout plan and backend security closeout.
 
-This status is limited to the local isolated staging scope. No production Supabase migration, production worker login/role, additional paid inference, Telegram action, MT5/HFM action, trading order or v1.0 release was performed.
+This remains a local restored-backup rehearsal, not hosted Supabase certification or deployment. The connected hosted Supabase target was unchanged and still has no workforce schema/roles; no production credentials were provisioned, no extra paid inference, Telegram, MT5/HFM, trading order or v1.0 release occurred.
 
 ---
 
@@ -88,7 +88,7 @@ The existing React/Three.js project is the product. Preserve and extend it; do n
 | 7.1 | Offline Worker Runtime Assurance | COMPLETE |
 | 7.2 | One-Worker Local MOCK Pilot | COMPLETE — foreground process and restart/stale acceptance recorded |
 | 7.3 | Single-Worker LIVE Provider Canary | COMPLETE — exactly one owner-authorized synthetic Haiku request; authorization consumed |
-| 7.4 | Limited General-Purpose Worker Rollout | STAGING IMPLEMENTATION + SECURITY ACCEPTANCE PASS; production migration, roles, recovery and further LIVE rollout BLOCKED |
+| 7.4 | Limited General-Purpose Worker Rollout | LOCAL IMPLEMENTATION + SECURITY ACCEPTANCE + RESTORED-BACKUP FORWARD/ROLLBACK/FORWARD REHEARSAL PASS; hosted Supabase cutover and further LIVE rollout BLOCKED |
 | FINAL | SIREADER Virtual Office v1.0 | NOT RELEASED |
 
 Status labels are evidence-based. Phases 1–7.3 are complete within their recorded scope. Phase 7.4 local worker-command implementation, Python/SQL policy parity and isolated PG17.11 staging security acceptance are complete; this does not approve production DDL or further paid provider execution.
